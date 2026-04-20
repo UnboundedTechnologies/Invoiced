@@ -181,6 +181,59 @@ export async function deleteLoanEntry(id: string): Promise<ActionResult> {
     if (await t4aSlipIssuedFor(existing.fiscalYear)) {
       return { error: `A T4A slip was issued for FY ${existing.fiscalYear}. Delete blocked.` };
     }
+
+    // Cascade-delete: if this is a reclassification entry linked to a dividend
+    // (created via the /shareholder-loan "Declare as dividend" flow), delete
+    // the matching dividend atomically so the pair stays consistent.
+    let linkedDividendId: string | null = null;
+    if (
+      existing.type === "reclassification" &&
+      existing.sourceKind === "reclass_to_dividend" &&
+      existing.sourceRef
+    ) {
+      const [dividend] = await db
+        .select()
+        .from(dividends)
+        .where(eq(dividends.id, existing.sourceRef));
+      if (dividend) {
+        if (await t5SlipIssuedFor(dividend.fiscalYear)) {
+          return {
+            error: `A T5 slip was issued for FY ${dividend.fiscalYear}. Can't cascade-delete the linked dividend.`,
+          };
+        }
+        linkedDividendId = dividend.id;
+      }
+    }
+
+    if (linkedDividendId) {
+      await db.batch([
+        db.delete(shareholderLoanEntries).where(eq(shareholderLoanEntries.id, id)),
+        db.delete(dividends).where(eq(dividends.id, linkedDividendId)),
+        db.insert(auditLog).values([
+          {
+            actorEmail: email,
+            action: "delete",
+            target: `shareholder_loan_entries:${id}`,
+            metadata: {
+              type: existing.type,
+              amountCents: existing.amountCents,
+              entryDate: existing.entryDate,
+              fiscalYear: existing.fiscalYear,
+              cascadeDeletedDividendId: linkedDividendId,
+            },
+          },
+          {
+            actorEmail: email,
+            action: "delete",
+            target: `dividends:${linkedDividendId}`,
+            metadata: { cascadedFromLoanEntryId: id },
+          },
+        ]),
+      ]);
+      revalidate();
+      return { ok: "Entry and linked dividend deleted." };
+    }
+
     await db.delete(shareholderLoanEntries).where(eq(shareholderLoanEntries.id, id));
     await db.insert(auditLog).values({
       actorEmail: email,
@@ -348,36 +401,36 @@ export async function reclassifyDrawAsDividend(
       return { error: `A T4A slip was issued for the draw's FY ${draw.fiscalYear}. Reclassifying would rewrite closed-year history.` };
     }
 
-    // Atomic write: dividend + matching reclassification entry + audit rows.
-    // neon-http batches the statements into one transactional request.
-    const newDividendId = await db.transaction(async (tx) => {
-      const [dividend] = await tx
-        .insert(dividends)
-        .values({
-          declaredDate,
-          paidDate: declaredDate, // declared + settled same day (draw already received)
-          amountCents,
-          eligible,
-          fiscalYear: dividendFY,
-          notes,
-        })
-        .returning({ id: dividends.id });
-
-      await tx.insert(shareholderLoanEntries).values({
+    // Atomic write via db.batch() — the neon-http driver doesn't support
+    // interactive transactions, but batch sends every statement in one
+    // transactional HTTP request (all commit or all fail). We pre-generate
+    // the dividend UUID server-side so the second insert can reference it
+    // without needing a mid-batch RETURNING round-trip.
+    const newDividendId = crypto.randomUUID();
+    await db.batch([
+      db.insert(dividends).values({
+        id: newDividendId,
+        declaredDate,
+        paidDate: declaredDate, // declared + settled same day (draw already received)
+        amountCents,
+        eligible,
+        fiscalYear: dividendFY,
+        notes,
+      }),
+      db.insert(shareholderLoanEntries).values({
         entryDate: declaredDate,
         type: "reclassification",
         amountCents,
         description: `Reclassified ${formatCAD(amountCents)} draw from ${draw.entryDate} as dividend`,
         sourceKind: "reclass_to_dividend",
-        sourceRef: dividend!.id,
+        sourceRef: newDividendId,
         fiscalYear: entryFY,
-      });
-
-      await tx.insert(auditLog).values([
+      }),
+      db.insert(auditLog).values([
         {
           actorEmail: email,
           action: "create",
-          target: `dividends:${dividend!.id}`,
+          target: `dividends:${newDividendId}`,
           metadata: {
             amountCents,
             eligible,
@@ -395,13 +448,11 @@ export async function reclassifyDrawAsDividend(
             amountCents,
             entryDate: declaredDate,
             fiscalYear: entryFY,
-            reclassDividendId: dividend!.id,
+            reclassDividendId: newDividendId,
           },
         },
-      ]);
-
-      return dividend!.id;
-    });
+      ]),
+    ]);
 
     revalidate();
     return { ok: `Reclassified ${formatCAD(amountCents)} as a ${eligible ? "eligible" : "non-eligible"} dividend. Draw settled.` };

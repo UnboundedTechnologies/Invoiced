@@ -178,6 +178,15 @@ export function LoanEntryRow({
               {formatCAD(entry.amountCents)} on {formatLongDate(entry.entryDate)}. Once a T4A slip
               is issued for FY {entry.fiscalYear}, deletion is blocked.
             </AlertDialogDescription>
+            {entry.type === "reclassification" &&
+              entry.sourceKind === "reclass_to_dividend" &&
+              entry.sourceRef && (
+                <div className="mt-3 rounded-md border border-rose-500/40 bg-rose-500/5 p-3 text-xs text-rose-300">
+                  <strong className="text-rose-200">Cascades:</strong> this entry was created when
+                  you declared the matching dividend. Deleting it will also delete that dividend
+                  to keep the ledger and T5 list in sync.
+                </div>
+              )}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>

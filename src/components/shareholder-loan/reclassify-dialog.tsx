@@ -47,23 +47,24 @@ export function ReclassifyDrawDialog({
   useEffect(() => {
     if (state?.ok) {
       toast.success(state.ok);
-      router.refresh();
       setOpen(false);
+      router.refresh();
     }
     if (state?.error) toast.error(state.error);
   }, [state, router]);
 
   return (
     <>
-      <button
+      <Button
         type="button"
+        size="sm"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-300 ring-1 ring-inset ring-violet-500/30 transition-colors hover:bg-violet-500/20 hover:text-violet-200"
+        className="h-7 gap-1.5 border border-violet-500/40 bg-violet-500/10 text-violet-300 shadow-none hover:bg-violet-500/20 hover:text-violet-100"
         aria-label="Reclassify draw as dividend"
       >
-        <PiggyBank className="size-3" />
+        <PiggyBank className="size-3.5" />
         Declare as dividend
-      </button>
+      </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
