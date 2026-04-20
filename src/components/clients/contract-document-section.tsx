@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   FileText,
@@ -36,6 +37,7 @@ export function ContractDocumentSection({
   contract: Contract;
   document: DocumentLite | null;
 }) {
+  const router = useRouter();
   const [vaultOpen, setVaultOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -56,7 +58,10 @@ export function ContractDocumentSection({
     fd.append("document", file);
     startTransition(async () => {
       const r = await uploadContractDocument(contract.id, fd);
-      if (r.ok) toast.success(r.ok);
+      if (r.ok) {
+        toast.success(r.ok);
+        router.refresh();
+      }
       if (r.error) toast.error(r.error);
     });
   }
@@ -68,7 +73,10 @@ export function ContractDocumentSection({
     fd.append("document", file);
     startTransition(async () => {
       const r = await replaceContractDocument(contract.id, fd);
-      if (r.ok) toast.success(r.ok);
+      if (r.ok) {
+        toast.success(r.ok);
+        router.refresh();
+      }
       if (r.error) toast.error(r.error);
     });
   }
@@ -76,7 +84,10 @@ export function ContractDocumentSection({
   async function doUnlink() {
     startTransition(async () => {
       const r = await unlinkContractDocument(contract.id);
-      if (r.ok) toast.success(r.ok);
+      if (r.ok) {
+        toast.success(r.ok);
+        router.refresh();
+      }
       if (r.error) toast.error(r.error);
     });
   }
@@ -98,25 +109,34 @@ export function ContractDocumentSection({
 
   // ─── Already linked: show document card ───
   if (document) {
+    const lastDot = document.name.lastIndexOf(".");
+    const base = lastDot > 0 ? document.name.slice(0, lastDot) : document.name;
+    const ext = lastDot > 0 ? document.name.slice(lastDot) : "";
+
     return (
-      <div className="space-y-2">
+      <div className="space-y-2 overflow-hidden">
         <Label>Contract document</Label>
-        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4">
+        <div className="overflow-hidden rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4">
           <div className="flex items-start gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 ring-1 ring-inset ring-emerald-500/30">
               <FileText className="size-5 text-emerald-400" />
             </div>
             <div className="min-w-0 flex-1 space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="truncate font-medium" title={document.name}>
-                  {document.name}
+              <div className="flex items-center gap-2 min-w-0">
+                {/* Middle-truncate: keep first chars + always show extension */}
+                <span
+                  className="flex min-w-0 flex-1 items-baseline overflow-hidden text-sm"
+                  title={document.name}
+                >
+                  <span className="min-w-0 truncate font-medium">{base}</span>
+                  <span className="shrink-0 font-medium">{ext}</span>
                 </span>
-                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400 ring-1 ring-inset ring-emerald-500/30">
+                <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400 ring-1 ring-inset ring-emerald-500/30">
                   v{document.version}
                 </span>
                 {document.supersedesDocumentId && (
                   <span
-                    className="inline-flex items-center gap-1 text-[10px] text-muted-foreground"
+                    className="inline-flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground"
                     title="Replaces an earlier version"
                   >
                     <History className="size-3" />
@@ -144,9 +164,10 @@ export function ContractDocumentSection({
               className="gap-1.5"
               onClick={pickReplace}
               disabled={pending}
+              title={`Upload a new version. Current is v${document.version}, new will be v${document.version + 1}.`}
             >
               {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
-              Replace (creates v{document.version + 1})
+              Replace
             </Button>
             <Button
               type="button"

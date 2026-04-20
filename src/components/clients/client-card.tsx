@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Building2,
@@ -16,6 +17,7 @@ import {
   Briefcase,
   FileText,
   ExternalLink,
+  Paperclip,
 } from "lucide-react";
 import type { Client, Contract, Document } from "@/lib/db/schema";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -40,6 +42,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ClientForm } from "./client-form";
 import { ContractForm } from "./contract-form";
+import { ContractDocumentSection } from "./contract-document-section";
 import { archiveClient, restoreClient, archiveContract, reactivateContract } from "@/server/actions/clients";
 import { formatCAD } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -62,24 +65,37 @@ const CADENCE_LABEL: Record<string, string> = {
 };
 
 export function ClientCard({ client, contracts }: { client: Client; contracts: ContractRow[] }) {
+  const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
   const [contractOpen, setContractOpen] = useState(false);
-  const [editingRow, setEditingRow] = useState<ContractRow | undefined>(undefined);
+  const [editingContractId, setEditingContractId] = useState<string | null>(null);
+  const [documentContractId, setDocumentContractId] = useState<string | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
+
+  // Always derive from current contracts array so re-renders show fresh data
+  const editingRow = editingContractId
+    ? contracts.find((r) => r.contract.id === editingContractId)
+    : undefined;
+  const documentRow = documentContractId
+    ? contracts.find((r) => r.contract.id === documentContractId)
+    : undefined;
 
   async function handleArchive() {
     const r = client.archived ? await restoreClient(client.id) : await archiveClient(client.id);
-    if (r.ok) toast.success(r.ok);
+    if (r.ok) {
+      toast.success(r.ok);
+      router.refresh();
+    }
     if (r.error) toast.error(r.error);
     setArchiveOpen(false);
   }
 
   function openNewContract() {
-    setEditingRow(undefined);
+    setEditingContractId(null);
     setContractOpen(true);
   }
-  function openEditContract(row: ContractRow) {
-    setEditingRow(row);
+  function openEditContract(id: string) {
+    setEditingContractId(id);
     setContractOpen(true);
   }
 
@@ -160,7 +176,12 @@ export function ClientCard({ client, contracts }: { client: Client; contracts: C
         ) : (
           <ul className="space-y-2">
             {contracts.map((row) => (
-              <ContractRowDisplay key={row.contract.id} row={row} onEdit={() => openEditContract(row)} />
+              <ContractRowDisplay
+                key={row.contract.id}
+                row={row}
+                onEdit={() => openEditContract(row.contract.id)}
+                onOpenDocument={() => setDocumentContractId(row.contract.id)}
+              />
             ))}
           </ul>
         )}
@@ -185,9 +206,26 @@ export function ClientCard({ client, contracts }: { client: Client; contracts: C
           <ContractForm
             clientId={client.id}
             contract={editingRow?.contract}
-            document={editingRow?.document ?? null}
             onDone={() => setContractOpen(false)}
           />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!documentContractId} onOpenChange={(o) => !o && setDocumentContractId(null)}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Contract document</DialogTitle>
+            <DialogDescription>
+              {documentRow?.contract.label || "Untitled contract"}
+            </DialogDescription>
+          </DialogHeader>
+          {documentRow && (
+            <ContractDocumentSection
+              key={`${documentRow.contract.id}::${documentRow.document?.id ?? "none"}`}
+              contract={documentRow.contract}
+              document={documentRow.document}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
@@ -215,13 +253,25 @@ export function ClientCard({ client, contracts }: { client: Client; contracts: C
   );
 }
 
-function ContractRowDisplay({ row, onEdit }: { row: ContractRow; onEdit: () => void }) {
+function ContractRowDisplay({
+  row,
+  onEdit,
+  onOpenDocument,
+}: {
+  row: ContractRow;
+  onEdit: () => void;
+  onOpenDocument: () => void;
+}) {
+  const router = useRouter();
   const { contract, document } = row;
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   async function toggle() {
     const r = contract.active ? await archiveContract(contract.id) : await reactivateContract(contract.id);
-    if (r.ok) toast.success(r.ok);
+    if (r.ok) {
+      toast.success(r.ok);
+      router.refresh();
+    }
     if (r.error) toast.error(r.error);
     setConfirmOpen(false);
   }
@@ -288,6 +338,18 @@ function ContractRowDisplay({ row, onEdit }: { row: ContractRow; onEdit: () => v
         <div className="flex shrink-0 gap-1">
           <Button variant="ghost" size="icon" onClick={onEdit} aria-label="Edit contract">
             <Pencil className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onOpenDocument}
+            aria-label="Manage document"
+            className="relative"
+          >
+            <Paperclip className="size-4" />
+            {document && (
+              <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-emerald-500 ring-2 ring-card" />
+            )}
           </Button>
           <Button
             variant="ghost"

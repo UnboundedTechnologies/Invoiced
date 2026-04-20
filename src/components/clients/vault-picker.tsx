@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FileText, Library, Loader2 } from "lucide-react";
 import {
@@ -30,6 +31,7 @@ export function VaultPicker({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  const router = useRouter();
   const [docs, setDocs] = useState<VaultDoc[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -50,6 +52,7 @@ export function VaultPicker({
       const r = await linkVaultDocumentToContract(contractId, selected);
       if (r.ok) {
         toast.success(r.ok);
+        router.refresh();
         onOpenChange(false);
       }
       if (r.error) toast.error(r.error);

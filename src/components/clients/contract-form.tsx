@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { Contract, Document } from "@/lib/db/schema";
+import type { Contract } from "@/lib/db/schema";
 import { createContract, updateContract } from "@/server/actions/clients";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,24 +11,16 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
-import { ContractDocumentSection } from "./contract-document-section";
 
 type Result = { ok?: string; error?: string };
-type DocumentLite = Pick<
-  Document,
-  "id" | "name" | "version" | "sizeBytes" | "uploadedAt" | "supersedesDocumentId"
->;
 
 export function ContractForm({
   clientId,
   contract,
-  document,
   onDone,
 }: {
   clientId: string;
   contract?: Contract;
-  document?: DocumentLite | null;
   onDone: () => void;
 }) {
   const action = contract
@@ -153,14 +145,6 @@ export function ContractForm({
           </Button>
         </DialogFooter>
       </form>
-
-      {/* Document upload only available for existing contracts (need an id to upload against) */}
-      {contract && (
-        <>
-          <Separator />
-          <ContractDocumentSection contract={contract} document={document ?? null} />
-        </>
-      )}
     </div>
   );
 }
