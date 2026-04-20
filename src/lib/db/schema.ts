@@ -12,10 +12,9 @@ import {
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
-// ────────────────────────────────────────────────────────────
 // Enums
-// ────────────────────────────────────────────────────────────
 export const payCadenceEnum = pgEnum("pay_cadence", ["weekly", "bi-weekly", "semi-monthly", "monthly"]);
 export const paymentTermsEnum = pgEnum("payment_terms", ["NET_15", "NET_30", "NET_45", "NET_60", "DUE_ON_RECEIPT"]);
 export const invoiceStatusEnum = pgEnum("invoice_status", ["draft", "sent", "paid", "overdue", "void"]);
@@ -42,9 +41,7 @@ export const slipTypeEnum = pgEnum("slip_type", ["T4", "T5", "T4A"]);
 export const payStrategyEnum = pgEnum("pay_strategy", ["salary_only", "dividends_only", "blend"]);
 export const auditActionEnum = pgEnum("audit_action", ["create", "update", "delete", "login", "logout", "download"]);
 
-// ────────────────────────────────────────────────────────────
 // Identity & Auth (single user enforced via CHECK + allowlist)
-// ────────────────────────────────────────────────────────────
 export const users = pgTable(
   "users",
   {
@@ -73,9 +70,7 @@ export const sessions = pgTable(
   (t) => [uniqueIndex("sessions_token_unique").on(t.sessionToken), index("sessions_user_idx").on(t.userId)],
 );
 
-// ────────────────────────────────────────────────────────────
 // Settings (singleton row - corp identity, branding, fiscal config)
-// ────────────────────────────────────────────────────────────
 export const settings = pgTable("settings", {
   id: integer("id").primaryKey().default(1), // singleton: always 1
   // Corporation
@@ -117,14 +112,13 @@ export const settings = pgTable("settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// ────────────────────────────────────────────────────────────
 // Clients & contracts
-// ────────────────────────────────────────────────────────────
 export const clients = pgTable("clients", {
   id: uuid("id").defaultRandom().primaryKey(),
   legalName: text("legal_name").notNull(),
   apContactName: text("ap_contact_name"),
   apEmail: text("ap_email"),
+  apPhone: text("ap_phone"),
   addressLine1: text("address_line_1"),
   addressLine2: text("address_line_2"),
   city: text("city"),
@@ -132,27 +126,36 @@ export const clients = pgTable("clients", {
   postalCode: text("postal_code"),
   country: text("country").default("CA"),
   notes: text("notes"),
+  archived: boolean("archived").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const contracts = pgTable("contracts", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  clientId: uuid("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
-  reference: text("reference"), // PO #
-  rateCents: bigint("rate_cents", { mode: "number" }).notNull(), // per-unit rate in cents
-  rateUnit: text("rate_unit").notNull().default("hour"),         // hour | day
-  hstApplicable: boolean("hst_applicable").notNull().default(true),
-  paymentTerms: paymentTermsEnum("payment_terms").notNull().default("NET_30"),
-  billingCadence: payCadenceEnum("billing_cadence").notNull().default("bi-weekly"),
-  startDate: date("start_date").notNull(),
-  endDate: date("end_date"),
-  active: boolean("active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const contracts = pgTable(
+  "contracts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    clientId: uuid("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+    label: text("label"),
+    reference: text("reference"),
+    rateCents: bigint("rate_cents", { mode: "number" }).notNull(),
+    rateUnit: text("rate_unit").notNull().default("hour"),
+    hstApplicable: boolean("hst_applicable").notNull().default(true),
+    paymentTerms: paymentTermsEnum("payment_terms").notNull().default("NET_30"),
+    billingCadence: payCadenceEnum("billing_cadence").notNull().default("bi-weekly"),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date"),
+    notes: text("notes"),
+    documentId: uuid("document_id"), // FK added below to avoid forward-ref
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    // Each document can be linked to at most one contract
+    uniqueIndex("contracts_document_id_unique").on(t.documentId).where(sql`document_id IS NOT NULL`),
+  ],
+);
 
-// ────────────────────────────────────────────────────────────
 // Invoices
-// ────────────────────────────────────────────────────────────
 export const invoices = pgTable(
   "invoices",
   {
@@ -187,9 +190,7 @@ export const invoiceLines = pgTable("invoice_lines", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
-// ────────────────────────────────────────────────────────────
 // Paycheques (salary)
-// ────────────────────────────────────────────────────────────
 export const paycheques = pgTable("paycheques", {
   id: uuid("id").defaultRandom().primaryKey(),
   payDate: date("pay_date").notNull(),
@@ -215,9 +216,7 @@ export const paycheques = pgTable("paycheques", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// ────────────────────────────────────────────────────────────
 // Dividends (T5 strategy)
-// ────────────────────────────────────────────────────────────
 export const dividends = pgTable("dividends", {
   id: uuid("id").defaultRandom().primaryKey(),
   declaredDate: date("declared_date").notNull(),
@@ -229,9 +228,7 @@ export const dividends = pgTable("dividends", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// ────────────────────────────────────────────────────────────
 // Expenses (with optional receipt blob)
-// ────────────────────────────────────────────────────────────
 export const expenses = pgTable("expenses", {
   id: uuid("id").defaultRandom().primaryKey(),
   expenseDate: date("expense_date").notNull(),
@@ -249,9 +246,7 @@ export const expenses = pgTable("expenses", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// ────────────────────────────────────────────────────────────
 // Remittances to CRA (HST, payroll source deductions, corp tax)
-// ────────────────────────────────────────────────────────────
 export const remittances = pgTable("remittances", {
   id: uuid("id").defaultRandom().primaryKey(),
   type: remitTypeEnum("type").notNull(),
@@ -265,9 +260,7 @@ export const remittances = pgTable("remittances", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// ────────────────────────────────────────────────────────────
 // Year-end slips (T4 / T5 / T4A)
-// ────────────────────────────────────────────────────────────
 export const slips = pgTable("slips", {
   id: uuid("id").defaultRandom().primaryKey(),
   type: slipTypeEnum("type").notNull(),
@@ -278,9 +271,7 @@ export const slips = pgTable("slips", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// ────────────────────────────────────────────────────────────
-// Document vault (encrypted blobs: incorporation, contracts, NDAs)
-// ────────────────────────────────────────────────────────────
+// Document vault (incorporation, contracts, NDAs) — versioned
 export const documents = pgTable("documents", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
@@ -289,12 +280,14 @@ export const documents = pgTable("documents", {
   sha256: text("sha256").notNull(),
   sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(),
   contentType: text("content_type").notNull(),
+  version: integer("version").notNull().default(1),
+  supersedesDocumentId: uuid("supersedes_document_id"),
+  archived: boolean("archived").notNull().default(false),
+  uploadedBy: text("uploaded_by"),
   uploadedAt: timestamp("uploaded_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// ────────────────────────────────────────────────────────────
 // Calendar / deadlines
-// ────────────────────────────────────────────────────────────
 export const deadlines = pgTable("deadlines", {
   id: uuid("id").defaultRandom().primaryKey(),
   title: text("title").notNull(),
@@ -305,9 +298,7 @@ export const deadlines = pgTable("deadlines", {
   completedAt: timestamp("completed_at", { withTimezone: true }),
 });
 
-// ────────────────────────────────────────────────────────────
 // Audit log (every write + login + download)
-// ────────────────────────────────────────────────────────────
 export const auditLog = pgTable(
   "audit_log",
   {
@@ -323,9 +314,7 @@ export const auditLog = pgTable(
   (t) => [index("audit_log_occurred_idx").on(t.occurredAt)],
 );
 
-// ────────────────────────────────────────────────────────────
 // Inferred types for app code
-// ────────────────────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Settings = typeof settings.$inferSelect;

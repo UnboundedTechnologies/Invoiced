@@ -114,7 +114,7 @@ export function SettingsForm({ data }: { data: SettingsRow }) {
   );
 }
 
-// ─────────────────────── Corporation (read-only) ───────────────────────
+//  Corporation (read-only) 
 function DisplayField({ label, value, full }: { label: string; value: React.ReactNode; full?: boolean }) {
   return (
     <div className={full ? "sm:col-span-2 space-y-1.5" : "space-y-1.5"}>
@@ -189,7 +189,7 @@ function CorpPanel({ data }: { data: SettingsRow }) {
   );
 }
 
-// ─────────────────────── Director ───────────────────────
+//  Director 
 function DirectorPanel({ data }: { data: SettingsRow }) {
   const [state, formAction, pending] = useActionState(updateDirector, undefined as Result | undefined);
   const [dirty, setDirty] = useState(false);
@@ -217,7 +217,7 @@ function DirectorPanel({ data }: { data: SettingsRow }) {
   );
 }
 
-// ─────────────────────── Fiscal & HST ───────────────────────
+//  Fiscal & HST 
 function FiscalPanel({ data }: { data: SettingsRow }) {
   const [state, formAction, pending] = useActionState(updateFiscal, undefined as Result | undefined);
   const [dirty, setDirty] = useState(false);
@@ -286,7 +286,7 @@ function FiscalPanel({ data }: { data: SettingsRow }) {
   );
 }
 
-// ─────────────────────── Self-pay ───────────────────────
+//  Self-pay 
 function SelfPayPanel({ data }: { data: SettingsRow }) {
   const [state, formAction, pending] = useActionState(updateSelfPay, undefined as Result | undefined);
   const [dirty, setDirty] = useState(false);
@@ -359,7 +359,7 @@ function SelfPayPanel({ data }: { data: SettingsRow }) {
   );
 }
 
-// ─────────────────────── Branding & Invoicing ───────────────────────
+//  Branding & Invoicing 
 function BrandingPanel({ data }: { data: SettingsRow }) {
   const [state, formAction, pending] = useActionState(updateBranding, undefined as Result | undefined);
   const [dirty, setDirty] = useState(false);

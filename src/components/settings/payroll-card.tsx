@@ -32,7 +32,7 @@ export function PayrollCard({ data }: { data: SettingsRow }) {
   return <InactivePayrollPanel data={data} />;
 }
 
-// ──────────────── ACTIVE STATE ────────────────
+//  ACTIVE STATE 
 function ActivePayrollPanel({ data }: { data: SettingsRow }) {
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);
@@ -96,7 +96,7 @@ function ActivePayrollPanel({ data }: { data: SettingsRow }) {
   );
 }
 
-// ──────────────── INACTIVE STATE (with wizard) ────────────────
+//  INACTIVE STATE (with wizard) 
 function InactivePayrollPanel({ data }: { data: SettingsRow }) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<Step>("ask");
@@ -142,7 +142,7 @@ function InactivePayrollPanel({ data }: { data: SettingsRow }) {
   );
 }
 
-// ──────────────── STEP 1 - Ask ────────────────
+//  STEP 1 - Ask 
 function AskStep({
   onYes,
   onNo,
@@ -174,7 +174,7 @@ function AskStep({
   );
 }
 
-// ──────────────── STEP 2a - Instructions ────────────────
+//  STEP 2a - Instructions 
 function InstructionsStep({ onBack, onClose }: { onBack: () => void; onClose: () => void }) {
   const steps = [
     { title: "Sign in to CRA My Business Account", body: "Go to canada.ca/my-business-account and authenticate with your CRA login or banking partner." },
@@ -215,7 +215,7 @@ function InstructionsStep({ onBack, onClose }: { onBack: () => void; onClose: ()
   );
 }
 
-// ──────────────── STEP 2b - Input ────────────────
+//  STEP 2b - Input 
 function InputStep({ businessNumber, onBack }: { businessNumber: string; onBack: () => void }) {
   const [value, setValue] = useState(businessNumber + "RP0001");
   const [state, formAction, pending] = useActionState(activatePayroll, undefined as Result | undefined);
