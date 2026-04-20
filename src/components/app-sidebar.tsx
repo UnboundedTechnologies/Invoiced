@@ -94,7 +94,7 @@ export function AppSidebar({ corpName }: { corpName: string }) {
           width={44}
           height={44}
           priority
-          className="shrink-0 transition-transform duration-300 group-hover:scale-105 group-hover:rotate-3"
+          className="shrink-0"
         />
         <div className="min-w-0">
           <div className="text-base font-semibold leading-tight text-brand-gradient">Invoiced</div>
@@ -151,7 +151,7 @@ export function AppSidebar({ corpName }: { corpName: string }) {
                         )}
                         <Icon
                           className={cn(
-                            "size-4 shrink-0 transition-transform duration-200 group-hover:scale-110",
+                            "size-4 shrink-0",
                             active && tone.text,
                           )}
                         />

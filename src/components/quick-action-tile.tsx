@@ -23,8 +23,7 @@ export function QuickActionTile({
     <Link
       href={href}
       className={cn(
-        "group relative overflow-hidden rounded-xl border border-border/60 bg-card/60 p-4 backdrop-blur-sm transition-all duration-300",
-        "hover:-translate-y-1 hover:shadow-xl",
+        "group relative overflow-hidden rounded-xl border border-border/60 bg-card/60 p-4 backdrop-blur-sm transition-colors duration-300",
         "animate-in fade-in slide-in-from-bottom-2 fill-mode-backwards",
         "hover:" + t.border.replace("border-", "border-"),
       )}
@@ -43,7 +42,7 @@ export function QuickActionTile({
       <div className="flex items-start justify-between gap-3">
         <div
           className={cn(
-            "flex size-10 items-center justify-center rounded-lg ring-1 ring-inset transition-transform duration-300 group-hover:scale-110",
+            "flex size-10 items-center justify-center rounded-lg ring-1 ring-inset",
             t.bg,
             t.border,
           )}
@@ -52,9 +51,8 @@ export function QuickActionTile({
         </div>
         <ArrowUpRight
           className={cn(
-            "size-4 text-muted-foreground transition-all duration-300",
+            "size-4 text-muted-foreground transition-colors duration-300",
             "group-hover:" + t.text.replace("text-", "text-"),
-            "group-hover:translate-x-0.5 group-hover:-translate-y-0.5",
           )}
         />
       </div>
