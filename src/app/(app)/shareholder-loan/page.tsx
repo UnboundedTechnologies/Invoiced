@@ -157,7 +157,7 @@ export default async function ShareholderLoanPage() {
       {/* Summary cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card>
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-5">
             <div className="flex items-center justify-between gap-3">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">
                 Current balance
@@ -170,15 +170,20 @@ export default async function ShareholderLoanPage() {
                 <BalanceIcon className={cn("size-[1.05rem]", balanceTone)} />
               </div>
             </div>
-            <div className={cn("mt-2 text-3xl font-bold tabular-nums", balanceTone)}>
+            <div
+              className={cn(
+                "text-3xl font-bold leading-none tracking-tight tabular-nums",
+                balanceTone,
+              )}
+            >
               {formatCAD(Math.abs(balance))}
             </div>
-            <CardDescription className="mt-1 text-xs">{balanceLabel}</CardDescription>
+            <CardDescription className="text-xs">{balanceLabel}</CardDescription>
           </CardHeader>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-5">
             <div className="flex items-center justify-between gap-3">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">
                 FY {currentFY} s.80.4 benefit
@@ -187,17 +192,17 @@ export default async function ShareholderLoanPage() {
                 <Info className="size-[1.05rem] text-cyan-400" />
               </div>
             </div>
-            <div className="mt-2 text-3xl font-bold tabular-nums text-cyan-400">
+            <div className="text-3xl font-bold leading-none tracking-tight tabular-nums text-cyan-400">
               {formatCAD(fyBenefit)}
             </div>
-            <CardDescription className="mt-1 text-xs">
+            <CardDescription className="text-xs">
               Net deemed interest at prescribed rate, less interest paid.
             </CardDescription>
           </CardHeader>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
+          <CardHeader className="pb-5">
             <div className="flex items-center justify-between gap-3">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">
                 FY {currentFY} T4A box 117
@@ -206,10 +211,10 @@ export default async function ShareholderLoanPage() {
                 <Coins className="size-[1.05rem] text-violet-400" />
               </div>
             </div>
-            <div className="mt-2 text-3xl font-bold tabular-nums text-violet-400">
+            <div className="text-3xl font-bold leading-none tracking-tight tabular-nums text-violet-400">
               {formatCAD(fyT4aBox117)}
             </div>
-            <CardDescription className="mt-1 text-xs">
+            <CardDescription className="text-xs">
               s.80.4 benefit + any s.15(2) principal inclusion ({formatCAD(fyInclusion)}).
             </CardDescription>
           </CardHeader>
