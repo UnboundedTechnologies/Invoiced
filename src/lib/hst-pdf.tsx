@@ -4,7 +4,7 @@
  * Draft returns render with a "DRAFT" watermark; filed returns carry the
  * CRA confirmation number + filed date in the metadata strip.
  */
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { Document, Page, Text, View, Image, StyleSheet } from "@react-pdf/renderer";
 import { formatLongDate } from "@/lib/utils";
 
 export type HstReturnPDFProps = {
@@ -39,6 +39,7 @@ export type HstReturnPDFProps = {
     brandPrimaryHex: string;
     brandAccentHex: string;
   };
+  bannerDataUri?: string;
 };
 
 function fmt(cents: number): string {
@@ -74,24 +75,37 @@ const styles = StyleSheet.create({
   },
   watermark: {
     position: "absolute",
-    top: 320,
-    left: 150,
-    fontSize: 80,
+    top: 380,
+    left: 50,
+    right: 50,
+    fontSize: 88,
     fontFamily: "Helvetica-Bold",
-    letterSpacing: 10,
+    letterSpacing: 12,
     color: COLORS.watermark,
-    transform: "rotate(-30deg)",
+    textAlign: "center",
+    transform: "rotate(-45deg)",
+    transformOrigin: "center",
   },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 14,
+  },
+  banner: { width: 200, height: 45 },
+  headerRight: { width: 260, alignItems: "flex-end" },
   title: {
     fontSize: 22,
     fontFamily: "Helvetica-Bold",
     letterSpacing: 2,
-    marginBottom: 4,
+    textAlign: "right",
+    lineHeight: 1,
   },
   subtitle: {
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.muted,
-    marginBottom: 16,
+    marginTop: 8,
+    textAlign: "right",
   },
   brandDivider: { height: 2, marginBottom: 18, borderRadius: 1 },
   sectionLabel: {
@@ -195,7 +209,7 @@ const styles = StyleSheet.create({
 });
 
 export function HstReturnPDF(props: HstReturnPDFProps) {
-  const { fiscalYear, period, dueDate, method, status, isFirstQmFy, craConfirmationNumber, filedAt, lines, settings } = props;
+  const { fiscalYear, period, dueDate, method, status, isFirstQmFy, craConfirmationNumber, filedAt, lines, settings, bannerDataUri } = props;
   const brandPrimary = settings.brandPrimaryHex;
   const brandAccent = settings.brandAccentHex;
   const isQuick = method === "quick";
@@ -207,12 +221,21 @@ export function HstReturnPDF(props: HstReturnPDFProps) {
       creator="Invoiced"
     >
       <Page size="LETTER" style={styles.page}>
+        {/* Watermark first so all subsequent content paints on top. */}
         {status === "draft" && <Text style={styles.watermark}>DRAFT</Text>}
 
-        <Text style={styles.title}>HST Return — FY {fiscalYear}</Text>
-        <Text style={styles.subtitle}>
-          Period {formatLongDate(period.start)} – {formatLongDate(period.end)}
-        </Text>
+        <View style={styles.header}>
+          <View>
+            {/* eslint-disable-next-line jsx-a11y/alt-text -- @react-pdf/renderer Image: not an HTML img; alt is not part of its prop shape */}
+            {bannerDataUri && <Image src={bannerDataUri} style={styles.banner} />}
+          </View>
+          <View style={styles.headerRight}>
+            <Text style={[styles.title, { color: brandPrimary }]}>HST RETURN</Text>
+            <Text style={styles.subtitle}>
+              FY {fiscalYear} · {formatLongDate(period.start)} – {formatLongDate(period.end)}
+            </Text>
+          </View>
+        </View>
         <View style={[styles.brandDivider, { backgroundColor: brandPrimary }]} />
 
         <View style={styles.registrantBlock}>

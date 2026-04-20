@@ -4,6 +4,8 @@ import { z } from "zod";
 import { and, desc, eq, sql as drizzleSql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { renderToBuffer } from "@react-pdf/renderer";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import {
   hstReturns,
   invoices,
@@ -33,6 +35,26 @@ async function requireSession() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
+}
+
+let _bannerDataUri: string | null = null;
+async function getBannerDataUri(): Promise<string | undefined> {
+  if (_bannerDataUri) return _bannerDataUri;
+  for (const candidate of [
+    "public/banner-pdf.png",
+    "public/banner.png",
+    "public/logo-full.png",
+    "public/logo.png",
+  ]) {
+    try {
+      const buffer = await readFile(resolve(process.cwd(), candidate));
+      _bannerDataUri = `data:image/png;base64,${buffer.toString("base64")}`;
+      return _bannerDataUri;
+    } catch {
+      continue;
+    }
+  }
+  return undefined;
 }
 
 function revalidate(fiscalYear?: number) {
@@ -450,6 +472,7 @@ export async function generateHstPdf(fiscalYear: number): Promise<ActionResult> 
               quickCredit: 0,
             };
 
+    const bannerDataUri = await getBannerDataUri();
     const buffer = await renderToBuffer(
       HstReturnPDF({
         fiscalYear,
@@ -474,6 +497,7 @@ export async function generateHstPdf(fiscalYear: number): Promise<ActionResult> 
           brandPrimaryHex: s.brandPrimaryHex,
           brandAccentHex: s.brandAccentHex,
         },
+        bannerDataUri,
       }),
     );
     const pdfBase64 = Buffer.from(buffer).toString("base64");
