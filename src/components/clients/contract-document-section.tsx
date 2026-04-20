@@ -15,6 +15,16 @@ import {
 } from "lucide-react";
 import type { Contract, Document } from "@/lib/db/schema";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import {
   uploadContractDocument,
@@ -43,6 +53,7 @@ export function ContractDocumentSection({
   const fileRef = useRef<HTMLInputElement>(null);
   const replaceRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   function pickFresh() {
     fileRef.current?.click();
@@ -81,7 +92,8 @@ export function ContractDocumentSection({
     });
   }
 
-  async function doUnlink() {
+  async function doDelete() {
+    setDeleteOpen(false);
     startTransition(async () => {
       const r = await unlinkContractDocument(contract.id);
       if (r.ok) {
@@ -174,13 +186,30 @@ export function ContractDocumentSection({
               size="sm"
               variant="ghost"
               className="gap-1.5 text-rose-400 hover:bg-rose-500/10 hover:text-rose-400"
-              onClick={doUnlink}
+              onClick={() => setDeleteOpen(true)}
               disabled={pending}
+              title="Permanently delete this contract document and every prior version from the vault + Vercel Blob."
             >
               <Trash2 className="size-3.5" />
-              Unlink
+              Delete
             </Button>
           </div>
+          <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete contract document?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This wipes <span className="font-medium">{document.name}</span> (v{document.version})
+                  {document.supersedesDocumentId ? " and every prior version in its history chain" : ""} from
+                  the vault and from Vercel Blob. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={doDelete}>Delete</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <input
             ref={replaceRef}
             type="file"

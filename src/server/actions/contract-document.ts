@@ -180,7 +180,12 @@ export async function replaceContractDocument(contractId: string, fd: FormData):
   }
 }
 
-/** Unlink the document from the contract. Document stays in the vault. */
+/**
+ * Delete the contract's document and every prior version in its supersedes chain.
+ * Wipes each blob from Vercel Blob and each row from the vault, then nulls
+ * contracts.document_id. Replace already auto-deletes prior versions, so in
+ * practice the chain is length 1 — walking it is defensive.
+ */
 export async function unlinkContractDocument(contractId: string): Promise<ActionResult> {
   try {
     const email = await requireSession();
@@ -190,17 +195,52 @@ export async function unlinkContractDocument(contractId: string): Promise<Action
       .where(eq(contracts.id, contractId));
     if (!existing?.documentId) return { error: "No document linked." };
 
+    const chain: { id: string; blobUrl: string; version: number }[] = [];
+    let cursor: string | null = existing.documentId;
+    const seen = new Set<string>();
+    while (cursor && !seen.has(cursor)) {
+      seen.add(cursor);
+      const [row] = await db
+        .select({
+          id: documents.id,
+          blobUrl: documents.blobUrl,
+          version: documents.version,
+          supersedesDocumentId: documents.supersedesDocumentId,
+        })
+        .from(documents)
+        .where(eq(documents.id, cursor));
+      if (!row) break;
+      chain.push({ id: row.id, blobUrl: row.blobUrl, version: row.version });
+      cursor = row.supersedesDocumentId;
+    }
+
+    // Null the FK before deleting rows so the unique index doesn't trip.
     await db.update(contracts).set({ documentId: null }).where(eq(contracts.id, contractId));
+
+    for (const doc of chain) {
+      try {
+        await del(doc.blobUrl);
+      } catch {
+        // best-effort; orphan sweep (pnpm cleanup-blobs) will catch leftovers
+      }
+      await db.delete(documents).where(eq(documents.id, doc.id));
+    }
+
     await db.insert(auditLog).values({
       actorEmail: email,
-      action: "update",
-      target: `contracts:${contractId}:document-unlink`,
-      metadata: { previousDocumentId: existing.documentId },
+      action: "delete",
+      target: `contracts:${contractId}:document-delete`,
+      metadata: {
+        previousDocumentId: existing.documentId,
+        deletedVersions: chain.map((d) => d.version),
+        deletedCount: chain.length,
+      },
     });
     revalidatePath("/clients");
-    return { ok: "Document unlinked. Still in the vault." };
+    const versionsLabel = chain.length === 1 ? "1 version" : `${chain.length} versions`;
+    return { ok: `Document deleted (${versionsLabel} wiped from vault + blob).` };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "Unlink failed" };
+    return { error: e instanceof Error ? e.message : "Delete failed" };
   }
 }
 
