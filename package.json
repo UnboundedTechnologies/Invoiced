@@ -19,7 +19,8 @@
     "optimize-logo": "tsx scripts/optimize-logo.ts",
     "optimize-banner": "tsx scripts/optimize-banner.ts",
     "cleanup-blobs": "tsx --env-file=.env.local scripts/cleanup-blobs.ts",
-    "verify-math": "tsx scripts/verify-invoice-math.ts"
+    "verify-math": "tsx scripts/verify-invoice-math.ts",
+    "gen-tax-pdf": "tsx scripts/gen-tax-pdf.tsx"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
