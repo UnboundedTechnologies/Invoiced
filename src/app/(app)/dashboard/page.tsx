@@ -1,6 +1,7 @@
 import { db } from "@/lib/db/client";
 import {
   dividends,
+  expenses,
   invoices,
   paycheques,
   psbChecklistItems,
@@ -43,6 +44,7 @@ export default async function DashboardPage() {
     loanEntriesRaw,
     rateRows,
     invoiceTotals,
+    allExpenses,
   ] = await Promise.all([
     getSettings(),
     db.select().from(dividends),
@@ -69,6 +71,7 @@ export default async function DashboardPage() {
           lte(invoices.issueDate, yearEnd),
         ),
       ),
+    db.select().from(expenses),
   ]);
   const firstName = s?.directorLegalName?.split(" ")[0] ?? "there";
   const fyeMonth = s?.fiscalYearEndMonth ?? 12;
@@ -92,6 +95,11 @@ export default async function DashboardPage() {
   const ytdRevenueCents = Number(invoiceTotals[0]?.subtotal ?? 0);
   const ytdHstCents = Number(invoiceTotals[0]?.hst ?? 0);
   const ytdInvoiceCount = Number(invoiceTotals[0]?.count ?? 0);
+
+  const fyExpenses = allExpenses.filter((e) => e.fiscalYear === currentFY);
+  const fyExpensesTotalCents = fyExpenses.reduce((a, e) => a + e.totalCents, 0);
+  const fyExpensesHstCents = fyExpenses.reduce((a, e) => a + e.hstPaidCents, 0);
+  const fyExpensesCount = fyExpenses.length;
 
   const psb = computePsbRisk(psbItems);
 
@@ -221,6 +229,23 @@ export default async function DashboardPage() {
           icon={Coins}
           tone="cyan"
           delayMs={420}
+        />
+        <StatCard
+          label={`Expenses FY ${currentFY}`}
+          value={formatCAD(fyExpensesTotalCents)}
+          hint={
+            fyExpensesCount === 0
+              ? "None logged yet"
+              : (
+                <>
+                  {fyExpensesCount} expense{fyExpensesCount === 1 ? "" : "s"} ·{" "}
+                  <span className="text-amber-400">{formatCAD(fyExpensesHstCents)} ITC recoverable</span>
+                </>
+              )
+          }
+          icon={Receipt}
+          tone="rose"
+          delayMs={500}
         />
       </div>
 
