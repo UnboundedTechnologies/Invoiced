@@ -5,7 +5,7 @@
  * Run: pnpm seed
  */
 import { db } from "./client";
-import { settings, clients, contracts, psbChecklistItems } from "./schema";
+import { settings, clients, contracts, psbChecklistItems, prescribedRatePeriods } from "./schema";
 import { eq } from "drizzle-orm";
 
 async function seed() {
@@ -181,6 +181,23 @@ async function seed() {
     console.log(`  ✔ ${items.length} PSB items seeded.`);
   } else {
     console.log("  ⊘ PSB items already exist - skipped.");
+  }
+
+  console.log("→ Seeding CRA prescribed-rate period (2026 Q2)…");
+  const existingRate = await db
+    .select({ id: prescribedRatePeriods.id })
+    .from(prescribedRatePeriods)
+    .where(eq(prescribedRatePeriods.startDate, "2026-04-01"));
+  if (existingRate.length === 0) {
+    await db.insert(prescribedRatePeriods).values({
+      startDate: "2026-04-01",
+      endDate: "2026-06-30",
+      ratePercent: 3,
+      note: "CRA taxable-benefits rate, Q2 2026. Source: canada.ca/en/revenue-agency/services/tax/prescribed-interest-rates/2026-q2",
+    });
+    console.log("  ✔ 2026 Q2 prescribed rate seeded (3%).");
+  } else {
+    console.log("  ⊘ 2026 Q2 prescribed rate already exists - skipped.");
   }
 
   console.log("\n✅ Seed complete.");

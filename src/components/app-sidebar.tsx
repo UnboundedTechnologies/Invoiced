@@ -8,6 +8,7 @@ import {
   FileText,
   BadgeDollarSign,
   PiggyBank,
+  Coins,
   Receipt,
   CalendarClock,
   FileSpreadsheet,
@@ -55,6 +56,7 @@ const SECTIONS: { label: string; tone: Tone; items: NavItem[] }[] = [
     items: [
       { href: "/paycheques", label: "Paycheques (T4)", icon: BadgeDollarSign, tone: "amber" },
       { href: "/dividends", label: "Dividends (T5)", icon: PiggyBank, tone: "violet" },
+      { href: "/shareholder-loan", label: "Shareholder loan", icon: Coins, tone: "cyan" },
     ],
   },
   {

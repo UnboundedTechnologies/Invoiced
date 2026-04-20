@@ -39,6 +39,12 @@ export const expenseCategoryEnum = pgEnum("expense_category", [
 ]);
 export const slipTypeEnum = pgEnum("slip_type", ["T4", "T5", "T4A"]);
 export const payStrategyEnum = pgEnum("pay_strategy", ["salary_only", "dividends_only", "blend"]);
+export const loanEntryTypeEnum = pgEnum("loan_entry_type", [
+  "draw",               // shareholder takes money from corp
+  "repayment",          // principal repayment
+  "interest_payment",   // shareholder pays interest (offsets 80.4 benefit)
+  "reclassification",   // after-the-fact recast as salary/dividend/reimbursement (phase 2D)
+]);
 export const auditActionEnum = pgEnum("audit_action", ["create", "update", "delete", "login", "logout", "download"]);
 
 // Identity & Auth (single user enforced via CHECK + allowlist)
@@ -301,6 +307,41 @@ export const deadlines = pgTable("deadlines", {
   completedAt: timestamp("completed_at", { withTimezone: true }),
 });
 
+// Shareholder loan ledger — ITA 15(2) / 15(2.6) / 80.4 tracking
+export const shareholderLoanEntries = pgTable(
+  "shareholder_loan_entries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    entryDate: date("entry_date").notNull(),
+    type: loanEntryTypeEnum("type").notNull(),
+    amountCents: bigint("amount_cents", { mode: "number" }).notNull(), // always positive; sign implied by type
+    description: text("description"),
+    sourceKind: text("source_kind"),     // "bank_xfer" | "expense_personal" | "reimbursement" | free-form
+    sourceRef: text("source_ref"),       // free-form reference (txn id, invoice #, etc.)
+    fiscalYear: integer("fiscal_year").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("shareholder_loan_entries_date_idx").on(t.entryDate),
+    index("shareholder_loan_entries_fy_idx").on(t.fiscalYear),
+  ],
+);
+
+// CRA prescribed rate for taxable benefits (s.80.4) — one row per quarter
+// Seeded as CRA publishes; admin can upsert via settings when new quarter lands.
+export const prescribedRatePeriods = pgTable(
+  "prescribed_rate_periods",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    startDate: date("start_date").notNull(), // inclusive
+    endDate: date("end_date").notNull(),     // inclusive
+    ratePercent: integer("rate_percent").notNull(), // 3, 4, 5, 6
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("prescribed_rate_start_unique").on(t.startDate)],
+);
+
 // PSB (Personal Services Business) risk monitor
 export const psbChecklistItems = pgTable("psb_checklist_items", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -365,3 +406,7 @@ export type Document = typeof documents.$inferSelect;
 export type Deadline = typeof deadlines.$inferSelect;
 export type PsbChecklistItem = typeof psbChecklistItems.$inferSelect;
 export type PsbSnapshot = typeof psbSnapshots.$inferSelect;
+export type ShareholderLoanEntry = typeof shareholderLoanEntries.$inferSelect;
+export type NewShareholderLoanEntry = typeof shareholderLoanEntries.$inferInsert;
+export type PrescribedRatePeriod = typeof prescribedRatePeriods.$inferSelect;
+export type NewPrescribedRatePeriod = typeof prescribedRatePeriods.$inferInsert;

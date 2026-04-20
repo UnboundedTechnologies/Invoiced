@@ -16,6 +16,7 @@ const TITLES: Record<string, Meta> = {
   "/clients": { section: "Income", sectionHref: "/invoices", page: "Clients & contracts" },
   "/paycheques": { section: "Self-pay", sectionHref: "/paycheques", page: "Paycheques (T4)" },
   "/dividends": { section: "Self-pay", sectionHref: "/paycheques", page: "Dividends (T5)" },
+  "/shareholder-loan": { section: "Self-pay", sectionHref: "/paycheques", page: "Shareholder loan" },
   "/expenses": { section: "Expenses & taxes", sectionHref: "/expenses", page: "Expenses" },
   "/hst": { section: "Expenses & taxes", sectionHref: "/expenses", page: "HST return" },
   "/corp-tax": { section: "Expenses & taxes", sectionHref: "/expenses", page: "Corporate tax (T2)" },
