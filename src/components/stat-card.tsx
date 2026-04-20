@@ -53,7 +53,7 @@ export function StatCard({
             <Icon className={cn("size-[1.05rem]", t.text)} />
           </div>
         </div>
-        <div className="mt-2 text-3xl font-bold leading-tight tracking-tight tabular-nums">
+        <div className="text-3xl font-bold leading-none tracking-tight tabular-nums">
           {value}
         </div>
       </CardHeader>
