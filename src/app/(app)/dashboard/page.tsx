@@ -1,5 +1,5 @@
 import { db } from "@/lib/db/client";
-import { settings } from "@/lib/db/schema";
+import { dividends, settings } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import {
   CircleDollarSign,
@@ -13,13 +13,25 @@ import {
 } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { QuickActionTile } from "@/components/quick-action-tile";
+import { fiscalYearFor, formatCAD } from "@/lib/utils";
+
+export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [s] = await db.select().from(settings).where(eq(settings.id, 1));
+  const [[s], allDividends] = await Promise.all([
+    db.select().from(settings).where(eq(settings.id, 1)),
+    db.select().from(dividends),
+  ]);
   const firstName = s?.directorLegalName?.split(" ")[0] ?? "there";
-  const fyEnd = s
-    ? `${String(s.fiscalYearEndMonth).padStart(2, "0")}-${String(s.fiscalYearEndDay).padStart(2, "0")}`
-    : "12-31";
+  const fyeMonth = s?.fiscalYearEndMonth ?? 12;
+  const fyeDay = s?.fiscalYearEndDay ?? 31;
+  const fyEnd = `${String(fyeMonth).padStart(2, "0")}-${String(fyeDay).padStart(2, "0")}`;
+  const today = new Date().toISOString().slice(0, 10);
+  const currentFY = fiscalYearFor(today, fyeMonth, fyeDay);
+  const fyDividends = allDividends.filter((d) => d.fiscalYear === currentFY);
+  const dividendsFYTotal = fyDividends.reduce((a, d) => a + d.amountCents, 0);
+  const eligibleTotal = fyDividends.filter((d) => d.eligible).reduce((a, d) => a + d.amountCents, 0);
+  const nonEligibleTotal = dividendsFYTotal - eligibleTotal;
 
   return (
     <div className="space-y-8">
@@ -34,7 +46,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="YTD revenue"
           value="$0.00"
@@ -62,6 +74,24 @@ export default async function DashboardPage() {
           icon={Wallet}
           tone="amber"
           delayMs={260}
+        />
+        <StatCard
+          label={`Dividends FY ${currentFY}`}
+          value={formatCAD(dividendsFYTotal)}
+          hint={
+            dividendsFYTotal === 0 ? (
+              "None declared yet"
+            ) : (
+              <>
+                <span className="text-emerald-400">{formatCAD(eligibleTotal)} eligible</span>
+                {" · "}
+                <span className="text-violet-400">{formatCAD(nonEligibleTotal)} non-eligible</span>
+              </>
+            )
+          }
+          icon={PiggyBank}
+          tone="violet"
+          delayMs={340}
         />
       </div>
 
