@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { db } from "@/lib/db/client";
-import { paycheques, settings, remittances } from "@/lib/db/schema";
+import { paycheques, remittances } from "@/lib/db/schema";
 import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { getSettings } from "@/lib/db/queries";
 import { BadgeDollarSign, Lock, Shield } from "lucide-react";
 import {
   Card,
@@ -20,8 +21,7 @@ import { formatCAD } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 
 export default async function PaychequesPage() {
-  const [settingsRow] = await db.select().from(settings).where(eq(settings.id, 1));
-  const s = settingsRow;
+  const s = await getSettings();
 
   if (!s?.payrollAccountActive) {
     return (

@@ -161,6 +161,7 @@ export const contracts = pgTable(
   (t) => [
     // Each document can be linked to at most one contract
     uniqueIndex("contracts_document_id_unique").on(t.documentId).where(sql`document_id IS NOT NULL`),
+    index("contracts_client_id_idx").on(t.clientId),
   ],
 );
 
@@ -186,56 +187,75 @@ export const invoices = pgTable(
     paidAt: timestamp("paid_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("invoices_number_unique").on(t.invoiceNumber)],
+  (t) => [
+    uniqueIndex("invoices_number_unique").on(t.invoiceNumber),
+    index("invoices_contract_id_idx").on(t.contractId),
+    index("invoices_issue_date_idx").on(t.issueDate),
+  ],
 );
 
-export const invoiceLines = pgTable("invoice_lines", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  invoiceId: uuid("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
-  description: text("description").notNull(),
-  quantity: integer("quantity").notNull(), // hours × 100 (so 7.5 hr = 750)
-  rateCents: bigint("rate_cents", { mode: "number" }).notNull(),
-  amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
-  sortOrder: integer("sort_order").notNull().default(0),
-});
+export const invoiceLines = pgTable(
+  "invoice_lines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    invoiceId: uuid("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+    description: text("description").notNull(),
+    quantity: integer("quantity").notNull(), // hours × 100 (so 7.5 hr = 750)
+    rateCents: bigint("rate_cents", { mode: "number" }).notNull(),
+    amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("invoice_lines_invoice_id_idx").on(t.invoiceId)],
+);
 
 // Paycheques (salary)
-export const paycheques = pgTable("paycheques", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  payDate: date("pay_date").notNull(),
-  periodStart: date("period_start").notNull(),
-  periodEnd: date("period_end").notNull(),
-  grossCents: bigint("gross_cents", { mode: "number" }).notNull(),
-  cppCents: bigint("cpp_cents", { mode: "number" }).notNull().default(0),
-  cpp2Cents: bigint("cpp2_cents", { mode: "number" }).notNull().default(0),
-  eiCents: bigint("ei_cents", { mode: "number" }).notNull().default(0), // owner-manager: 0
-  federalTaxCents: bigint("federal_tax_cents", { mode: "number" }).notNull().default(0),
-  provincialTaxCents: bigint("provincial_tax_cents", { mode: "number" }).notNull().default(0),
-  otherDeductionsCents: bigint("other_deductions_cents", { mode: "number" }).notNull().default(0),
-  netCents: bigint("net_cents", { mode: "number" }).notNull(),
-  // Employer contributions (for remittance)
-  employerCppCents: bigint("employer_cpp_cents", { mode: "number" }).notNull().default(0),
-  employerCpp2Cents: bigint("employer_cpp2_cents", { mode: "number" }).notNull().default(0),
-  employerEiCents: bigint("employer_ei_cents", { mode: "number" }).notNull().default(0),
-  totalRemittanceCents: bigint("total_remittance_cents", { mode: "number" }).notNull().default(0),
-  status: paychequeStatusEnum("status").notNull().default("draft"),
-  pdfBlobUrl: text("pdf_blob_url"),
-  pdfSha256: text("pdf_sha256"),
-  notes: text("notes"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const paycheques = pgTable(
+  "paycheques",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    payDate: date("pay_date").notNull(),
+    periodStart: date("period_start").notNull(),
+    periodEnd: date("period_end").notNull(),
+    grossCents: bigint("gross_cents", { mode: "number" }).notNull(),
+    cppCents: bigint("cpp_cents", { mode: "number" }).notNull().default(0),
+    cpp2Cents: bigint("cpp2_cents", { mode: "number" }).notNull().default(0),
+    eiCents: bigint("ei_cents", { mode: "number" }).notNull().default(0), // owner-manager: 0
+    federalTaxCents: bigint("federal_tax_cents", { mode: "number" }).notNull().default(0),
+    provincialTaxCents: bigint("provincial_tax_cents", { mode: "number" }).notNull().default(0),
+    otherDeductionsCents: bigint("other_deductions_cents", { mode: "number" }).notNull().default(0),
+    netCents: bigint("net_cents", { mode: "number" }).notNull(),
+    // Employer contributions (for remittance)
+    employerCppCents: bigint("employer_cpp_cents", { mode: "number" }).notNull().default(0),
+    employerCpp2Cents: bigint("employer_cpp2_cents", { mode: "number" }).notNull().default(0),
+    employerEiCents: bigint("employer_ei_cents", { mode: "number" }).notNull().default(0),
+    totalRemittanceCents: bigint("total_remittance_cents", { mode: "number" }).notNull().default(0),
+    status: paychequeStatusEnum("status").notNull().default("draft"),
+    pdfBlobUrl: text("pdf_blob_url"),
+    pdfSha256: text("pdf_sha256"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("paycheques_pay_date_idx").on(t.payDate)],
+);
 
 // Dividends (T5 strategy)
-export const dividends = pgTable("dividends", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  declaredDate: date("declared_date").notNull(),
-  paidDate: date("paid_date"),
-  amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
-  eligible: boolean("eligible").notNull().default(true), // eligible vs non-eligible dividend
-  fiscalYear: integer("fiscal_year").notNull(),
-  notes: text("notes"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const dividends = pgTable(
+  "dividends",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    declaredDate: date("declared_date").notNull(),
+    paidDate: date("paid_date"),
+    amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+    eligible: boolean("eligible").notNull().default(true), // eligible vs non-eligible dividend
+    fiscalYear: integer("fiscal_year").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index("dividends_declared_date_idx").on(t.declaredDate),
+    index("dividends_fiscal_year_idx").on(t.fiscalYear),
+  ],
+);
 
 // Expenses (with optional receipt blob)
 export const expenses = pgTable("expenses", {
@@ -270,15 +290,21 @@ export const remittances = pgTable("remittances", {
 });
 
 // Year-end slips (T4 / T5 / T4A)
-export const slips = pgTable("slips", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  type: slipTypeEnum("type").notNull(),
-  taxYear: integer("tax_year").notNull(),
-  totals: jsonb("totals").notNull(), // box-by-box amounts
-  pdfBlobUrl: text("pdf_blob_url"),
-  pdfSha256: text("pdf_sha256"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const slips = pgTable(
+  "slips",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    type: slipTypeEnum("type").notNull(),
+    taxYear: integer("tax_year").notNull(),
+    totals: jsonb("totals").notNull(), // box-by-box amounts
+    pdfBlobUrl: text("pdf_blob_url"),
+    pdfSha256: text("pdf_sha256"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  // Every mutation in dividends/paycheques/shareholder-loan checks whether a
+  // slip exists for a (type, taxYear). Composite index backs that lookup.
+  (t) => [uniqueIndex("slips_type_year_unique").on(t.type, t.taxYear)],
+);
 
 // Document vault (incorporation, contracts, NDAs) — versioned
 export const documents = pgTable("documents", {

@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Pencil, Trash2, PiggyBank } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import type { ShareholderLoanEntry } from "@/lib/db/schema";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +24,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ShareholderLoanEntryForm } from "./entry-form";
+import { ReclassifyDrawDialog } from "./reclassify-dialog";
 import { deleteLoanEntry } from "@/server/actions/shareholder-loan";
 import { formatCAD, formatLongDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -50,14 +50,16 @@ export function LoanEntryRow({
   fyeMonth,
   fyeDay,
   runningBalanceCents,
-  isUnmatchedDraw,
+  unpaidCents,
 }: {
   entry: ShareholderLoanEntry;
   fyeMonth: number;
   fyeDay: number;
   runningBalanceCents: number;
-  isUnmatchedDraw: boolean;
+  /** For draws: FIFO-matched unpaid principal. > 0 means "reclassify" is offered. */
+  unpaidCents: number;
 }) {
+  const isUnmatchedDraw = entry.type === "draw" && unpaidCents > 0;
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -98,15 +100,19 @@ export function LoanEntryRow({
           </span>
         </td>
         <td className="px-4 py-3 text-xs text-muted-foreground">
-          {entry.description || <span className="text-muted-foreground/60">—</span>}
+          {entry.description ? (
+            <div>{entry.description}</div>
+          ) : isUnmatchedDraw ? null : (
+            <span className="text-muted-foreground/60">—</span>
+          )}
           {isUnmatchedDraw && (
-            <Link
-              href={`/dividends?prefillAmount=${(entry.amountCents / 100).toFixed(2)}&prefillDate=${entry.entryDate}`}
-              className="mt-1 inline-flex items-center gap-1 rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-300 ring-1 ring-inset ring-violet-500/30 hover:bg-violet-500/15"
-            >
-              <PiggyBank className="size-3" />
-              Declare as dividend
-            </Link>
+            <div className={cn(entry.description && "mt-1")}>
+              <ReclassifyDrawDialog
+                drawId={entry.id}
+                drawDate={entry.entryDate}
+                unpaidCents={unpaidCents}
+              />
+            </div>
           )}
         </td>
         <td className="px-4 py-3 text-center font-mono text-xs text-muted-foreground">

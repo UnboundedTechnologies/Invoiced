@@ -1,21 +1,23 @@
 import { db } from "@/lib/db/client";
-import { contracts, clients, settings } from "@/lib/db/schema";
+import { contracts, clients } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { InvoiceForm } from "@/components/invoices/invoice-form";
+import { getSettings } from "@/lib/db/queries";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewInvoicePage() {
-  const [s] = await db.select().from(settings).where(eq(settings.id, 1));
+  const [s, rows] = await Promise.all([
+    getSettings(),
+    db
+      .select({ contract: contracts, client: clients })
+      .from(contracts)
+      .innerJoin(clients, eq(clients.id, contracts.clientId))
+      .where(eq(contracts.active, true)),
+  ]);
   if (!s) {
     return <div>Settings not seeded. Run pnpm seed.</div>;
   }
-
-  const rows = await db
-    .select({ contract: contracts, client: clients })
-    .from(contracts)
-    .innerJoin(clients, eq(clients.id, contracts.clientId))
-    .where(eq(contracts.active, true));
 
   return (
     <div className="space-y-6">

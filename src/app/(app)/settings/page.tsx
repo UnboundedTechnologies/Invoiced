@@ -1,11 +1,9 @@
-import { db } from "@/lib/db/client";
-import { settings } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { SettingsForm } from "@/components/settings/settings-form";
+import { getSettings } from "@/lib/db/queries";
 
 export default async function SettingsPage() {
-  const [s] = await db.select().from(settings).where(eq(settings.id, 1));
+  const s = await getSettings();
 
   if (!s) {
     return (

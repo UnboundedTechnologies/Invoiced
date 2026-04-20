@@ -1,10 +1,7 @@
 import { db } from "@/lib/db/client";
-import {
-  shareholderLoanEntries,
-  prescribedRatePeriods,
-  settings,
-} from "@/lib/db/schema";
-import { asc, eq } from "drizzle-orm";
+import { shareholderLoanEntries, prescribedRatePeriods } from "@/lib/db/schema";
+import { asc } from "drizzle-orm";
+import { getSettings } from "@/lib/db/queries";
 import { Coins, TrendingDown, TrendingUp, AlertTriangle, Info } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { NewLoanEntryButton } from "@/components/shareholder-loan/new-entry-button";
@@ -21,15 +18,14 @@ import { cn } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 
 export default async function ShareholderLoanPage() {
-  const [entriesRaw, rateRows, settingsRows] = await Promise.all([
+  const [entriesRaw, rateRows, s] = await Promise.all([
     db
       .select()
       .from(shareholderLoanEntries)
       .orderBy(asc(shareholderLoanEntries.entryDate), asc(shareholderLoanEntries.createdAt)),
     db.select().from(prescribedRatePeriods).orderBy(asc(prescribedRatePeriods.startDate)),
-    db.select().from(settings).where(eq(settings.id, 1)),
+    getSettings(),
   ]);
-  const s = settingsRows[0];
   const fyeMonth = s?.fiscalYearEndMonth ?? 12;
   const fyeDay = s?.fiscalYearEndDay ?? 31;
   const today = new Date().toISOString().slice(0, 10);
@@ -66,9 +62,10 @@ export default async function ShareholderLoanPage() {
     }
   }
 
-  // Flag unmatched draws (current unpaid > 0) for the "Declare as dividend" CTA
-  const unmatchedDrawIds = new Set(
-    timeline.draws15_2Candidates.filter((d) => d.currentUnpaidCents > 0).map((d) => d.drawId),
+  // Per-draw FIFO-matched unpaid principal. The row uses this for the
+  // reclassify CTA amount; non-draw entries get 0 (button won't show).
+  const unpaidByDrawId = new Map<string, number>(
+    timeline.draws15_2Candidates.map((d) => [d.drawId, d.currentUnpaidCents]),
   );
 
   // Current-year summary for the header
@@ -261,7 +258,7 @@ export default async function ShareholderLoanPage() {
                       fyeMonth={fyeMonth}
                       fyeDay={fyeDay}
                       runningBalanceCents={runningByEntryId.get(e.id) ?? 0}
-                      isUnmatchedDraw={e.type === "draw" && unmatchedDrawIds.has(e.id)}
+                      unpaidCents={unpaidByDrawId.get(e.id) ?? 0}
                     />
                   ))}
                 </tbody>

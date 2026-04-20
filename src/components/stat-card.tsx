@@ -58,33 +58,11 @@ export function StatCard({
         </div>
       </CardHeader>
 
-      <CardContent className="relative pt-0">
-        {/* Sparkline placeholder - flat baseline with a fade */}
-        <svg
-          viewBox="0 0 200 32"
-          preserveAspectRatio="none"
-          className={cn("h-8 w-full opacity-60", t.text)}
-          aria-hidden
-        >
-          <defs>
-            <linearGradient id={`spark-${tone}`} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="currentColor" stopOpacity="0.5" />
-              <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <path
-            d="M0,24 C20,22 40,18 60,18 S100,22 120,16 160,12 200,14 L200,32 L0,32 Z"
-            fill={`url(#spark-${tone})`}
-          />
-          <path
-            d="M0,24 C20,22 40,18 60,18 S100,22 120,16 160,12 200,14"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
-        </svg>
-        {hint && <div className="mt-2 text-xs text-muted-foreground">{hint}</div>}
-      </CardContent>
+      {hint && (
+        <CardContent className="relative pt-0">
+          <div className="text-xs text-muted-foreground">{hint}</div>
+        </CardContent>
+      )}
     </Card>
   );
 }
