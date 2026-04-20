@@ -287,22 +287,36 @@ export function computeLoanTimeline(input: {
     }
   }
 
-  // Missing-rate gaps: any span of interest between earliest entry and today
-  // where `rateOn()` returns null (i.e. before the earliest configured period).
+  // Missing-rate gaps: spans where no prescribed-rate row covers the day.
+  // - Pre-earliest: from earliest entry date to the day before the first rate.
+  // - Interior: between consecutive rate periods (e.g. Q2 configured, Q3
+  //   missing, Q4 configured → flag Q3 so the user knows to add it).
+  // Forward gaps past the last rate are NOT flagged — rateOn() falls forward
+  // to the latest-known rate so the engine never silently zeros out.
   const missingRateGaps: MissingRateGap[] = [];
   {
     const firstEntryDate = entries[0]!.entryDate;
     if (rates.length > 0 && firstEntryDate < rates[0]!.startDate) {
       const gapEnd = addDays(rates[0]!.startDate, -1);
-      const days = dayDiff(firstEntryDate, gapEnd) + 1;
       missingRateGaps.push({
         startDate: firstEntryDate,
         endDate: gapEnd,
-        days,
+        days: dayDiff(firstEntryDate, gapEnd) + 1,
       });
     }
-    // We deliberately don't flag forward gaps — rateOn() falls forward to the
-    // latest-known rate so the engine doesn't zero-out silently.
+    for (let i = 0; i < rates.length - 1; i++) {
+      const cur = rates[i]!;
+      const next = rates[i + 1]!;
+      const gapStart = addDays(cur.endDate, 1);
+      const gapEnd = addDays(next.startDate, -1);
+      if (gapStart <= gapEnd) {
+        missingRateGaps.push({
+          startDate: gapStart,
+          endDate: gapEnd,
+          days: dayDiff(gapStart, gapEnd) + 1,
+        });
+      }
+    }
   }
 
   // Build quarterly accruals — one per RatePeriod that overlaps any draw segment.
