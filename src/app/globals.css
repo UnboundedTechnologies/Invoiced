@@ -82,7 +82,7 @@
     background: color-mix(in oklch, var(--primary) 35%, transparent);
     color: var(--foreground);
   }
-  /* Custom scrollbar — subtle, brand-tinted */
+  /* Custom scrollbar - subtle, brand-tinted */
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {

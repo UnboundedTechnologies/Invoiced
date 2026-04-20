@@ -74,7 +74,7 @@ export const sessions = pgTable(
 );
 
 // ────────────────────────────────────────────────────────────
-// Settings (singleton row — corp identity, branding, fiscal config)
+// Settings (singleton row - corp identity, branding, fiscal config)
 // ────────────────────────────────────────────────────────────
 export const settings = pgTable("settings", {
   id: integer("id").primaryKey().default(1), // singleton: always 1

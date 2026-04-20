@@ -74,7 +74,7 @@ const SECTIONS: { label: string; tone: Tone; items: NavItem[] }[] = [
   },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ corpName }: { corpName: string }) {
   const pathname = usePathname();
   let staggerIdx = 0;
 
@@ -83,23 +83,26 @@ export function AppSidebar() {
       {/* Animated brand stripe at the very top */}
       <div className="h-[3px] w-full bg-brand-gradient" />
 
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-5 animate-in fade-in slide-in-from-left-4 duration-500">
+      {/* Header — clickable, links back to dashboard */}
+      <Link
+        href="/dashboard"
+        className="group flex items-center gap-3 px-4 py-5 animate-in fade-in slide-in-from-left-4 duration-500 transition-colors hover:bg-primary/5"
+      >
         <Image
           src="/logo.png"
           alt="Unbounded Technologies"
           width={44}
           height={44}
           priority
-          className="shrink-0 transition-transform duration-300 hover:scale-105 hover:rotate-3"
+          className="shrink-0 transition-transform duration-300 group-hover:scale-105 group-hover:rotate-3"
         />
         <div className="min-w-0">
           <div className="text-base font-semibold leading-tight text-brand-gradient">Invoiced</div>
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">
-            Unbounded Tech.
+          <div className="text-[11px] leading-snug text-muted-foreground line-clamp-2" title={corpName}>
+            {corpName}
           </div>
         </div>
-      </div>
+      </Link>
       <Separator className="bg-border/50" />
 
       {/* Nav */}

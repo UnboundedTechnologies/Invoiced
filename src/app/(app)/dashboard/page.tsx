@@ -29,7 +29,7 @@ export default async function DashboardPage() {
           Welcome back, <span className="text-brand-gradient">{firstName}</span>
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {s?.corpLegalName} — fiscal year ending {fyEnd}
+          {s?.corpLegalName} · fiscal year ending {fyEnd}
         </p>
       </div>
 
@@ -46,7 +46,7 @@ export default async function DashboardPage() {
         <StatCard
           label="HST collected"
           value="$0.00"
-          hint="Annual filing — next due 2027-04-30"
+          hint="Annual filing. Next due 2027-04-30"
           icon={Percent}
           tone="rose"
           delayMs={180}

@@ -1,5 +1,5 @@
 /**
- * Section tones — each toolbox area gets a color identity that shows up in
+ * Section tones - each toolbox area gets a color identity that shows up in
  * sidebar labels, active items, stat cards, and quick-action tiles.
  *
  * Static class strings (not template-built) so Tailwind's JIT picks them up.

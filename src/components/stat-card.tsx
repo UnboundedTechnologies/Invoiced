@@ -54,7 +54,7 @@ export function StatCard({
       </CardHeader>
 
       <CardContent className="relative pt-0">
-        {/* Sparkline placeholder — flat baseline with a fade */}
+        {/* Sparkline placeholder - flat baseline with a fade */}
         <svg
           viewBox="0 0 200 32"
           preserveAspectRatio="none"
