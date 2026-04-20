@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ShieldAlert } from "lucide-react";
 import type { Contract } from "@/lib/db/schema";
 import { createContract, updateContract } from "@/server/actions/clients";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,8 @@ export function ContractForm({
     : (createContract.bind(null, clientId) as (p: Result | undefined, fd: FormData) => Promise<Result>);
   const [state, formAction, pending] = useActionState(action, undefined as Result | undefined);
   const [hstApplicable, setHst] = useState(contract?.hstApplicable ?? true);
+  const [billingModel, setBillingModel] = useState(contract?.billingModel ?? "hourly");
+  const [rightToSubcontract, setRightToSubcontract] = useState(contract?.rightToSubcontract ?? false);
 
   useEffect(() => {
     if (state?.ok) {
@@ -126,6 +129,53 @@ export function ContractForm({
                 onCheckedChange={setHst}
               />
             </div>
+          </div>
+
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="billingModel">Billing model *</Label>
+            <Select name="billingModel" value={billingModel} onValueChange={setBillingModel}>
+              <SelectTrigger id="billingModel">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="hourly">Hourly / T&M</SelectItem>
+                <SelectItem value="fixed_fee">Fixed fee</SelectItem>
+                <SelectItem value="milestone">Milestone-based</SelectItem>
+              </SelectContent>
+            </Select>
+            {billingModel === "hourly" && (
+              <p className="flex items-start gap-1.5 text-[11px] text-amber-400/90">
+                <ShieldAlert className="mt-0.5 size-3 shrink-0" />
+                Hourly is the easiest PSB flag for CRA. Fixed-fee or milestone-based engagements demonstrate
+                entrepreneurial risk.
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-md border border-border/40 p-3 sm:col-span-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="rightToSubcontract" className="text-sm">
+                  Right to subcontract (PSB defense)
+                </Label>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Is there a written clause in the MSA allowing you to delegate or substitute personnel?
+                </p>
+              </div>
+              <Switch
+                id="rightToSubcontract"
+                name="rightToSubcontract"
+                checked={rightToSubcontract}
+                onCheckedChange={setRightToSubcontract}
+              />
+            </div>
+            {!rightToSubcontract && (
+              <p className="mt-2 flex items-start gap-1.5 text-[11px] text-rose-400/90">
+                <ShieldAlert className="mt-0.5 size-3 shrink-0" />
+                Without this clause, you are harder to distinguish from an employee. This single item is the strongest
+                PSB defense in CRA case law.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5 sm:col-span-2">

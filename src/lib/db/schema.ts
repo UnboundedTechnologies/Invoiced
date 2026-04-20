@@ -147,6 +147,9 @@ export const contracts = pgTable(
     notes: text("notes"),
     documentId: uuid("document_id"), // FK added below to avoid forward-ref
     active: boolean("active").notNull().default(true),
+    // PSB defensibility signals
+    billingModel: text("billing_model").notNull().default("hourly"), // hourly | fixed_fee | milestone
+    rightToSubcontract: boolean("right_to_subcontract").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
@@ -298,6 +301,37 @@ export const deadlines = pgTable("deadlines", {
   completedAt: timestamp("completed_at", { withTimezone: true }),
 });
 
+// PSB (Personal Services Business) risk monitor
+export const psbChecklistItems = pgTable("psb_checklist_items", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  code: text("code").notNull().unique(), // stable key for seed / lookup
+  label: text("label").notNull(),
+  description: text("description"),
+  weight: integer("weight").notNull().default(1), // relative weight in scoring
+  critical: boolean("critical").notNull().default(false), // gates green rating
+  status: text("status").notNull().default("not_started"), // not_started|in_progress|done|not_applicable
+  evidenceDocumentId: uuid("evidence_document_id"), // optional vault link
+  notes: text("notes"),
+  lastReviewedAt: timestamp("last_reviewed_at", { withTimezone: true }),
+  sortOrder: integer("sort_order").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const psbSnapshots = pgTable(
+  "psb_snapshots",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    snapshotDate: date("snapshot_date").notNull(),
+    score: integer("score").notNull(), // 0-100
+    risk: text("risk").notNull(), // green|amber|red
+    itemsDoneCount: integer("items_done_count").notNull(),
+    itemsTotalCount: integer("items_total_count").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("psb_snapshots_date_idx").on(t.snapshotDate)],
+);
+
 // Audit log (every write + login + download)
 export const auditLog = pgTable(
   "audit_log",
@@ -329,3 +363,5 @@ export type Remittance = typeof remittances.$inferSelect;
 export type Slip = typeof slips.$inferSelect;
 export type Document = typeof documents.$inferSelect;
 export type Deadline = typeof deadlines.$inferSelect;
+export type PsbChecklistItem = typeof psbChecklistItems.$inferSelect;
+export type PsbSnapshot = typeof psbSnapshots.$inferSelect;

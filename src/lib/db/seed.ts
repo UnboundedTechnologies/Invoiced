@@ -5,7 +5,7 @@
  * Run: pnpm seed
  */
 import { db } from "./client";
-import { settings, clients, contracts } from "./schema";
+import { settings, clients, contracts, psbChecklistItems } from "./schema";
 import { eq } from "drizzle-orm";
 
 async function seed() {
@@ -80,6 +80,107 @@ async function seed() {
     console.log("  ✔ Contract seeded.");
   } else {
     console.log("  ⊘ Contract already exists - skipped.");
+  }
+
+  console.log("→ Seeding PSB checklist items…");
+  const existingPsb = await db.select({ id: psbChecklistItems.id }).from(psbChecklistItems).limit(1);
+  if (existingPsb.length === 0) {
+    const items = [
+      {
+        code: "multiple_clients",
+        label: "Multiple concurrent clients",
+        description:
+          "CRA's #1 tell is single-client engagement. Two or more paid clients in the fiscal year dramatically reduces PSB risk.",
+        weight: 3,
+        critical: true,
+        sortOrder: 10,
+      },
+      {
+        code: "client_pipeline",
+        label: "Documented pipeline of prospects",
+        description:
+          "Evidence of active business-development work (proposals out, discovery calls booked). Supports 'ongoing enterprise' narrative.",
+        weight: 1,
+        critical: false,
+        sortOrder: 20,
+      },
+      {
+        code: "website_brand",
+        label: "Professional website live",
+        description:
+          "unboundedtechnologies.ca (or equivalent) with service description, portfolio, contact info. A real brand, not an invoice factory.",
+        weight: 2,
+        critical: false,
+        sortOrder: 30,
+      },
+      {
+        code: "right_to_subcontract",
+        label: "Right-to-subcontract clause in MSA",
+        description:
+          "Written contractual right to delegate or substitute personnel. This single item is the strongest PSB defense per CRA jurisprudence.",
+        weight: 3,
+        critical: true,
+        sortOrder: 40,
+      },
+      {
+        code: "own_email_domain",
+        label: "Own email domain",
+        description:
+          "Primary business email at your corp domain (e.g., @unboundedtechnologies.ca), not the client's issued email.",
+        weight: 2,
+        critical: false,
+        sortOrder: 50,
+      },
+      {
+        code: "own_tools",
+        label: "Own laptop + software licenses",
+        description:
+          "You provide your own hardware and paid software. Client-issued laptop + forced Citrix is classic PSB integration.",
+        weight: 2,
+        critical: false,
+        sortOrder: 60,
+      },
+      {
+        code: "liability_insurance",
+        label: "Business liability / E&O insurance",
+        description:
+          "Active policy in the corp's name. Shows you bear business risk — essential for 'chance of profit / risk of loss' test.",
+        weight: 2,
+        critical: false,
+        sortOrder: 70,
+      },
+      {
+        code: "fixed_fee_engagement",
+        label: "Fixed-fee or milestone-based engagement",
+        description:
+          "Open-ended hourly rate is CRA's easiest PSB flag. Fixed-fee or milestone pricing demonstrates entrepreneurial risk.",
+        weight: 2,
+        critical: false,
+        sortOrder: 80,
+      },
+      {
+        code: "linkedin_brand",
+        label: "LinkedIn + public brand presence",
+        description:
+          "LinkedIn headline reflects your corp (Founder / Principal at Unbounded Technologies), not 'Consultant at BMO'.",
+        weight: 1,
+        critical: false,
+        sortOrder: 90,
+      },
+      {
+        code: "business_materials",
+        label: "Business cards + invoicing identity",
+        description:
+          "Logo, letterhead, invoice branding, business cards. Visible artifacts of an independent enterprise.",
+        weight: 1,
+        critical: false,
+        sortOrder: 100,
+      },
+    ];
+    await db.insert(psbChecklistItems).values(items);
+    console.log(`  ✔ ${items.length} PSB items seeded.`);
+  } else {
+    console.log("  ⊘ PSB items already exist - skipped.");
   }
 
   console.log("\n✅ Seed complete.");

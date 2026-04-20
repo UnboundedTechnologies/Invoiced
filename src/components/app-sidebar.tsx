@@ -15,6 +15,7 @@ import {
   Building2,
   User,
   Settings,
+  ShieldAlert,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,7 +36,10 @@ const SECTIONS: { label: string; tone: Tone; items: NavItem[] }[] = [
   {
     label: "Overview",
     tone: "indigo",
-    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, tone: "indigo" }],
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, tone: "indigo" },
+      { href: "/psb", label: "PSB risk", icon: ShieldAlert, tone: "indigo" },
+    ],
   },
   {
     label: "Income",
@@ -49,7 +53,7 @@ const SECTIONS: { label: string; tone: Tone; items: NavItem[] }[] = [
     label: "Self-pay",
     tone: "amber",
     items: [
-      { href: "/paycheques", label: "Paycheques (T4)", icon: BadgeDollarSign, tone: "amber", gated: true },
+      { href: "/paycheques", label: "Paycheques (T4)", icon: BadgeDollarSign, tone: "amber" },
       { href: "/dividends", label: "Dividends (T5)", icon: PiggyBank, tone: "violet" },
     ],
   },
