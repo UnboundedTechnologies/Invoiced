@@ -36,6 +36,10 @@ next-env.d.ts
 /uploads/
 drizzle/migrations/meta/_journal.json.bak
 
+# ───── Generated personal documents (defense in depth) ─────
+*.pdf
+!docs/**/*.pdf
+
 # ───── Logs ─────
 npm-debug.log*
 pnpm-debug.log*
