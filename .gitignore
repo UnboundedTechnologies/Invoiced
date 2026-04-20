@@ -1,0 +1,65 @@
+# ───── Secrets & environment (NEVER COMMIT) ─────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+secrets/
+private/
+credentials.json
+serviceAccountKey.json
+
+# ───── Dependencies ─────
+node_modules/
+.pnpm-store/
+.yarn/
+.npm/
+
+# ───── Build / Cache ─────
+.next/
+out/
+dist/
+build/
+.turbo/
+.vercel/
+.swc/
+.cache/
+*.tsbuildinfo
+next-env.d.ts
+
+# ───── Database & local data ─────
+*.sqlite
+*.sqlite3
+*.db
+/data/
+/uploads/
+drizzle/migrations/meta/_journal.json.bak
+
+# ───── Logs ─────
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+logs/
+
+# ───── IDE / OS ─────
+.idea/
+.vscode/
+!.vscode/settings.json.example
+.claude/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ───── Testing / coverage ─────
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# ───── Misc ─────
+tmp/
+temp/
+.history/
