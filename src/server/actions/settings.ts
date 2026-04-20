@@ -121,6 +121,19 @@ export async function activatePayroll(_prev: ActionResult | undefined, fd: FormD
 export async function deactivatePayroll(): Promise<ActionResult> {
   try {
     const email = await requireSession();
+    // Refuse if any draft paycheque exists — deactivating only gates the
+    // "New paycheque" UI button, not the edit/issue paths on existing drafts.
+    // A draft issued after deactivation would leak through without the gate.
+    const [openDraft] = await db
+      .select({ id: paycheques.id })
+      .from(paycheques)
+      .where(eq(paycheques.status, "draft"))
+      .limit(1);
+    if (openDraft) {
+      return {
+        error: "Can't deactivate payroll while a draft paycheque is open. Issue it or delete it first.",
+      };
+    }
     await commit(email, { payrollAccountActive: false }, "payroll-deactivate");
     return { ok: "Payroll deactivated. Salary tool locked." };
   } catch (e) {

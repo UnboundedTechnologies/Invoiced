@@ -217,11 +217,13 @@ function DirectorPanel({ data }: { data: SettingsRow }) {
   );
 }
 
-//  Fiscal & HST 
+//  Fiscal & HST
 function FiscalPanel({ data }: { data: SettingsRow }) {
   const [state, formAction, pending] = useActionState(updateFiscal, undefined as Result | undefined);
   const [dirty, setDirty] = useState(false);
+  const [hstBps, setHstBps] = useState(data.hstRateBps);
   useFormResult(state, setDirty);
+  const hstChanged = hstBps !== data.hstRateBps;
   return (
     <Card>
       <CardHeader>
@@ -267,18 +269,28 @@ function FiscalPanel({ data }: { data: SettingsRow }) {
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="HST rate (basis points)" htmlFor="hstRateBps" hint={`${(data.hstRateBps / 100).toFixed(2)}% - Ontario standard is 1300`}>
+            <Field label="HST rate (basis points)" htmlFor="hstRateBps" hint={`${(hstBps / 100).toFixed(2)}% - Ontario standard is 1300`}>
               <Input
                 id="hstRateBps"
                 name="hstRateBps"
                 type="number"
                 min={0}
                 max={10000}
-                defaultValue={data.hstRateBps}
+                value={hstBps}
+                onChange={(e) => setHstBps(Number(e.target.value))}
                 required
               />
             </Field>
           </div>
+          {hstChanged && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-300">
+              <strong className="text-amber-200">HST rate changing:</strong>{" "}
+              {(data.hstRateBps / 100).toFixed(2)}% → {(hstBps / 100).toFixed(2)}%. Existing
+              invoices keep their snapshotted HST. Any invoice issued from this point will use
+              the new rate. Double-check before saving — Ontario&rsquo;s 13.00% has been stable
+              for years.
+            </div>
+          )}
           <SaveBar pending={pending} dirty={dirty} />
         </form>
       </CardContent>

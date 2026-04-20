@@ -296,6 +296,23 @@ export async function upsertPrescribedRate(
       .select()
       .from(prescribedRatePeriods)
       .where(eq(prescribedRatePeriods.startDate, startDate));
+
+    // Overlap guard: reject if any OTHER row's date range intersects the new
+    // one. The unique index on startDate only catches exact start collisions,
+    // not partial overlaps that would silently skew 80.4 benefit math.
+    const allPeriods = await db.select().from(prescribedRatePeriods);
+    const overlap = allPeriods.find(
+      (p) =>
+        p.startDate !== startDate &&
+        p.startDate <= endDate &&
+        p.endDate >= startDate,
+    );
+    if (overlap) {
+      return {
+        error: `Overlaps existing ${overlap.ratePercent}% period ${overlap.startDate} → ${overlap.endDate}. Fix or delete that period first.`,
+      };
+    }
+
     if (existing) {
       await db
         .update(prescribedRatePeriods)
