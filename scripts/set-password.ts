@@ -30,9 +30,9 @@ async function main() {
     parallelism: 4,
   });
 
-  console.log("\n────────── ADMIN_PASSWORD_HASH ──────────");
+  console.log("\n ADMIN_PASSWORD_HASH ");
   console.log(hashed);
-  console.log("─────────────────────────────────────────");
+  console.log("");
   console.log("\nPaste the line above into .env.local under ADMIN_PASSWORD_HASH=...");
   console.log('Wrap it in quotes:  ADMIN_PASSWORD_HASH="<paste>"');
 }

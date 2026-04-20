@@ -35,7 +35,7 @@ async function commit(
   revalidatePath("/(app)", "layout");
 }
 
-// ────────────────────────────── Corporation ──────────────────────────────
+//  Corporation 
 const corpSchema = z
   .object({
     corpLegalName: z.string().min(1, "Legal name is required"),
@@ -81,7 +81,7 @@ export async function updateCorporation(_prev: ActionResult | undefined, fd: For
   }
 }
 
-// ────────────────────────────── Payroll account (guided activation) ──────────────────────────────
+//  Payroll account (guided activation) 
 const payrollActivateSchema = z.object({
   payrollAccount: z
     .string()
@@ -121,7 +121,7 @@ export async function deactivatePayroll(): Promise<ActionResult> {
   }
 }
 
-// ────────────────────────────── Director ──────────────────────────────
+//  Director 
 const directorSchema = z.object({
   directorLegalName: z.string().min(1, "Director name is required"),
   directorEmail: z.string().email("Invalid email"),
@@ -142,7 +142,7 @@ export async function updateDirector(_prev: ActionResult | undefined, fd: FormDa
   }
 }
 
-// ────────────────────────────── Fiscal & HST ──────────────────────────────
+//  Fiscal & HST 
 const fiscalSchema = z.object({
   fiscalYearEndMonth: z.coerce.number().int().min(1).max(12),
   fiscalYearEndDay: z.coerce.number().int().min(1).max(31),
@@ -167,7 +167,7 @@ export async function updateFiscal(_prev: ActionResult | undefined, fd: FormData
   }
 }
 
-// ────────────────────────────── Self-pay ──────────────────────────────
+//  Self-pay 
 const selfPaySchema = z.object({
   paymentStrategy: z.enum(["salary_only", "dividends_only", "blend"]),
   targetAnnualSalaryDollars: z.coerce.number().min(0),
@@ -201,7 +201,7 @@ export async function updateSelfPay(_prev: ActionResult | undefined, fd: FormDat
   }
 }
 
-// ────────────────────────────── Branding & Invoicing ──────────────────────────────
+//  Branding & Invoicing 
 const brandingSchema = z.object({
   brandPrimaryHex: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Hex like #6366F1"),
   brandAccentHex: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Hex like #22D3EE"),

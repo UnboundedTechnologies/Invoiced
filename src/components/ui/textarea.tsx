@@ -5,6 +5,12 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttribu
   ({ className, ...props }, ref) => (
     <textarea
       ref={ref}
+      // Block grammar/spelling browser extensions (Grammarly, LanguageTool) from
+      // injecting wrappers that bloat dialog height
+      data-gramm="false"
+      data-gramm_editor="false"
+      data-enable-grammarly="false"
+      data-lt-active="false"
       className={cn(
         "flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm",
         "placeholder:text-muted-foreground",
