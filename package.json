@@ -16,7 +16,9 @@
     "seed": "tsx --env-file=.env.local src/lib/db/seed.ts",
     "set-password": "tsx --env-file=.env.local scripts/set-password.ts",
     "reset-password": "tsx --env-file=.env.local scripts/reset-password.ts",
-    "optimize-logo": "tsx scripts/optimize-logo.ts"
+    "optimize-logo": "tsx scripts/optimize-logo.ts",
+    "optimize-banner": "tsx scripts/optimize-banner.ts",
+    "cleanup-blobs": "tsx --env-file=.env.local scripts/cleanup-blobs.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

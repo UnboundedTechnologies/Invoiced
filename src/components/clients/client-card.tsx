@@ -324,10 +324,14 @@ function ContractRowDisplay({
               <span className="text-foreground font-medium">{formatCAD(contract.rateCents)}</span>
               {" / "}
               {contract.rateUnit}
+              {contract.hstApplicable ? (
+                <span className="ml-1 text-emerald-400">+ HST</span>
+              ) : (
+                <span className="ml-1 text-muted-foreground/70">no HST</span>
+              )}
             </span>
             <span>{CADENCE_LABEL[contract.billingCadence] ?? contract.billingCadence}</span>
             <span>{TERMS_LABEL[contract.paymentTerms] ?? contract.paymentTerms}</span>
-            <span>{contract.hstApplicable ? "+ HST" : "No HST"}</span>
             <span className="inline-flex items-center gap-1">
               <Calendar className="size-3" />
               {contract.startDate}

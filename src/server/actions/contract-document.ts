@@ -110,6 +110,7 @@ export async function replaceContractDocument(contractId: string, fd: FormData):
         documentId: contracts.documentId,
         version: documents.version,
         previousId: documents.id,
+        previousBlobUrl: documents.blobUrl,
       })
       .from(contracts)
       .leftJoin(documents, eq(documents.id, contracts.documentId))
@@ -146,11 +147,30 @@ export async function replaceContractDocument(contractId: string, fd: FormData):
 
     await db.update(contracts).set({ documentId: doc!.id }).where(eq(contracts.id, contractId));
 
+    // Auto-cleanup: delete the previous version's blob + vault row so storage stays
+    // in sync with what the app actually shows. Audit log keeps the version trail.
+    if (existing.previousBlobUrl) {
+      try {
+        await del(existing.previousBlobUrl);
+      } catch {
+        // best-effort
+      }
+    }
+    if (existing.previousId) {
+      await db.delete(documents).where(eq(documents.id, existing.previousId));
+    }
+
     await db.insert(auditLog).values({
       actorEmail: email,
       action: "update",
       target: `contracts:${contractId}:document:${doc!.id}`,
-      metadata: { name: file.name, sha256, version: newVersion, supersedes: existing.previousId },
+      metadata: {
+        name: file.name,
+        sha256,
+        version: newVersion,
+        supersedes: existing.previousId,
+        previousBlobDeleted: !!existing.previousBlobUrl,
+      },
     });
 
     revalidatePath("/clients");

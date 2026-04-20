@@ -122,16 +122,13 @@
     0 8px 30px color-mix(in oklch, var(--primary) 30%, transparent);
 }
 
-/* Card lift on hover */
+/* Card hover: brand-tinted border + ring, no lift */
 .card-hover {
-  transition: transform 200ms ease, box-shadow 250ms ease, border-color 250ms ease;
+  transition: box-shadow 250ms ease, border-color 250ms ease;
 }
 .card-hover:hover {
-  transform: translateY(-2px);
   border-color: color-mix(in oklch, var(--primary) 35%, transparent);
-  box-shadow:
-    0 10px 30px -12px oklch(0 0 0 / 60%),
-    0 0 0 1px color-mix(in oklch, var(--primary) 25%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 25%, transparent);
 }
 
 /* Sidebar nav-item hover wash */
