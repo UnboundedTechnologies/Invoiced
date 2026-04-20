@@ -1,11 +1,9 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
-import { db } from "@/lib/db/client";
-import { settings } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { getSettings } from "@/lib/db/queries";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const [s] = await db.select().from(settings).where(eq(settings.id, 1));
+  const s = await getSettings();
   const corpName = s?.corpLegalName ?? "Unbounded Technologies Inc.";
   const brandPrimary = s?.brandPrimaryHex ?? "#6366F1";
   const brandAccent = s?.brandAccentHex ?? "#22D3EE";

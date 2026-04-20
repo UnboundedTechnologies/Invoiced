@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db/client";
-import { paycheques, settings, remittances } from "@/lib/db/schema";
+import { paycheques, remittances } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
+import { getSettings } from "@/lib/db/queries";
 import { ArrowLeft } from "lucide-react";
 import {
   Card,
@@ -24,8 +25,8 @@ export default async function PaychequeDetailPage({ params }: { params: Promise<
   const [paycheque] = await db.select().from(paycheques).where(eq(paycheques.id, id));
   if (!paycheque) notFound();
 
-  const [[s], remit] = await Promise.all([
-    db.select().from(settings).where(eq(settings.id, 1)),
+  const [s, remit] = await Promise.all([
+    getSettings(),
     db
       .select()
       .from(remittances)

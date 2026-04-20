@@ -1,13 +1,14 @@
 import { db } from "@/lib/db/client";
 import {
   dividends,
+  invoices,
   paycheques,
   psbChecklistItems,
-  settings,
   shareholderLoanEntries,
   prescribedRatePeriods,
 } from "@/lib/db/schema";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, gte, inArray, lte, sql } from "drizzle-orm";
+import { getSettings } from "@/lib/db/queries";
 import {
   CircleDollarSign,
   Percent,
@@ -30,8 +31,20 @@ import { fiscalYearFor, formatCAD } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [[s], allDividends, allPaycheques, psbItems, loanEntriesRaw, rateRows] = await Promise.all([
-    db.select().from(settings).where(eq(settings.id, 1)),
+  const calYear = new Date().getUTCFullYear();
+  const yearStart = `${calYear}-01-01`;
+  const yearEnd = `${calYear}-12-31`;
+
+  const [
+    s,
+    allDividends,
+    allPaycheques,
+    psbItems,
+    loanEntriesRaw,
+    rateRows,
+    invoiceTotals,
+  ] = await Promise.all([
+    getSettings(),
     db.select().from(dividends),
     db.select().from(paycheques),
     db.select().from(psbChecklistItems),
@@ -40,6 +53,22 @@ export default async function DashboardPage() {
       .from(shareholderLoanEntries)
       .orderBy(asc(shareholderLoanEntries.entryDate), asc(shareholderLoanEntries.createdAt)),
     db.select().from(prescribedRatePeriods).orderBy(asc(prescribedRatePeriods.startDate)),
+    // YTD revenue + HST aggregates — accrual basis, i.e. invoices that have
+    // been issued (sent/paid/overdue), excluding drafts and voids.
+    db
+      .select({
+        subtotal: sql<number>`COALESCE(SUM(${invoices.subtotalCents}), 0)`,
+        hst: sql<number>`COALESCE(SUM(${invoices.hstCents}), 0)`,
+        count: sql<number>`COUNT(*)::int`,
+      })
+      .from(invoices)
+      .where(
+        and(
+          inArray(invoices.status, ["sent", "paid", "overdue"]),
+          gte(invoices.issueDate, yearStart),
+          lte(invoices.issueDate, yearEnd),
+        ),
+      ),
   ]);
   const firstName = s?.directorLegalName?.split(" ")[0] ?? "there";
   const fyeMonth = s?.fiscalYearEndMonth ?? 12;
@@ -52,14 +81,17 @@ export default async function DashboardPage() {
   const eligibleTotal = fyDividends.filter((d) => d.eligible).reduce((a, d) => a + d.amountCents, 0);
   const nonEligibleTotal = dividendsFYTotal - eligibleTotal;
 
-  const calYear = new Date().getUTCFullYear();
-  const yearStart = `${calYear}-01-01`;
-  const yearEnd = `${calYear}-12-31`;
   const ytdPaycheques = allPaycheques.filter(
     (p) => p.status === "issued" && p.payDate >= yearStart && p.payDate <= yearEnd,
   );
   const salaryYTD = ytdPaycheques.reduce((a, p) => a + p.grossCents, 0);
   const selfPayYTD = salaryYTD + dividendsFYTotal;
+
+  // SQL COALESCE returns 0 for empty sets; Number() is belt-and-suspenders
+  // in case the driver returns bigint-as-string for the SUM.
+  const ytdRevenueCents = Number(invoiceTotals[0]?.subtotal ?? 0);
+  const ytdHstCents = Number(invoiceTotals[0]?.hst ?? 0);
+  const ytdInvoiceCount = Number(invoiceTotals[0]?.count ?? 0);
 
   const psb = computePsbRisk(psbItems);
 
@@ -128,16 +160,24 @@ export default async function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
         <StatCard
           label="YTD revenue"
-          value="$0.00"
-          hint="No invoices issued yet"
+          value={formatCAD(ytdRevenueCents)}
+          hint={
+            ytdInvoiceCount === 0
+              ? "No invoices issued yet"
+              : `${ytdInvoiceCount} invoice${ytdInvoiceCount === 1 ? "" : "s"} issued in ${calYear}`
+          }
           icon={CircleDollarSign}
           tone="emerald"
           delayMs={100}
         />
         <StatCard
           label="HST collected"
-          value="$0.00"
-          hint="Annual filing. Next due 2027-04-30"
+          value={formatCAD(ytdHstCents)}
+          hint={
+            ytdHstCents === 0
+              ? "Annual filing. Next due 2027-04-30"
+              : `${calYear} HST collected — annual filing due ${calYear + 1}-04-30`
+          }
           icon={Percent}
           tone="rose"
           delayMs={180}

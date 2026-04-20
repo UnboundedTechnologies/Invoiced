@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
 import {
@@ -10,9 +10,11 @@ import {
   settings,
   slips,
   auditLog,
+  dividends,
 } from "@/lib/db/schema";
 import { auth } from "../../../auth";
-import { fiscalYearFor } from "@/lib/utils";
+import { fiscalYearFor, formatCAD } from "@/lib/utils";
+import { computeLoanTimeline, type LoanEntry, type RatePeriod } from "@/lib/shareholder-loan";
 
 type ActionResult = { ok?: string; error?: string };
 
@@ -25,7 +27,17 @@ async function requireSession() {
 function revalidate() {
   revalidatePath("/shareholder-loan");
   revalidatePath("/dashboard");
+  revalidatePath("/dividends");
   revalidatePath("/(app)", "layout");
+}
+
+async function t5SlipIssuedFor(fiscalYear: number) {
+  const [row] = await db
+    .select({ id: slips.id })
+    .from(slips)
+    .where(and(eq(slips.type, "T5"), eq(slips.taxYear, fiscalYear)))
+    .limit(1);
+  return !!row;
 }
 
 async function getFye() {
@@ -253,5 +265,147 @@ export async function deletePrescribedRate(id: string): Promise<ActionResult> {
     return { ok: "Rate period deleted." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Delete failed" };
+  }
+}
+
+//  Reclassify draw as dividend (Phase 2D)
+//  Atomic: inserts a dividend + a matching reclassification ledger entry in a
+//  single transaction so the draw's outstanding principal goes to zero AND a
+//  T5-eligible dividend row appears, in one click. If either insert fails,
+//  nothing commits (neon-http transaction → single-request atomicity).
+const reclassifySchema = z.object({
+  declaredDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Declared date is required"),
+  eligible: z.boolean(),
+  notes: z.string().max(2000).nullable(),
+});
+
+export async function reclassifyDrawAsDividend(
+  drawId: string,
+  _prev: ActionResult | undefined,
+  fd: FormData,
+): Promise<ActionResult> {
+  try {
+    const email = await requireSession();
+
+    const parsed = reclassifySchema.safeParse({
+      declaredDate: String(fd.get("declaredDate") ?? "").trim(),
+      eligible: fd.get("eligible") === "on",
+      notes: (String(fd.get("notes") ?? "").trim()) || null,
+    });
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+    const { declaredDate, eligible, notes } = parsed.data;
+
+    // Load the draw + full ledger so we can recompute its FIFO-unpaid amount.
+    const [draw] = await db
+      .select()
+      .from(shareholderLoanEntries)
+      .where(eq(shareholderLoanEntries.id, drawId));
+    if (!draw) return { error: "Draw not found." };
+    if (draw.type !== "draw") return { error: "Only draws can be reclassified as dividends." };
+
+    const { fyeMonth, fyeDay } = await getFye();
+    const [allEntries, rateRows] = await Promise.all([
+      db
+        .select()
+        .from(shareholderLoanEntries)
+        .orderBy(asc(shareholderLoanEntries.entryDate), asc(shareholderLoanEntries.createdAt)),
+      db.select().from(prescribedRatePeriods).orderBy(asc(prescribedRatePeriods.startDate)),
+    ]);
+    const entries: LoanEntry[] = allEntries.map((e) => ({
+      id: e.id,
+      entryDate: e.entryDate,
+      type: e.type,
+      amountCents: e.amountCents,
+      description: e.description,
+    }));
+    const rates: RatePeriod[] = rateRows.map((r) => ({
+      startDate: r.startDate,
+      endDate: r.endDate,
+      ratePercent: r.ratePercent,
+    }));
+    const timeline = computeLoanTimeline({
+      entries,
+      rates,
+      fiscalYearEnd: { month: fyeMonth, day: fyeDay },
+      today: new Date().toISOString().slice(0, 10),
+    });
+    const candidate = timeline.draws15_2Candidates.find((c) => c.drawId === drawId);
+    if (!candidate) return { error: "Draw not found in ledger." };
+    const amountCents = candidate.currentUnpaidCents;
+    if (amountCents <= 0) {
+      return { error: "This draw has already been fully settled — nothing to reclassify." };
+    }
+
+    const dividendFY = fiscalYearFor(declaredDate, fyeMonth, fyeDay);
+    const entryFY = fiscalYearFor(declaredDate, fyeMonth, fyeDay);
+    if (await t5SlipIssuedFor(dividendFY)) {
+      return { error: `A T5 slip was issued for FY ${dividendFY}. Can't create a dividend in a closed year.` };
+    }
+    if (await t4aSlipIssuedFor(entryFY)) {
+      return { error: `A T4A slip was issued for FY ${entryFY}. Can't add a loan-ledger entry in a closed year.` };
+    }
+    if (await t4aSlipIssuedFor(draw.fiscalYear)) {
+      return { error: `A T4A slip was issued for the draw's FY ${draw.fiscalYear}. Reclassifying would rewrite closed-year history.` };
+    }
+
+    // Atomic write: dividend + matching reclassification entry + audit rows.
+    // neon-http batches the statements into one transactional request.
+    const newDividendId = await db.transaction(async (tx) => {
+      const [dividend] = await tx
+        .insert(dividends)
+        .values({
+          declaredDate,
+          paidDate: declaredDate, // declared + settled same day (draw already received)
+          amountCents,
+          eligible,
+          fiscalYear: dividendFY,
+          notes,
+        })
+        .returning({ id: dividends.id });
+
+      await tx.insert(shareholderLoanEntries).values({
+        entryDate: declaredDate,
+        type: "reclassification",
+        amountCents,
+        description: `Reclassified ${formatCAD(amountCents)} draw from ${draw.entryDate} as dividend`,
+        sourceKind: "reclass_to_dividend",
+        sourceRef: dividend!.id,
+        fiscalYear: entryFY,
+      });
+
+      await tx.insert(auditLog).values([
+        {
+          actorEmail: email,
+          action: "create",
+          target: `dividends:${dividend!.id}`,
+          metadata: {
+            amountCents,
+            eligible,
+            fiscalYear: dividendFY,
+            declaredDate,
+            reclassifiedFromDrawId: drawId,
+          },
+        },
+        {
+          actorEmail: email,
+          action: "create",
+          target: `shareholder_loan_entries:reclass_for_draw_${drawId}`,
+          metadata: {
+            type: "reclassification",
+            amountCents,
+            entryDate: declaredDate,
+            fiscalYear: entryFY,
+            reclassDividendId: dividend!.id,
+          },
+        },
+      ]);
+
+      return dividend!.id;
+    });
+
+    revalidate();
+    return { ok: `Reclassified ${formatCAD(amountCents)} as a ${eligible ? "eligible" : "non-eligible"} dividend. Draw settled.` };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Reclassify failed" };
   }
 }

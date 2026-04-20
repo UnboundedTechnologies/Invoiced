@@ -1,6 +1,7 @@
 import { db } from "@/lib/db/client";
-import { dividends, settings } from "@/lib/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { dividends } from "@/lib/db/schema";
+import { desc } from "drizzle-orm";
+import { getSettings } from "@/lib/db/queries";
 import { PiggyBank } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { NewDividendButton } from "@/components/dividends/new-dividend-button";
@@ -10,11 +11,10 @@ import { formatCAD, fiscalYearFor } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 
 export default async function DividendsPage() {
-  const [allDividends, settingsRows] = await Promise.all([
+  const [allDividends, s] = await Promise.all([
     db.select().from(dividends).orderBy(desc(dividends.declaredDate), desc(dividends.createdAt)),
-    db.select().from(settings).where(eq(settings.id, 1)),
+    getSettings(),
   ]);
-  const s = settingsRows[0];
   const fyeMonth = s?.fiscalYearEndMonth ?? 12;
   const fyeDay = s?.fiscalYearEndDay ?? 31;
   const today = new Date().toISOString().slice(0, 10);
