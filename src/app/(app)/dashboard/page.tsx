@@ -1,5 +1,5 @@
 import { db } from "@/lib/db/client";
-import { dividends, settings } from "@/lib/db/schema";
+import { dividends, paycheques, psbChecklistItems, settings } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import {
   CircleDollarSign,
@@ -13,14 +13,18 @@ import {
 } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { QuickActionTile } from "@/components/quick-action-tile";
+import { PsbDashboardBanner } from "@/components/psb/dashboard-banner";
+import { computePsbRisk } from "@/lib/psb";
 import { fiscalYearFor, formatCAD } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [[s], allDividends] = await Promise.all([
+  const [[s], allDividends, allPaycheques, psbItems] = await Promise.all([
     db.select().from(settings).where(eq(settings.id, 1)),
     db.select().from(dividends),
+    db.select().from(paycheques),
+    db.select().from(psbChecklistItems),
   ]);
   const firstName = s?.directorLegalName?.split(" ")[0] ?? "there";
   const fyeMonth = s?.fiscalYearEndMonth ?? 12;
@@ -33,6 +37,17 @@ export default async function DashboardPage() {
   const eligibleTotal = fyDividends.filter((d) => d.eligible).reduce((a, d) => a + d.amountCents, 0);
   const nonEligibleTotal = dividendsFYTotal - eligibleTotal;
 
+  const calYear = new Date().getUTCFullYear();
+  const yearStart = `${calYear}-01-01`;
+  const yearEnd = `${calYear}-12-31`;
+  const ytdPaycheques = allPaycheques.filter(
+    (p) => p.status === "issued" && p.payDate >= yearStart && p.payDate <= yearEnd,
+  );
+  const salaryYTD = ytdPaycheques.reduce((a, p) => a + p.grossCents, 0);
+  const selfPayYTD = salaryYTD + dividendsFYTotal;
+
+  const psb = computePsbRisk(psbItems);
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -44,6 +59,8 @@ export default async function DashboardPage() {
           {s?.corpLegalName} · fiscal year ending {fyEnd}
         </p>
       </div>
+
+      <PsbDashboardBanner score={psb.score} risk={psb.risk} criticalMissing={psb.criticalMissing} />
 
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -65,10 +82,12 @@ export default async function DashboardPage() {
         />
         <StatCard
           label="Self-pay (YTD)"
-          value="$0.00"
+          value={formatCAD(selfPayYTD)}
           hint={
             <>
-              Strategy: <span className="font-medium capitalize text-foreground">{s?.paymentStrategy ?? "blend"}</span>
+              <span className="text-amber-400">{formatCAD(salaryYTD)} salary</span>
+              {" · "}
+              <span className="text-violet-400">{formatCAD(dividendsFYTotal)} dividends</span>
             </>
           }
           icon={Wallet}
