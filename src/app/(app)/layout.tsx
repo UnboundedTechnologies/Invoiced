@@ -7,9 +7,19 @@ import { eq } from "drizzle-orm";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const [s] = await db.select().from(settings).where(eq(settings.id, 1));
   const corpName = s?.corpLegalName ?? "Unbounded Technologies Inc.";
+  const brandPrimary = s?.brandPrimaryHex ?? "#6366F1";
+  const brandAccent = s?.brandAccentHex ?? "#22D3EE";
+  // Override the shadcn CSS variables for the authenticated app so that the
+  // Settings → Branding color pickers live-repaint the UI on save (alongside
+  // their existing effect on invoice/paystub PDFs). `--ring` tracks primary.
+  const brandStyle = {
+    "--primary": brandPrimary,
+    "--ring": brandPrimary,
+    "--accent": brandAccent,
+  } as React.CSSProperties;
 
   return (
-    <div className="relative flex min-h-screen bg-background">
+    <div className="relative flex min-h-screen bg-background" style={brandStyle}>
       {/* Background decorations: floating colored orbs */}
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="absolute -top-32 -left-32 size-[36rem] rounded-full bg-indigo-500/15 blur-3xl" />
@@ -20,7 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <AppSidebar corpName={corpName} />
       <main className="flex-1 overflow-x-hidden">
         <TopBar corpName={corpName} />
-        <div className="mx-auto max-w-6xl px-6 py-8 animate-in fade-in duration-300">{children}</div>
+        <div className="mx-auto max-w-7xl px-6 py-8 animate-in fade-in duration-300">{children}</div>
       </main>
     </div>
   );

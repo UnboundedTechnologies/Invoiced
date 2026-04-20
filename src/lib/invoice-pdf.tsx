@@ -385,11 +385,15 @@ function CanadianAddress({
     country?: string | null;
   };
 }) {
-  const cityLine = [d.city, d.province, d.postalCode]
+  // Canada Post format: "CITY PROVINCE  POSTAL CODE" — single space between
+  // city/province, two spaces before the postal code. Matches the Settings
+  // mailing-address block for parity.
+  const cityProv = [d.city, d.province]
     .filter(Boolean)
-    .map((v) => v?.toUpperCase())
-    .join(" ")
-    .replace(/\s+/g, " ");
+    .map((v) => v!.toUpperCase())
+    .join(" ");
+  const postal = d.postalCode?.toUpperCase() ?? "";
+  const cityLine = [cityProv, postal].filter(Boolean).join("  ");
   const lines = [
     d.addressLine1?.toUpperCase(),
     d.addressLine2?.toUpperCase(),

@@ -37,19 +37,24 @@ export function StatCard({
         )}
       />
 
-      <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
-        <div className="space-y-1.5 min-w-0">
+      <CardHeader className="pb-2">
+        {/* Top row: label + icon chip. Value lives below on its own full-width
+            row so long amounts (up to $1,000,000.00+) never collide with the
+            icon, regardless of card column count. */}
+        <div className="flex items-center justify-between gap-3">
           <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-          <div className="text-3xl font-bold tracking-tight">{value}</div>
+          <div
+            className={cn(
+              "flex size-9 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset",
+              t.bg,
+              t.border,
+            )}
+          >
+            <Icon className={cn("size-[1.05rem]", t.text)} />
+          </div>
         </div>
-        <div
-          className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset",
-            t.bg,
-            t.border,
-          )}
-        >
-          <Icon className={cn("size-5", t.text)} />
+        <div className="mt-2 text-3xl font-bold leading-tight tracking-tight tabular-nums">
+          {value}
         </div>
       </CardHeader>
 
