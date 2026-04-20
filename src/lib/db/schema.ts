@@ -46,6 +46,8 @@ export const loanEntryTypeEnum = pgEnum("loan_entry_type", [
   "reclassification",   // after-the-fact recast as salary/dividend/reimbursement (phase 2D)
 ]);
 export const auditActionEnum = pgEnum("audit_action", ["create", "update", "delete", "login", "logout", "download"]);
+export const hstFilingMethodEnum = pgEnum("hst_filing_method", ["regular", "quick"]);
+export const hstReturnStatusEnum = pgEnum("hst_return_status", ["draft", "filed"]);
 
 // Identity & Auth (single user enforced via CHECK + allowlist)
 export const users = pgTable(
@@ -289,6 +291,43 @@ export const remittances = pgTable("remittances", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// HST returns — one row per fiscal year (annual filer only, per Phase 3B scope).
+// Drafts are recomputed live from invoices + expenses on every page load.
+// Filing snapshots the CRA line numbers so downstream receipt edits don't
+// silently rewrite a filed return. Status transitions to 'filed' also gate
+// expense + invoice mutations for rows whose date falls in the period.
+export const hstReturns = pgTable(
+  "hst_returns",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    fiscalYear: integer("fiscal_year").notNull(),
+    periodStart: date("period_start").notNull(),
+    periodEnd: date("period_end").notNull(),
+    method: hstFilingMethodEnum("method").notNull().default("regular"),
+    status: hstReturnStatusEnum("status").notNull().default("draft"),
+    // Quick Method election metadata
+    isFirstQmFy: boolean("is_first_qm_fy").notNull().default(false),
+    quickRateBps: integer("quick_rate_bps"), // 880 for Ontario services ≥ 90% to HST-province
+    // Frozen CRA line numbers — populated when status flips to 'filed'
+    line101Cents: bigint("line_101_cents", { mode: "number" }),   // worldwide taxable supplies (subtotal)
+    line103Cents: bigint("line_103_cents", { mode: "number" }),   // GST/HST collected OR QM remittance
+    line105Cents: bigint("line_105_cents", { mode: "number" }),   // total GST/HST + adjustments (= 103 + 104)
+    line106Cents: bigint("line_106_cents", { mode: "number" }),   // ITCs (regular) / capital-only ITCs (QM)
+    line107Cents: bigint("line_107_cents", { mode: "number" }),   // meals-cap adjustment (negative of 50% disallowed)
+    line108Cents: bigint("line_108_cents", { mode: "number" }),   // total ITCs + adjustments
+    line109Cents: bigint("line_109_cents", { mode: "number" }),   // net tax (105 - 108)
+    quickCreditCents: bigint("quick_credit_cents", { mode: "number" }), // 1% first-$30K credit (max $300)
+    // Filing metadata
+    craConfirmationNumber: text("cra_confirmation_number"),
+    filedAt: timestamp("filed_at", { withTimezone: true }),
+    filedBy: text("filed_by"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("hst_returns_fiscal_year_unique").on(t.fiscalYear)],
+);
+
 // Year-end slips (T4 / T5 / T4A)
 export const slips = pgTable(
   "slips",
@@ -436,3 +475,5 @@ export type ShareholderLoanEntry = typeof shareholderLoanEntries.$inferSelect;
 export type NewShareholderLoanEntry = typeof shareholderLoanEntries.$inferInsert;
 export type PrescribedRatePeriod = typeof prescribedRatePeriods.$inferSelect;
 export type NewPrescribedRatePeriod = typeof prescribedRatePeriods.$inferInsert;
+export type HstReturn = typeof hstReturns.$inferSelect;
+export type NewHstReturn = typeof hstReturns.$inferInsert;

@@ -22,6 +22,7 @@ import {
 import { auth } from "../../../auth";
 import { addDaysISO, calculateHst, paymentTermsToDays } from "@/lib/utils";
 import { InvoicePDF } from "@/lib/invoice-pdf";
+import { hstPeriodLockError } from "./hst";
 
 type ActionResult = { ok?: string; error?: string; invoiceId?: string };
 
@@ -77,6 +78,9 @@ export async function createInvoice(_prev: ActionResult | undefined, fd: FormDat
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
     const data = parsed.data;
     if (data.periodEnd < data.periodStart) return { error: "Period end must be on or after period start." };
+
+    const lockErr = await hstPeriodLockError(data.issueDate);
+    if (lockErr) return { error: lockErr };
 
     const [contract] = await db.select().from(contracts).where(eq(contracts.id, data.contractId));
     if (!contract) return { error: "Contract not found." };
@@ -235,6 +239,11 @@ export async function setInvoiceStatus(id: string, status: string): Promise<Acti
     const parsed = statusSchema.safeParse(status);
     if (!parsed.success) return { error: "Invalid status." };
 
+    const [existing] = await db.select().from(invoices).where(eq(invoices.id, id));
+    if (!existing) return { error: "Invoice not found." };
+    const lockErr = await hstPeriodLockError(existing.issueDate);
+    if (lockErr) return { error: lockErr };
+
     const patch: { status: typeof parsed.data; paidAt?: Date | null } = { status: parsed.data };
     if (parsed.data === "paid") patch.paidAt = new Date();
     if (parsed.data !== "paid") patch.paidAt = null;
@@ -261,6 +270,8 @@ export async function deleteDraftInvoice(id: string): Promise<ActionResult> {
     const [inv] = await db.select().from(invoices).where(eq(invoices.id, id));
     if (!inv) return { error: "Invoice not found." };
     if (inv.status !== "draft") return { error: "Only draft invoices can be deleted." };
+    const lockErr = await hstPeriodLockError(inv.issueDate);
+    if (lockErr) return { error: lockErr };
 
     // Delete the blob + the vault documents row that mirrored this invoice's PDF
     if (inv.pdfBlobUrl) {

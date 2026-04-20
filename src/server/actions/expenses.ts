@@ -1,8 +1,5 @@
 "use server";
 
-// TODO(3B): block mutations once an HST return is filed for the row's fiscal period.
-// TODO(3B): meals/entertainment HST paid is recorded in full here; apply the 50% ITC
-//           cap (ETA s.236) at HST-return aggregation time — do NOT mutate the row.
 // TODO(4C): block mutations once a T2 return is filed for the row's fiscal year.
 // TODO(4C): meals/entertainment subtotal is recorded in full; apply the 50%
 //           deduction cap (ITA s.67.1) at T2 P&L aggregation — do NOT mutate.
@@ -17,6 +14,7 @@ import { db } from "@/lib/db/client";
 import { expenses, documents, settings, auditLog } from "@/lib/db/schema";
 import { auth } from "../../../auth";
 import { fiscalYearFor } from "@/lib/utils";
+import { hstPeriodLockError } from "./hst";
 
 type ActionResult = { ok?: string; error?: string; expenseId?: string };
 
@@ -188,6 +186,9 @@ export async function createExpense(
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
     const data = parsed.data;
 
+    const lockErr = await hstPeriodLockError(data.expenseDate);
+    if (lockErr) return { error: lockErr };
+
     const fileCheck = await validatedReceiptFile(fd);
     if (fileCheck.kind === "error") return { error: fileCheck.error };
 
@@ -306,6 +307,14 @@ export async function updateExpense(
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
     const data = parsed.data;
 
+    // Block edits in a filed period AND block moving a row into a filed period.
+    const oldLockErr = await hstPeriodLockError(existing.expenseDate);
+    if (oldLockErr) return { error: oldLockErr };
+    if (data.expenseDate !== existing.expenseDate) {
+      const newLockErr = await hstPeriodLockError(data.expenseDate);
+      if (newLockErr) return { error: newLockErr };
+    }
+
     const { fyeMonth, fyeDay } = await getFye();
     const fiscalYear = fiscalYearFor(data.expenseDate, fyeMonth, fyeDay);
     const subtotalCents = Math.round(data.subtotalDollars * 100);
@@ -356,6 +365,9 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
     const [existing] = await db.select().from(expenses).where(eq(expenses.id, id));
     if (!existing) return { error: "Expense not found." };
 
+    const lockErr = await hstPeriodLockError(existing.expenseDate);
+    if (lockErr) return { error: lockErr };
+
     const auditEntry = db.insert(auditLog).values({
       actorEmail: email,
       action: "delete" as const,
@@ -402,6 +414,8 @@ export async function uploadReceipt(expenseId: string, fd: FormData): Promise<Ac
     if (existing.receiptBlobUrl) {
       return { error: "A receipt is already attached. Use Replace to upload a new file." };
     }
+    const lockErr = await hstPeriodLockError(existing.expenseDate);
+    if (lockErr) return { error: lockErr };
 
     const fileCheck = await validatedReceiptFile(fd);
     if (fileCheck.kind === "error") return { error: fileCheck.error };
@@ -464,6 +478,8 @@ export async function replaceReceipt(expenseId: string, fd: FormData): Promise<A
     if (!existing.receiptBlobUrl) {
       return { error: "Nothing to replace. Attach a receipt first." };
     }
+    const lockErr = await hstPeriodLockError(existing.expenseDate);
+    if (lockErr) return { error: lockErr };
 
     const fileCheck = await validatedReceiptFile(fd);
     if (fileCheck.kind === "error") return { error: fileCheck.error };
@@ -536,6 +552,8 @@ export async function deleteReceipt(expenseId: string): Promise<ActionResult> {
     const [existing] = await db.select().from(expenses).where(eq(expenses.id, expenseId));
     if (!existing) return { error: "Expense not found." };
     if (!existing.receiptBlobUrl) return { error: "No receipt to remove." };
+    const lockErr = await hstPeriodLockError(existing.expenseDate);
+    if (lockErr) return { error: lockErr };
 
     const oldBlobUrl = existing.receiptBlobUrl;
 

@@ -8,8 +8,15 @@ import {
   shareholderLoanEntries,
   prescribedRatePeriods,
 } from "@/lib/db/schema";
-import { and, asc, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { getSettings } from "@/lib/db/queries";
+import { hstReturns } from "@/lib/db/schema";
+import {
+  aggregateRegular,
+  aggregateQuickMethod,
+  hstFilingDueDate,
+  hstPeriodFor,
+} from "@/lib/hst";
 import {
   CircleDollarSign,
   Percent,
@@ -44,6 +51,7 @@ export default async function DashboardPage() {
     loanEntriesRaw,
     rateRows,
     invoiceTotals,
+    allInvoices,
     allExpenses,
   ] = await Promise.all([
     getSettings(),
@@ -71,6 +79,7 @@ export default async function DashboardPage() {
           lte(invoices.issueDate, yearEnd),
         ),
       ),
+    db.select().from(invoices),
     db.select().from(expenses),
   ]);
   const firstName = s?.directorLegalName?.split(" ")[0] ?? "there";
@@ -100,6 +109,57 @@ export default async function DashboardPage() {
   const fyExpensesTotalCents = fyExpenses.reduce((a, e) => a + e.totalCents, 0);
   const fyExpensesHstCents = fyExpenses.reduce((a, e) => a + e.hstPaidCents, 0);
   const fyExpensesCount = fyExpenses.length;
+
+  // HST net tax (line 109) projected for the current fiscal year. When a
+  // draft return exists we pick up its method + first-year flag; otherwise
+  // fall back to regular-method projection.
+  const hstPeriod = hstPeriodFor(currentFY, fyeMonth, fyeDay);
+  const hstDueIso = hstFilingDueDate(hstPeriod.end);
+  const [currentFyReturn] = await db
+    .select()
+    .from(hstReturns)
+    .where(eq(hstReturns.fiscalYear, currentFY));
+  const hstMethod = currentFyReturn?.method ?? "regular";
+  const hstFirstQm = currentFyReturn?.isFirstQmFy ?? false;
+  const hstStatus = currentFyReturn?.status ?? "draft";
+  const hstInvoiceSlices = allInvoices.map((i) => ({
+    id: i.id,
+    invoiceNumber: i.invoiceNumber,
+    issueDate: i.issueDate,
+    subtotalCents: i.subtotalCents,
+    hstCents: i.hstCents,
+    totalCents: i.totalCents,
+    status: i.status,
+  }));
+  const hstExpenseSlices = allExpenses.map((e) => ({
+    id: e.id,
+    expenseDate: e.expenseDate,
+    vendor: e.vendor,
+    category: e.category,
+    subtotalCents: e.subtotalCents,
+    hstPaidCents: e.hstPaidCents,
+    totalCents: e.totalCents,
+  }));
+  const hstNetCents =
+    hstStatus === "filed"
+      ? currentFyReturn?.line109Cents ?? 0
+      : hstMethod === "quick"
+        ? aggregateQuickMethod({
+            invoices: hstInvoiceSlices,
+            expenses: hstExpenseSlices,
+            period: hstPeriod,
+            isFirstQmFy: hstFirstQm,
+          }).line109Cents
+        : aggregateRegular({
+            invoices: hstInvoiceSlices,
+            expenses: hstExpenseSlices,
+            period: hstPeriod,
+          }).line109Cents;
+  const hstDaysToDue = Math.round(
+    (new Date(hstDueIso + "T00:00:00Z").getTime() -
+      new Date(today + "T00:00:00Z").getTime()) /
+      86_400_000,
+  );
 
   const psb = computePsbRisk(psbItems);
 
@@ -179,15 +239,24 @@ export default async function DashboardPage() {
           delayMs={100}
         />
         <StatCard
-          label="HST collected"
-          value={formatCAD(ytdHstCents)}
+          label={`HST net — FY ${currentFY}`}
+          value={formatCAD(Math.abs(hstNetCents))}
           hint={
-            ytdHstCents === 0
-              ? "Annual filing. Next due 2027-04-30"
-              : `${calYear} HST collected — annual filing due ${calYear + 1}-04-30`
+            hstStatus === "filed" ? (
+              <span className="text-emerald-400">
+                Filed · {formatCAD(ytdHstCents)} HST collected YTD
+              </span>
+            ) : (
+              <>
+                {hstNetCents >= 0 ? "Owed to CRA" : "Refund"} ·{" "}
+                {hstDaysToDue >= 0
+                  ? `due in ${hstDaysToDue} day${hstDaysToDue === 1 ? "" : "s"}`
+                  : `${Math.abs(hstDaysToDue)} days overdue`}
+              </>
+            )
           }
           icon={Percent}
-          tone="rose"
+          tone="sky"
           delayMs={180}
         />
         <StatCard
