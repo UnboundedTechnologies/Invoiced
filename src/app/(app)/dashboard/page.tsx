@@ -1,6 +1,13 @@
 import { db } from "@/lib/db/client";
-import { dividends, paycheques, psbChecklistItems, settings } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import {
+  dividends,
+  paycheques,
+  psbChecklistItems,
+  settings,
+  shareholderLoanEntries,
+  prescribedRatePeriods,
+} from "@/lib/db/schema";
+import { asc, eq } from "drizzle-orm";
 import {
   CircleDollarSign,
   Percent,
@@ -9,22 +16,30 @@ import {
   Receipt,
   PiggyBank,
   CalendarClock,
+  Coins,
   Settings,
 } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { QuickActionTile } from "@/components/quick-action-tile";
 import { PsbDashboardBanner } from "@/components/psb/dashboard-banner";
+import { LoanRiskBanner } from "@/components/shareholder-loan/risk-banner";
 import { computePsbRisk } from "@/lib/psb";
+import { computeLoanTimeline, type LoanEntry, type RatePeriod } from "@/lib/shareholder-loan";
 import { fiscalYearFor, formatCAD } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [[s], allDividends, allPaycheques, psbItems] = await Promise.all([
+  const [[s], allDividends, allPaycheques, psbItems, loanEntriesRaw, rateRows] = await Promise.all([
     db.select().from(settings).where(eq(settings.id, 1)),
     db.select().from(dividends),
     db.select().from(paycheques),
     db.select().from(psbChecklistItems),
+    db
+      .select()
+      .from(shareholderLoanEntries)
+      .orderBy(asc(shareholderLoanEntries.entryDate), asc(shareholderLoanEntries.createdAt)),
+    db.select().from(prescribedRatePeriods).orderBy(asc(prescribedRatePeriods.startDate)),
   ]);
   const firstName = s?.directorLegalName?.split(" ")[0] ?? "there";
   const fyeMonth = s?.fiscalYearEndMonth ?? 12;
@@ -48,6 +63,44 @@ export default async function DashboardPage() {
 
   const psb = computePsbRisk(psbItems);
 
+  // Shareholder-loan timeline → balance, worst 15(2) candidate, banner input
+  const loanEntries: LoanEntry[] = loanEntriesRaw.map((e) => ({
+    id: e.id,
+    entryDate: e.entryDate,
+    type: e.type,
+    amountCents: e.amountCents,
+    description: e.description,
+  }));
+  const rates: RatePeriod[] = rateRows.map((r) => ({
+    startDate: r.startDate,
+    endDate: r.endDate,
+    ratePercent: r.ratePercent,
+  }));
+  const loan = computeLoanTimeline({
+    entries: loanEntries,
+    rates,
+    fiscalYearEnd: { month: fyeMonth, day: fyeDay },
+    today,
+  });
+  const outstandingDraws = loan.draws15_2Candidates
+    .filter((c) => c.currentUnpaidCents > 0)
+    .sort((a, b) => a.daysUntilTrigger - b.daysUntilTrigger);
+  const worstDraw = outstandingDraws[0];
+  const pastDeadlineCount = loan.draws15_2Candidates.filter(
+    (c) => c.status === "past_deadline",
+  ).length;
+  const loanBannerVisible =
+    worstDraw && (worstDraw.status === "warning" || worstDraw.status === "past_deadline");
+  const loanBalance = loan.todayBalanceCents;
+  const loanHint = (() => {
+    if (loanBalance === 0) return "Clean";
+    if (loanBalance > 0) {
+      if (worstDraw) return `Next deadline ${worstDraw.triggerDate}`;
+      return "Corp → you";
+    }
+    return "You → corp";
+  })();
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -61,6 +114,15 @@ export default async function DashboardPage() {
       </div>
 
       <PsbDashboardBanner score={psb.score} risk={psb.risk} criticalMissing={psb.criticalMissing} />
+
+      {loanBannerVisible && (
+        <LoanRiskBanner
+          daysUntilWorstTrigger={worstDraw.daysUntilTrigger}
+          worstUnpaidCents={worstDraw.currentUnpaidCents}
+          worstTriggerDate={worstDraw.triggerDate}
+          pastDeadlineCount={pastDeadlineCount}
+        />
+      )}
 
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
@@ -111,6 +173,14 @@ export default async function DashboardPage() {
           icon={PiggyBank}
           tone="violet"
           delayMs={340}
+        />
+        <StatCard
+          label="Shareholder loan"
+          value={formatCAD(Math.abs(loanBalance))}
+          hint={loanHint}
+          icon={Coins}
+          tone="cyan"
+          delayMs={420}
         />
       </div>
 
