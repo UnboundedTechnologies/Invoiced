@@ -108,3 +108,19 @@ export function quantityFromWeekly(perWeek: number, startISO: string, endISO: st
   const raw = perWeek * (bd / 5);
   return Math.round(raw * 100) / 100;
 }
+
+/**
+ * Fiscal-year label for an ISO date given the corp's fiscal year end
+ * (month 1-12, day 1-31). Labelled by the ending calendar year (Canadian
+ * convention). Examples with FYE = Oct 31:
+ *   2026-10-31 → FY 2026
+ *   2026-11-01 → FY 2027
+ * With FYE = Dec 31, FY matches the calendar year.
+ */
+export function fiscalYearFor(iso: string, fyeMonth: number, fyeDay: number): number {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return new Date().getUTCFullYear();
+  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
+  const asKey = y * 10000 + m * 100 + d;
+  const fyeKey = y * 10000 + fyeMonth * 100 + fyeDay;
+  return asKey <= fyeKey ? y : y + 1;
+}

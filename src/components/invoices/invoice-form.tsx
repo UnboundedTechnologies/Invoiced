@@ -53,7 +53,7 @@ export function InvoiceForm({
   const [contractId, setContractId] = useState(contracts[0]?.contract.id ?? "");
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
-  const [qtyMode, setQtyMode] = useState<"total" | "weekly">("total");
+  const [qtyMode, setQtyMode] = useState<"total" | "weekly">("weekly");
   const [totalInput, setTotalInput] = useState("");
   const [weeklyInput, setWeeklyInput] = useState("");
   const [description, setDescription] = useState("");
@@ -184,20 +184,6 @@ export function InvoiceForm({
                     <button
                       type="button"
                       role="tab"
-                      aria-selected={qtyMode === "total"}
-                      onClick={() => setQtyMode("total")}
-                      className={cn(
-                        "rounded px-2.5 py-1 font-medium transition",
-                        qtyMode === "total"
-                          ? "bg-primary/20 text-primary ring-1 ring-inset ring-primary/30"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      Total
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
                       aria-selected={qtyMode === "weekly"}
                       onClick={() => setQtyMode("weekly")}
                       className={cn(
@@ -208,6 +194,20 @@ export function InvoiceForm({
                       )}
                     >
                       Per week
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={qtyMode === "total"}
+                      onClick={() => setQtyMode("total")}
+                      className={cn(
+                        "rounded px-2.5 py-1 font-medium transition",
+                        qtyMode === "total"
+                          ? "bg-primary/20 text-primary ring-1 ring-inset ring-primary/30"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      Total
                     </button>
                   </div>
                 </div>
