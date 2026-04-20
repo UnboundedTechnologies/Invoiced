@@ -136,6 +136,7 @@ export function PaystubPDF({ paycheque, ytd, settings, employee, bannerDataUri }
     <Document title={`Pay Stub ${paycheque.payDate} — ${employee.legalName}`}>
       <Page size="LETTER" style={styles.page}>
         <View style={styles.header}>
+          {/* eslint-disable-next-line jsx-a11y/alt-text -- @react-pdf/renderer Image: not an HTML img; alt is not part of its prop shape */}
           {bannerDataUri ? <Image src={bannerDataUri} style={styles.banner} /> : <View />}
           <View style={styles.headerRight}>
             <Text style={styles.title}>PAY STUB</Text>

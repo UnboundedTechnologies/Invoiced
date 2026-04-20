@@ -58,12 +58,6 @@ const createSchema = z.object({
   notes: z.string().max(2000).nullable(),
 });
 
-function addMonthISO(iso: string, months: number): string {
-  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
-  const dt = new Date(Date.UTC(y, m - 1 + months, d));
-  return dt.toISOString().slice(0, 10);
-}
-
 /** 15th of the month following the pay date (CRA standard remitter default). */
 function remittanceDueDate(payDate: string): string {
   const [y, m] = payDate.split("-").map(Number) as [number, number];

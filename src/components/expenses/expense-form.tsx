@@ -207,7 +207,7 @@ export function ExpenseForm({
         )}
       </div>
 
-      {/* Money */}
+      {/* Money — enter total first, then Split at 13% back-computes subtotal + HST */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label>Money *</Label>
@@ -225,6 +225,25 @@ export function ExpenseForm({
           </Button>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
+          <div className="space-y-1">
+            <Label htmlFor="totalDollars" className="text-xs text-muted-foreground">
+              Total
+            </Label>
+            <Input
+              id="totalDollars"
+              name="totalDollars"
+              type="number"
+              step="0.01"
+              min="0"
+              required
+              value={total}
+              onChange={(e) => {
+                setTotal(e.target.value);
+                setTotalTouched(true);
+              }}
+              data-gramm="false"
+            />
+          </div>
           <div className="space-y-1">
             <Label htmlFor="subtotalDollars" className="text-xs text-muted-foreground">
               Subtotal
@@ -256,25 +275,6 @@ export function ExpenseForm({
               value={hstPaid}
               onChange={(e) => setHstPaid(e.target.value)}
               onBlur={() => maybeAutoFillTotal(undefined, hstPaid)}
-              data-gramm="false"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="totalDollars" className="text-xs text-muted-foreground">
-              Total
-            </Label>
-            <Input
-              id="totalDollars"
-              name="totalDollars"
-              type="number"
-              step="0.01"
-              min="0"
-              required
-              value={total}
-              onChange={(e) => {
-                setTotal(e.target.value);
-                setTotalTouched(true);
-              }}
               data-gramm="false"
             />
           </div>

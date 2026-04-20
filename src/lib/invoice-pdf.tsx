@@ -433,6 +433,7 @@ export function InvoicePDF({
         {/* Header */}
         <View style={styles.header}>
           <View>
+            {/* eslint-disable-next-line jsx-a11y/alt-text -- @react-pdf/renderer Image: not an HTML img; alt is not part of its prop shape */}
             {bannerDataUri && <Image src={bannerDataUri} style={styles.banner} />}
           </View>
           <View style={styles.headerRight}>
