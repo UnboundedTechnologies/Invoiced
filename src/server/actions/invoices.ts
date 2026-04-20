@@ -262,14 +262,6 @@ export async function deleteDraftInvoice(id: string): Promise<ActionResult> {
     if (!inv) return { error: "Invoice not found." };
     if (inv.status !== "draft") return { error: "Only draft invoices can be deleted." };
 
-    // Free up the sequence number for reuse only if it was the most recent
-    const [s] = await db.select().from(settings).where(eq(settings.id, 1));
-    const expectedSeq = s ? s.nextInvoiceSeq - 1 : null;
-    const lastUsedSeq = parseInt(inv.invoiceNumber.split("-").pop() ?? "0", 10);
-    if (s && expectedSeq === lastUsedSeq) {
-      await db.update(settings).set({ nextInvoiceSeq: lastUsedSeq, updatedAt: new Date() }).where(eq(settings.id, 1));
-    }
-
     // Delete the blob + the vault documents row that mirrored this invoice's PDF
     if (inv.pdfBlobUrl) {
       try {
@@ -282,11 +274,34 @@ export async function deleteDraftInvoice(id: string): Promise<ActionResult> {
 
     await db.delete(invoiceLines).where(eq(invoiceLines.invoiceId, id));
     await db.delete(invoices).where(eq(invoices.id, id));
+
+    // Reclaim the sequence: next number should be (max trailing seq of remaining
+    // invoices) + 1, or 1 if the table is now empty. This correctly handles
+    // full-wipe, middle delete, and last-delete without special-casing.
+    const remaining = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices);
+    let maxSeq = 0;
+    for (const r of remaining) {
+      const n = parseInt(r.invoiceNumber.split("-").pop() ?? "0", 10);
+      if (Number.isFinite(n) && n > maxSeq) maxSeq = n;
+    }
+    const newNext = maxSeq + 1;
+    const [s] = await db.select().from(settings).where(eq(settings.id, 1));
+    if (s && s.nextInvoiceSeq !== newNext) {
+      await db
+        .update(settings)
+        .set({ nextInvoiceSeq: newNext, updatedAt: new Date() })
+        .where(eq(settings.id, 1));
+    }
+
     await db.insert(auditLog).values({
       actorEmail: email,
       action: "delete",
       target: `invoices:${id}`,
-      metadata: { invoiceNumber: inv.invoiceNumber, blobDeleted: !!inv.pdfBlobUrl },
+      metadata: {
+        invoiceNumber: inv.invoiceNumber,
+        blobDeleted: !!inv.pdfBlobUrl,
+        nextInvoiceSeqAfter: newNext,
+      },
     });
     revalidatePath("/invoices");
     revalidatePath("/dashboard");
