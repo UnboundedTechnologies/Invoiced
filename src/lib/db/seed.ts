@@ -42,7 +42,7 @@ async function seed() {
     });
     console.log("  ✔ Settings seeded.");
   } else {
-    console.log("  ⊘ Settings already exists — skipped.");
+    console.log("  ⊘ Settings already exists - skipped.");
   }
 
   console.log("→ Seeding BMO client…");
@@ -53,7 +53,7 @@ async function seed() {
       .insert(clients)
       .values({
         legalName: "Bank of Montreal",
-        notes: "AP contact + address pending — will be updated when BMO provides.",
+        notes: "AP contact + address pending - will be updated when BMO provides.",
         country: "CA",
       })
       .returning({ id: clients.id });
@@ -61,7 +61,7 @@ async function seed() {
     console.log("  ✔ BMO client seeded.");
   } else {
     bmoId = existingBmo[0]!.id;
-    console.log("  ⊘ BMO client already exists — skipped.");
+    console.log("  ⊘ BMO client already exists - skipped.");
   }
 
   console.log("→ Seeding active BMO contract…");
@@ -79,7 +79,7 @@ async function seed() {
     });
     console.log("  ✔ Contract seeded.");
   } else {
-    console.log("  ⊘ Contract already exists — skipped.");
+    console.log("  ⊘ Contract already exists - skipped.");
   }
 
   console.log("\n✅ Seed complete.");

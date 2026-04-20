@@ -22,7 +22,7 @@ async function main() {
   // Keep original as logo-full.png for PDF use if not already backed up
   try {
     await stat(BACKUP);
-    console.log("• logo-full.png already exists — keeping backup untouched.");
+    console.log("• logo-full.png already exists - keeping backup untouched.");
   } catch {
     await copyFile(SRC, BACKUP);
     console.log("• Saved original to public/logo-full.png.");
