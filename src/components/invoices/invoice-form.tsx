@@ -19,11 +19,14 @@ import {
 } from "@/components/ui/select";
 import {
   addDaysISO,
+  businessDaysBetweenISO,
   calculateHst,
+  cn,
   formatCAD,
   formatLongDate,
   paymentTermsLabel,
   paymentTermsToDays,
+  quantityFromWeekly,
 } from "@/lib/utils";
 
 type Result = { ok?: string; error?: string };
@@ -50,7 +53,9 @@ export function InvoiceForm({
   const [contractId, setContractId] = useState(contracts[0]?.contract.id ?? "");
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
-  const [quantity, setQuantity] = useState("");
+  const [qtyMode, setQtyMode] = useState<"total" | "weekly">("total");
+  const [totalInput, setTotalInput] = useState("");
+  const [weeklyInput, setWeeklyInput] = useState("");
   const [description, setDescription] = useState("");
   const [issueDate, setIssueDate] = useState(today);
   const [notes, setNotes] = useState("");
@@ -71,7 +76,19 @@ export function InvoiceForm({
     if (state?.error) toast.error(state.error);
   }, [state]);
 
-  const qty = Number(quantity) || 0;
+  const rateUnit = selected?.contract.rateUnit ?? "hour";
+  const unitLabel = rateUnit === "day" ? "Days" : "Hours";
+  const unitLabelLower = unitLabel.toLowerCase();
+
+  const businessDays =
+    periodStart && periodEnd ? businessDaysBetweenISO(periodStart, periodEnd) : 0;
+  const weeksInPeriod = businessDays / 5;
+  const perWeekNum = Number(weeklyInput) || 0;
+  const computedFromWeekly =
+    qtyMode === "weekly" ? quantityFromWeekly(perWeekNum, periodStart, periodEnd) : 0;
+  const qty =
+    qtyMode === "weekly" ? computedFromWeekly : Math.round((Number(totalInput) || 0) * 100) / 100;
+
   const subtotalCents = selected ? Math.round(qty * selected.contract.rateCents) : 0;
   const hstCents = selected?.contract.hstApplicable ? calculateHst(subtotalCents, hstRateBps) : 0;
   const totalCents = subtotalCents + hstCents;
@@ -156,22 +173,103 @@ export function InvoiceForm({
                   required
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="quantity">
-                  {selected?.contract.rateUnit === "day" ? "Days worked *" : "Hours worked *"}
-                </Label>
-                <Input
-                  id="quantity"
-                  name="quantity"
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                  required
-                />
+              <div className="space-y-1.5 sm:col-span-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label>{unitLabel} worked *</Label>
+                  <div
+                    role="tablist"
+                    aria-label={`${unitLabel} input mode`}
+                    className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/30 p-0.5 text-xs"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={qtyMode === "total"}
+                      onClick={() => setQtyMode("total")}
+                      className={cn(
+                        "rounded px-2.5 py-1 font-medium transition",
+                        qtyMode === "total"
+                          ? "bg-primary/20 text-primary ring-1 ring-inset ring-primary/30"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      Total
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={qtyMode === "weekly"}
+                      onClick={() => setQtyMode("weekly")}
+                      className={cn(
+                        "rounded px-2.5 py-1 font-medium transition",
+                        qtyMode === "weekly"
+                          ? "bg-primary/20 text-primary ring-1 ring-inset ring-primary/30"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      Per week
+                    </button>
+                  </div>
+                </div>
+
+                {qtyMode === "total" ? (
+                  <>
+                    <Input
+                      id="quantity"
+                      name="quantity"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={totalInput}
+                      onChange={(e) => setTotalInput(e.target.value)}
+                      placeholder={rateUnit === "day" ? "e.g., 22" : "e.g., 165"}
+                      required
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Total {unitLabelLower} billed on this invoice. Enter exactly what you tracked.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-[1fr_auto] items-stretch gap-2">
+                      <Input
+                        id="weeklyInput"
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        value={weeklyInput}
+                        onChange={(e) => setWeeklyInput(e.target.value)}
+                        placeholder={rateUnit === "day" ? "e.g., 5 days/week" : "e.g., 37.5 hours/week"}
+                        required
+                      />
+                      <div className="flex items-center gap-1 rounded-md border border-dashed border-border/60 bg-muted/20 px-3 text-xs text-muted-foreground">
+                        × {weeksInPeriod.toFixed(2)} wk
+                      </div>
+                    </div>
+                    <input type="hidden" name="quantity" value={qty > 0 ? qty.toFixed(2) : ""} />
+                    <div className="rounded-md bg-muted/25 p-2.5 text-xs">
+                      <div className="text-muted-foreground">
+                        {periodStart && periodEnd ? (
+                          <>
+                            {businessDays} business {businessDays === 1 ? "day" : "days"} in period
+                            {" · "}
+                            {weeksInPeriod.toFixed(2)} week{weeksInPeriod === 1 ? "" : "s"} (÷ 5)
+                          </>
+                        ) : (
+                          "Pick a period first to see business days."
+                        )}
+                      </div>
+                      <div className="mt-1 text-sm font-medium">
+                        Total:{" "}
+                        <span className="text-brand-gradient">
+                          {qty.toFixed(2)} {unitLabelLower}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="issueDate">Issue date *</Label>
                 <Input
                   id="issueDate"

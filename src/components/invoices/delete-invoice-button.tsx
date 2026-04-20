@@ -39,7 +39,7 @@ export function DeleteInvoiceButton({ id, invoiceNumber }: { id: string; invoice
       <Button
         variant="ghost"
         size="icon"
-        className="size-7 text-muted-foreground hover:bg-rose-500/10 hover:text-rose-400"
+        className="size-7 text-rose-400 hover:bg-rose-500/10 hover:text-rose-400"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();

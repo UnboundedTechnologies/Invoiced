@@ -76,3 +76,35 @@ export function formatLongDate(iso: string): string {
     timeZone: "UTC",
   });
 }
+
+/**
+ * Count business days (Mon-Fri) in [startISO, endISO] inclusive.
+ * Public holidays are NOT excluded — this is an approximation for invoice
+ * quantity defaults. Returns 0 if end < start or either date is malformed.
+ * Parses via UTC to sidestep DST / local-TZ off-by-ones.
+ */
+export function businessDaysBetweenISO(startISO: string, endISO: string): number {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startISO) || !/^\d{4}-\d{2}-\d{2}$/.test(endISO)) return 0;
+  if (endISO < startISO) return 0;
+  const [ys, ms, ds] = startISO.split("-").map(Number) as [number, number, number];
+  const [ye, me, de] = endISO.split("-").map(Number) as [number, number, number];
+  const start = Date.UTC(ys, ms - 1, ds);
+  const end = Date.UTC(ye, me - 1, de);
+  let count = 0;
+  for (let t = start; t <= end; t += 86_400_000) {
+    const day = new Date(t).getUTCDay(); // 0=Sun, 6=Sat
+    if (day !== 0 && day !== 6) count++;
+  }
+  return count;
+}
+
+/**
+ * Compute an invoice quantity (hours or days) from a weekly rate applied over
+ * the business days in a period. `weeks = businessDays / 5`, so a full Mon-Fri
+ * week yields 1 week. Rounded to 2 decimals to match the form + DB basis.
+ */
+export function quantityFromWeekly(perWeek: number, startISO: string, endISO: string): number {
+  const bd = businessDaysBetweenISO(startISO, endISO);
+  const raw = perWeek * (bd / 5);
+  return Math.round(raw * 100) / 100;
+}
