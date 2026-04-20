@@ -26,6 +26,9 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  devIndicators: {
+    position: "bottom-right",
+  },
   experimental: {
     serverActions: { bodySizeLimit: "5mb" },
   },
