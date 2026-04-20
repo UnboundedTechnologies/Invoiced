@@ -1,6 +1,6 @@
 import { db } from "@/lib/db/client";
-import { dividends } from "@/lib/db/schema";
-import { desc } from "drizzle-orm";
+import { dividends, shareholderLoanEntries } from "@/lib/db/schema";
+import { desc, eq } from "drizzle-orm";
 import { getSettings } from "@/lib/db/queries";
 import { PiggyBank } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,10 +11,20 @@ import { formatCAD, fiscalYearFor } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 
 export default async function DividendsPage() {
-  const [allDividends, s] = await Promise.all([
+  const [allDividends, s, reclassEntries] = await Promise.all([
     db.select().from(dividends).orderBy(desc(dividends.declaredDate), desc(dividends.createdAt)),
     getSettings(),
+    db
+      .select({ sourceRef: shareholderLoanEntries.sourceRef })
+      .from(shareholderLoanEntries)
+      .where(eq(shareholderLoanEntries.sourceKind, "reclass_to_dividend")),
   ]);
+  // Dividend IDs that were created via the shareholder-loan "Declare as
+  // dividend" flow — flag these in their row's delete dialog so the user
+  // knows deleting will cascade to the matching loan-ledger entry.
+  const reclassifiedDividendIds = new Set(
+    reclassEntries.map((r) => r.sourceRef).filter((v): v is string => !!v),
+  );
   const fyeMonth = s?.fiscalYearEndMonth ?? 12;
   const fyeDay = s?.fiscalYearEndDay ?? 31;
   const today = new Date().toISOString().slice(0, 10);
@@ -75,7 +85,13 @@ export default async function DividendsPage() {
                 </thead>
                 <tbody>
                   {allDividends.map((d) => (
-                    <DividendRow key={d.id} dividend={d} fyeMonth={fyeMonth} fyeDay={fyeDay} />
+                    <DividendRow
+                      key={d.id}
+                      dividend={d}
+                      fyeMonth={fyeMonth}
+                      fyeDay={fyeDay}
+                      linkedToLoanLedger={reclassifiedDividendIds.has(d.id)}
+                    />
                   ))}
                 </tbody>
               </table>

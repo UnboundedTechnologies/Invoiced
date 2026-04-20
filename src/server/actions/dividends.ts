@@ -4,7 +4,7 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
-import { dividends, settings, slips, auditLog } from "@/lib/db/schema";
+import { dividends, settings, slips, auditLog, shareholderLoanEntries } from "@/lib/db/schema";
 import { auth } from "../../../auth";
 import { fiscalYearFor } from "@/lib/utils";
 
@@ -18,8 +18,18 @@ async function requireSession() {
 
 function revalidate() {
   revalidatePath("/dividends");
+  revalidatePath("/shareholder-loan");
   revalidatePath("/dashboard");
   revalidatePath("/(app)", "layout");
+}
+
+async function t4aSlipIssuedFor(fiscalYear: number) {
+  const [row] = await db
+    .select({ id: slips.id })
+    .from(slips)
+    .where(and(eq(slips.type, "T4A"), eq(slips.taxYear, fiscalYear)))
+    .limit(1);
+  return !!row;
 }
 
 async function getFye() {
@@ -155,6 +165,56 @@ export async function deleteDividend(id: string): Promise<ActionResult> {
     if (await t5SlipIssuedFor(existing.fiscalYear)) {
       return { error: `A T5 slip was issued for FY ${existing.fiscalYear}. Delete blocked.` };
     }
+
+    // Cascade-delete: if this dividend was created via the "Declare as
+    // dividend" reclassify flow, a shareholder_loan_entries row of type
+    // `reclassification` points back to it via sourceRef. Delete both
+    // atomically so the ledger and the dividend list stay in sync.
+    const [linkedEntry] = await db
+      .select()
+      .from(shareholderLoanEntries)
+      .where(
+        and(
+          eq(shareholderLoanEntries.sourceKind, "reclass_to_dividend"),
+          eq(shareholderLoanEntries.sourceRef, id),
+        ),
+      )
+      .limit(1);
+
+    if (linkedEntry) {
+      if (await t4aSlipIssuedFor(linkedEntry.fiscalYear)) {
+        return {
+          error: `A T4A slip was issued for FY ${linkedEntry.fiscalYear}. Can't cascade-delete the linked loan-ledger entry.`,
+        };
+      }
+      await db.batch([
+        db.delete(dividends).where(eq(dividends.id, id)),
+        db.delete(shareholderLoanEntries).where(eq(shareholderLoanEntries.id, linkedEntry.id)),
+        db.insert(auditLog).values([
+          {
+            actorEmail: email,
+            action: "delete",
+            target: `dividends:${id}`,
+            metadata: {
+              amountCents: existing.amountCents,
+              eligible: existing.eligible,
+              fiscalYear: existing.fiscalYear,
+              declaredDate: existing.declaredDate,
+              cascadeDeletedLoanEntryId: linkedEntry.id,
+            },
+          },
+          {
+            actorEmail: email,
+            action: "delete",
+            target: `shareholder_loan_entries:${linkedEntry.id}`,
+            metadata: { cascadedFromDividendId: id },
+          },
+        ]),
+      ]);
+      revalidate();
+      return { ok: "Dividend and linked loan-ledger entry deleted." };
+    }
+
     await db.delete(dividends).where(eq(dividends.id, id));
     await db.insert(auditLog).values({
       actorEmail: email,

@@ -32,10 +32,14 @@ export function DividendRow({
   dividend,
   fyeMonth,
   fyeDay,
+  linkedToLoanLedger = false,
 }: {
   dividend: Dividend;
   fyeMonth: number;
   fyeDay: number;
+  /** True if this dividend was created via shareholder-loan reclassification.
+   * Delete will cascade to the matching ledger entry — show a warning. */
+  linkedToLoanLedger?: boolean;
 }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
@@ -161,6 +165,13 @@ export function DividendRow({
             <AlertDialogDescription>
               Removes the {formatCAD(dividend.amountCents)} {dividend.eligible ? "eligible" : "non-eligible"} dividend declared {formatLongDate(dividend.declaredDate)}. Once a T5 slip is issued for FY {dividend.fiscalYear}, deletion is blocked.
             </AlertDialogDescription>
+            {linkedToLoanLedger && (
+              <div className="mt-3 rounded-md border border-rose-500/40 bg-rose-500/5 p-3 text-xs text-rose-300">
+                <strong className="text-rose-200">Cascades:</strong> this dividend was created by
+                reclassifying a shareholder-loan draw. Deleting it will also remove the matching
+                ledger entry so the draw&rsquo;s outstanding balance stays consistent.
+              </div>
+            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
