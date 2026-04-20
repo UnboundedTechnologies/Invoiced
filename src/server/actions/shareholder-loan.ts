@@ -138,6 +138,20 @@ export async function updateLoanEntry(
       .where(eq(shareholderLoanEntries.id, id));
     if (!existing) return { error: "Entry not found." };
 
+    // Guard: linked reclassifications (created by the "Declare as dividend"
+    // flow) must stay tied to their dividend — the amount, date, and type
+    // are locked to the dividend's row to preserve the invariant. Delete
+    // and recreate if you need to change it (the delete cascades cleanly).
+    if (
+      existing.type === "reclassification" &&
+      existing.sourceKind === "reclass_to_dividend" &&
+      existing.sourceRef
+    ) {
+      return {
+        error: "This entry is linked to a dividend declared via the reclassify flow. To change it, delete the entry (which cascades and removes the matching dividend) and create new records — don't edit in place.",
+      };
+    }
+
     const parsed = parseEntry(fd);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
     const { entryDate, type, amountDollars, description, sourceKind, sourceRef } = parsed.data;
@@ -387,6 +401,15 @@ export async function reclassifyDrawAsDividend(
     const amountCents = candidate.currentUnpaidCents;
     if (amountCents <= 0) {
       return { error: "This draw has already been fully settled — nothing to reclassify." };
+    }
+    // s.80.4(3)(b) + s.15(2) double-tax guard: once a draw has crossed its
+    // s.15(2.6) one-year deadline still unpaid, the principal is already
+    // deemed income in the draw's year T1. Declaring a T5 dividend on top
+    // would tax the same dollars twice.
+    if (candidate.status === "past_deadline") {
+      return {
+        error: `This draw already triggered s.15(2) inclusion in FY ${candidate.drawFiscalYear} (deadline ${candidate.triggerDate}). Reclassifying now would double-count the principal as income. If that inclusion was entered in error, delete the draw first so the ledger no longer shows it as unpaid-past-deadline.`,
+      };
     }
 
     const dividendFY = fiscalYearFor(declaredDate, fyeMonth, fyeDay);

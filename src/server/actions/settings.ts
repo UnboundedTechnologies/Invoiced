@@ -4,7 +4,14 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
-import { settings, auditLog } from "@/lib/db/schema";
+import {
+  settings,
+  auditLog,
+  dividends,
+  paycheques,
+  invoices,
+  shareholderLoanEntries,
+} from "@/lib/db/schema";
 import { auth } from "../../../auth";
 
 type ActionResult = { ok?: string; error?: string };
@@ -160,6 +167,32 @@ export async function updateFiscal(_prev: ActionResult | undefined, fd: FormData
       hstRateBps: fd.get("hstRateBps"),
     });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+
+    // FYE lock: once any fiscal-year-dependent row exists (dividends,
+    // paycheques, invoices, shareholder-loan entries), refuse to change
+    // fiscalYearEndMonth/Day. Those tables snapshot `fiscal_year` from the
+    // current FYE at write time; silently changing it would leave stale,
+    // wrong fiscal-year labels on historical rows (and invalidate T4A/T5
+    // slip lookups). CRA requires consent under ITA s.249.1 anyway.
+    const [current] = await db.select().from(settings).where(eq(settings.id, 1));
+    const fyeChanged =
+      current &&
+      (current.fiscalYearEndMonth !== parsed.data.fiscalYearEndMonth ||
+        current.fiscalYearEndDay !== parsed.data.fiscalYearEndDay);
+    if (fyeChanged) {
+      const [[anyDividend], [anyPaycheque], [anyInvoice], [anyLoan]] = await Promise.all([
+        db.select({ id: dividends.id }).from(dividends).limit(1),
+        db.select({ id: paycheques.id }).from(paycheques).limit(1),
+        db.select({ id: invoices.id }).from(invoices).limit(1),
+        db.select({ id: shareholderLoanEntries.id }).from(shareholderLoanEntries).limit(1),
+      ]);
+      if (anyDividend || anyPaycheque || anyInvoice || anyLoan) {
+        return {
+          error: "FYE change blocked — existing dividends, paycheques, invoices, or shareholder-loan entries already reference the current fiscal year. Changing FYE now would silently mislabel historical rows and break T4/T5/T4A slip lookups. ITA s.249.1 also requires CRA consent for a real FYE change.",
+        };
+      }
+    }
+
     await commit(email, parsed.data, "fiscal");
     return { ok: "Fiscal & HST saved." };
   } catch (e) {
