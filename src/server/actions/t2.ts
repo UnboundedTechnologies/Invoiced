@@ -23,7 +23,7 @@ import { fiscalYearFor } from "@/lib/utils";
 import { hstPeriodFor } from "@/lib/hst";
 import { TAXABLE_SUPPLY_STATUSES } from "@/lib/queries/invoice-slices";
 import { operatingExpensesForT2 } from "@/lib/dashboard-metrics";
-import { estimateT2Detailed, type T2Result } from "@/lib/t2";
+import { estimateT2Detailed, t2FilingDueDate, type T2Result } from "@/lib/t2";
 import {
   buildCcaPools,
   totalCcaClaimed,
@@ -92,20 +92,6 @@ export async function t2PeriodLockError(iso: string): Promise<string | null> {
     return `T2 return for FY ${fiscalYear} is filed. Corrections route through CRA form T2A or the next-year return.`;
   }
   return null;
-}
-
-// ————————————————————————————————————————————————————————————————
-// T2 due date: 6 months after FYE per ITA s.150(1)(a)
-// ————————————————————————————————————————————————————————————————
-
-export function t2FilingDueDate(periodEndIso: string): string {
-  const [y, m, d] = periodEndIso.split("-").map(Number) as [number, number, number];
-  const targetMonthIndex = m - 1 + 6;
-  const targetYear = y + Math.floor(targetMonthIndex / 12);
-  const targetMonth = ((targetMonthIndex % 12) + 12) % 12;
-  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
-  const dd = Math.min(d, lastDay);
-  return `${targetYear.toString().padStart(4, "0")}-${String(targetMonth + 1).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
 }
 
 // ————————————————————————————————————————————————————————————————

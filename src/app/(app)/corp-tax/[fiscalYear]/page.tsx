@@ -18,8 +18,8 @@ import { Separator } from "@/components/ui/separator";
 import {
   loadLiveT2Aggregate,
   upsertDraftT2Return,
-  t2FilingDueDate,
 } from "@/server/actions/t2";
+import { t2FilingDueDate } from "@/lib/t2";
 import { hstPeriodFor } from "@/lib/hst";
 import { formatCAD, formatLongDate } from "@/lib/utils";
 import { FileT2Button } from "@/components/corp-tax/file-t2-button";

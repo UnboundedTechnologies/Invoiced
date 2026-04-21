@@ -1,9 +1,24 @@
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { SettingsForm } from "@/components/settings/settings-form";
 import { getSettings } from "@/lib/db/queries";
+import { db } from "@/lib/db/client";
+import { t2Returns } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 export default async function SettingsPage() {
   const s = await getSettings();
+  // Opening-pool inputs lock once any T2 return has been filed — the
+  // closing balance on that return becomes the source of truth. Passing
+  // this flag down to the CorpTaxPanel disables the inputs visually in
+  // addition to the server-side guard already enforced by updateCorpTax.
+  const [anyFiledT2] = s
+    ? await db
+        .select({ id: t2Returns.id })
+        .from(t2Returns)
+        .where(eq(t2Returns.status, "filed"))
+        .limit(1)
+    : [];
+  const openingPoolsLocked = !!anyFiledT2;
 
   if (!s) {
     return (
@@ -26,7 +41,7 @@ export default async function SettingsPage() {
           Everything below is the source of truth for invoices, slips, and tax tools.
         </p>
       </div>
-      <SettingsForm data={s} />
+      <SettingsForm data={s} openingPoolsLocked={openingPoolsLocked} />
     </div>
   );
 }

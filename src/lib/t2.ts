@@ -31,6 +31,17 @@
 
 import { ontarioSmallBizRate, FED_SBD_RATE } from "./t2-rates";
 
+/** T2 filing due date: 6 months after the fiscal year-end per ITA s.150(1)(a). */
+export function t2FilingDueDate(periodEndIso: string): string {
+  const [y, m, d] = periodEndIso.split("-").map(Number) as [number, number, number];
+  const targetMonthIndex = m - 1 + 6;
+  const targetYear = y + Math.floor(targetMonthIndex / 12);
+  const targetMonth = ((targetMonthIndex % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  const dd = Math.min(d, lastDay);
+  return `${targetYear.toString().padStart(4, "0")}-${String(targetMonth + 1).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+}
+
 const BPS = 10_000;
 
 /** Federal general rate after GRR (ITA s.123.4): 38% − 10% − 13% = 15%. */

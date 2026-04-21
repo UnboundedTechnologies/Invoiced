@@ -78,7 +78,13 @@ function SaveBar({ pending, dirty }: { pending: boolean; dirty: boolean }) {
   );
 }
 
-export function SettingsForm({ data }: { data: SettingsRow }) {
+export function SettingsForm({
+  data,
+  openingPoolsLocked,
+}: {
+  data: SettingsRow;
+  openingPoolsLocked: boolean;
+}) {
   return (
     <Tabs defaultValue="corp" className="w-full">
       <TabsList>
@@ -110,7 +116,7 @@ export function SettingsForm({ data }: { data: SettingsRow }) {
       </TabsContent>
       <TabsContent value="fiscal" className="space-y-4">
         <FiscalPanel data={data} />
-        <CorpTaxPanel data={data} />
+        <CorpTaxPanel data={data} openingPoolsLocked={openingPoolsLocked} />
       </TabsContent>
       <TabsContent value="selfpay">
         <SelfPayPanel data={data} />
@@ -451,7 +457,13 @@ function FiscalPanel({ data }: { data: SettingsRow }) {
 }
 
 //  Corporate tax (T2)
-function CorpTaxPanel({ data }: { data: SettingsRow }) {
+function CorpTaxPanel({
+  data,
+  openingPoolsLocked,
+}: {
+  data: SettingsRow;
+  openingPoolsLocked: boolean;
+}) {
   const [state, formAction, pending] = useActionState(
     updateCorpTax,
     undefined as Result | undefined,
@@ -529,9 +541,21 @@ function CorpTaxPanel({ data }: { data: SettingsRow }) {
           </div>
 
           <div className="rounded-md border border-border/40 bg-card/30 p-3">
-            <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Opening pool balances
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Opening pool balances
+              </div>
+              {openingPoolsLocked && (
+                <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
+                  Locked · T2 filed
+                </span>
+              )}
             </div>
+            {openingPoolsLocked && (
+              <p className="mb-3 text-[11px] text-muted-foreground">
+                A T2 return has been filed. Closing balances on filed returns are now the source of truth; these openings can&rsquo;t be edited.
+              </p>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field
                 label="GRIP opening ($)"
@@ -546,6 +570,7 @@ function CorpTaxPanel({ data }: { data: SettingsRow }) {
                   min="0"
                   defaultValue={(data.openingGripCents / 100).toFixed(2)}
                   data-gramm="false"
+                  disabled={openingPoolsLocked}
                 />
               </Field>
               <Field
@@ -561,6 +586,7 @@ function CorpTaxPanel({ data }: { data: SettingsRow }) {
                   min="0"
                   defaultValue={(data.openingErdtohCents / 100).toFixed(2)}
                   data-gramm="false"
+                  disabled={openingPoolsLocked}
                 />
               </Field>
               <Field
@@ -576,6 +602,7 @@ function CorpTaxPanel({ data }: { data: SettingsRow }) {
                   min="0"
                   defaultValue={(data.openingNerdtohCents / 100).toFixed(2)}
                   data-gramm="false"
+                  disabled={openingPoolsLocked}
                 />
               </Field>
               <Field
@@ -591,6 +618,7 @@ function CorpTaxPanel({ data }: { data: SettingsRow }) {
                   min="0"
                   defaultValue={(data.openingCdaCents / 100).toFixed(2)}
                   data-gramm="false"
+                  disabled={openingPoolsLocked}
                 />
               </Field>
             </div>

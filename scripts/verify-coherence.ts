@@ -707,12 +707,16 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
       `more expenses must reduce T2: base ${formatCAD(base.totalTaxCents)}, more ${formatCAD(more.totalTaxCents)}`,
     );
   }
-  // Delta: $40K extra expenses × combined rate ≈ expected drop. Allow a few
-  // cents of tolerance — the facade combinedRate is bps-rounded for display,
-  // while estimateT2Detailed applies the exact blended float rate internally.
-  const expectedDrop = Math.round((50_000_00 - 10_000_00) * base.combinedRate);
+  // Delta: $40K extra expenses × combined rate = expected drop. Compute the
+  // expected drop via the same exact-float path estimateT2Detailed uses
+  // internally — the facade's combinedRate is bps-rounded for display and
+  // would drift a few cents from the cent-exact reality.
+  const deltaCents = 40_000_00; // 50k - 10k
+  const onRate = ontarioSmallBizRate(fyPeriod.start, fyPeriod.end);
+  const expectedDrop =
+    Math.round(deltaCents * FED_SBD_RATE) + Math.round(deltaCents * onRate);
   const actualDrop = base.totalTaxCents - more.totalTaxCents;
-  expect(failures, "T2 drop proportional to combined rate", actualDrop, expectedDrop, 200);
+  expect(failures, "T2 drop proportional to combined rate", actualDrop, expectedDrop, 1);
   record("T2 monotonicity: more operating expenses → less tax, proportional to combined rate", failures);
 })();
 
