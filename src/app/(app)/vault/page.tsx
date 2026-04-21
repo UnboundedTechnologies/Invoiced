@@ -16,6 +16,7 @@ import { PinGate } from "@/components/vault/pin-gate";
 import { VaultFilters } from "@/components/vault/vault-filters";
 import { VaultTable } from "@/components/vault/vault-table";
 import { UploadVaultDialog } from "@/components/vault/upload-vault-dialog";
+import { LockVaultButton } from "@/components/vault/lock-vault-button";
 
 export const dynamic = "force-dynamic";
 
@@ -90,7 +91,15 @@ export default async function VaultPage({ searchParams }: { searchParams: Search
 
   return (
     <div className="space-y-6">
-      <VaultHeader right={<UploadVaultDialog />} pinSetAt={pinSetAt} />
+      <VaultHeader
+        right={
+          <div className="flex items-center gap-2">
+            <LockVaultButton />
+            <UploadVaultDialog />
+          </div>
+        }
+        pinSetAt={pinSetAt}
+      />
       <VaultFilters counts={counts} />
       {rows.length === 0 ? (
         <Card>
@@ -138,12 +147,12 @@ function VaultHeader({
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Document vault</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Everything the corp has on file, behind a 6-digit PIN.
+          PIN required on every access · auto-locks on navigation away
           {pinSetAt && (
             <>
               {" · "}
               <span className="text-muted-foreground">
-                PIN set{" "}
+                set{" "}
                 {pinSetAt.toLocaleDateString("en-CA", {
                   year: "numeric",
                   month: "short",
