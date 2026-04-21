@@ -54,7 +54,18 @@ async function setPinCookie() {
 
 async function clearPinCookie() {
   const c = await cookies();
-  c.delete(VAULT_PIN_COOKIE);
+  // Delete by overwriting with maxAge=0 + the exact same attributes used at
+  // set time. `__Host-` cookies require matching path/secure/sameSite for the
+  // browser to accept the delete — bare c.delete(name) can silently no-op.
+  c.set({
+    name: VAULT_PIN_COOKIE,
+    value: "",
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
 }
 
 const pinSchema = z.object({
