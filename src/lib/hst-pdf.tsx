@@ -222,11 +222,7 @@ export function HstReturnPDF(props: HstReturnPDFProps) {
     >
       <Page size="LETTER" style={styles.page}>
         {/* Watermark first so all subsequent content paints on top. */}
-        {status === "draft" && (
-          <Text style={styles.watermark} fixed>
-            DRAFT
-          </Text>
-        )}
+        {status === "draft" && <Text style={styles.watermark}>DRAFT</Text>}
 
         <View style={styles.header}>
           <View>
