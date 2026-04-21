@@ -23,9 +23,17 @@ export async function loginAction(_prev: { error?: string } | undefined, formDat
 }
 
 export async function logoutAction() {
-  // Clear the vault PIN cookie alongside the main session so nothing
-  // persists across a logout/login boundary.
+  // Clear the vault PIN cookie alongside the main session. Explicit attribute
+  // match required — `__Host-` cookies ignore bare c.delete() in some browsers.
   const c = await cookies();
-  c.delete(VAULT_PIN_COOKIE);
+  c.set({
+    name: VAULT_PIN_COOKIE,
+    value: "",
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
   await signOut({ redirectTo: "/login" });
 }
