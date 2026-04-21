@@ -13,6 +13,14 @@ export function formatCAD(cents: number): string {
   }).format(cents / 100);
 }
 
+/** Format a byte count as KB / MB with 1 decimal place. */
+export function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return "—";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
 /** Calculate HST (basis points) on a subtotal in cents. Returns cents. */
 export function calculateHst(subtotalCents: number, hstRateBps: number): number {
   return Math.round((subtotalCents * hstRateBps) / 10_000);

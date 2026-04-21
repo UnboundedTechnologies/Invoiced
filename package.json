@@ -16,6 +16,7 @@
     "seed": "tsx --env-file=.env.local src/lib/db/seed.ts",
     "set-password": "tsx --env-file=.env.local scripts/set-password.ts",
     "reset-password": "tsx --env-file=.env.local scripts/reset-password.ts",
+    "reset-vault-pin": "tsx --env-file=.env.local scripts/reset-vault-pin.ts",
     "optimize-logo": "tsx scripts/optimize-logo.ts",
     "optimize-banner": "tsx scripts/optimize-banner.ts",
     "cleanup-blobs": "tsx --env-file=.env.local scripts/cleanup-blobs.ts",
@@ -26,7 +27,9 @@
     "verify-coherence": "tsx scripts/verify-coherence.ts",
     "verify-payroll": "tsx scripts/verify-payroll.ts",
     "verify-deadlines": "tsx scripts/verify-deadlines.ts",
-    "verify-all": "pnpm verify-math && pnpm verify-loans && pnpm verify-hst && pnpm verify-dashboard && pnpm verify-payroll && pnpm verify-deadlines && pnpm verify-coherence",
+    "verify-vault": "tsx scripts/verify-vault.ts",
+    "verify-vault-pin": "tsx --env-file=.env.local scripts/verify-vault-pin.ts",
+    "verify-all": "pnpm verify-math && pnpm verify-loans && pnpm verify-hst && pnpm verify-dashboard && pnpm verify-payroll && pnpm verify-deadlines && pnpm verify-vault && pnpm verify-vault-pin && pnpm verify-coherence",
     "gen-tax-pdf": "tsx scripts/gen-tax-pdf.tsx"
   },
   "dependencies": {
