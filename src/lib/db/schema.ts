@@ -101,6 +101,7 @@ export const settings = pgTable("settings", {
   // Fiscal
   fiscalYearEndMonth: integer("fiscal_year_end_month").notNull().default(12), // 1-12
   fiscalYearEndDay: integer("fiscal_year_end_day").notNull().default(31),     // 1-31
+  incorporationDate: date("incorporation_date"), // drives Ontario annual return anniversary
   hstFilingFrequency: text("hst_filing_frequency").notNull().default("annual"), // annual|quarterly|monthly
   hstRateBps: integer("hst_rate_bps").notNull().default(1300), // basis points (1300 = 13.00%)
   // Self-pay
@@ -362,15 +363,24 @@ export const documents = pgTable("documents", {
 });
 
 // Calendar / deadlines
-export const deadlines = pgTable("deadlines", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  title: text("title").notNull(),
-  description: text("description"),
-  dueDate: date("due_date").notNull(),
-  category: text("category").notNull(), // hst | payroll | t2 | t1 | annual_return | other
-  completed: boolean("completed").notNull().default(false),
-  completedAt: timestamp("completed_at", { withTimezone: true }),
-});
+export const deadlines = pgTable(
+  "deadlines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    title: text("title").notNull(),
+    description: text("description"),
+    dueDate: date("due_date").notNull(),
+    category: text("category").notNull(), // hst | payroll | t2 | t4 | t1 | annual_return | other
+    completed: boolean("completed").notNull().default(false),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    // Natural key for idempotent upsert by derivation lib. NULL for user-entered
+    // "other" deadlines so duplicates are possible (by design — multiple ad-hoc items).
+    sourceKey: text("source_key"),
+    craConfirmationNumber: text("cra_confirmation_number"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("deadlines_source_key_unique").on(t.sourceKey)],
+);
 
 // Shareholder loan ledger — ITA 15(2) / 15(2.6) / 80.4 tracking
 export const shareholderLoanEntries = pgTable(

@@ -29,6 +29,7 @@ async function seed() {
       directorEmail: "said.aissani@engineer.com",
       fiscalYearEndMonth: 12,
       fiscalYearEndDay: 31,
+      incorporationDate: "2026-03-30",
       hstFilingFrequency: "annual",
       hstRateBps: 1300,
       paymentStrategy: "blend",

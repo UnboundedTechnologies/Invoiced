@@ -281,6 +281,19 @@ function FiscalPanel({ data }: { data: SettingsRow }) {
                 required
               />
             </Field>
+            <Field
+              label="Incorporation date"
+              htmlFor="incorporationDate"
+              hint="Drives the Ontario annual return anniversary on /calendar."
+              full
+            >
+              <Input
+                id="incorporationDate"
+                name="incorporationDate"
+                type="date"
+                defaultValue={data.incorporationDate ?? ""}
+              />
+            </Field>
           </div>
           {hstChanged && (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-300">
