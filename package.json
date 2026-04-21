@@ -30,7 +30,8 @@
     "verify-deadlines": "tsx scripts/verify-deadlines.ts",
     "verify-vault": "tsx scripts/verify-vault.ts",
     "verify-vault-pin": "tsx --env-file=.env.local scripts/verify-vault-pin.ts",
-    "verify-all": "pnpm verify-math && pnpm verify-loans && pnpm verify-hst && pnpm verify-dashboard && pnpm verify-payroll && pnpm verify-deadlines && pnpm verify-vault && pnpm verify-vault-pin && pnpm verify-coherence",
+    "verify-t2": "tsx scripts/verify-t2.ts",
+    "verify-all": "pnpm verify-math && pnpm verify-loans && pnpm verify-hst && pnpm verify-dashboard && pnpm verify-payroll && pnpm verify-deadlines && pnpm verify-vault && pnpm verify-vault-pin && pnpm verify-t2 && pnpm verify-coherence",
     "gen-tax-pdf": "tsx scripts/gen-tax-pdf.tsx"
   },
   "dependencies": {

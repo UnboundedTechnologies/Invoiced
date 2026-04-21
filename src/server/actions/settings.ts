@@ -11,6 +11,7 @@ import {
   paycheques,
   invoices,
   shareholderLoanEntries,
+  t2Returns,
 } from "@/lib/db/schema";
 import { auth } from "../../../auth";
 
@@ -275,6 +276,83 @@ export async function updateBranding(_prev: ActionResult | undefined, fd: FormDa
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
     await commit(email, parsed.data, "branding");
     return { ok: "Branding saved." };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Save failed" };
+  }
+}
+
+//  Corp tax configuration — drives T2 estimates across the app.
+//  Opening pool balances are meaningful only before any T2 is filed; once a
+//  filed return exists, its closing columns override what's in settings.
+//  We still accept writes (for future "restoring from backup" style edits),
+//  but refuse to change them while any T2 return is filed — same rationale
+//  as the FYE lock, to prevent silent rewrites of closed-year history.
+const corpTaxSchema = z.object({
+  isCcpc: z.coerce.boolean(),
+  priorYearAaiiDollars: z.coerce.number().min(0).max(10_000_000),
+  ontarioGeneralRatePercent: z.coerce.number().min(0).max(50),
+  openingGripDollars: z.coerce.number().min(0).max(100_000_000),
+  openingErdtohDollars: z.coerce.number().min(0).max(100_000_000),
+  openingNerdtohDollars: z.coerce.number().min(0).max(100_000_000),
+  openingCdaDollars: z.coerce.number().min(0).max(100_000_000),
+});
+
+export async function updateCorpTax(
+  _prev: ActionResult | undefined,
+  fd: FormData,
+): Promise<ActionResult> {
+  try {
+    const email = await requireSession();
+    const parsed = corpTaxSchema.safeParse({
+      isCcpc: fd.get("isCcpc") === "on",
+      priorYearAaiiDollars: fd.get("priorYearAaiiDollars"),
+      ontarioGeneralRatePercent: fd.get("ontarioGeneralRatePercent"),
+      openingGripDollars: fd.get("openingGripDollars"),
+      openingErdtohDollars: fd.get("openingErdtohDollars"),
+      openingNerdtohDollars: fd.get("openingNerdtohDollars"),
+      openingCdaDollars: fd.get("openingCdaDollars"),
+    });
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+
+    const [current] = await db.select().from(settings).where(eq(settings.id, 1));
+    if (!current) return { error: "Settings not seeded." };
+
+    const newOpenings = {
+      openingGripCents: Math.round(parsed.data.openingGripDollars * 100),
+      openingErdtohCents: Math.round(parsed.data.openingErdtohDollars * 100),
+      openingNerdtohCents: Math.round(parsed.data.openingNerdtohDollars * 100),
+      openingCdaCents: Math.round(parsed.data.openingCdaDollars * 100),
+    };
+    const openingsChanged =
+      current.openingGripCents !== newOpenings.openingGripCents ||
+      current.openingErdtohCents !== newOpenings.openingErdtohCents ||
+      current.openingNerdtohCents !== newOpenings.openingNerdtohCents ||
+      current.openingCdaCents !== newOpenings.openingCdaCents;
+    if (openingsChanged) {
+      const [anyFiled] = await db
+        .select({ id: t2Returns.id })
+        .from(t2Returns)
+        .where(eq(t2Returns.status, "filed"))
+        .limit(1);
+      if (anyFiled) {
+        return {
+          error:
+            "Opening pool balances are locked — a T2 return has already been filed. Closing balances on filed returns are now the source of truth.",
+        };
+      }
+    }
+
+    await commit(
+      email,
+      {
+        isCcpc: parsed.data.isCcpc,
+        priorYearAaiiCents: Math.round(parsed.data.priorYearAaiiDollars * 100),
+        ontarioGeneralRateBps: Math.round(parsed.data.ontarioGeneralRatePercent * 100),
+        ...newOpenings,
+      },
+      "corp-tax",
+    );
+    return { ok: "Corporate tax configuration saved." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Save failed" };
   }

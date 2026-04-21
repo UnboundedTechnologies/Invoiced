@@ -9,6 +9,7 @@ import {
   updateFiscal,
   updateSelfPay,
   updateBranding,
+  updateCorpTax,
 } from "@/server/actions/settings";
 import { changeVaultPin } from "@/server/actions/vault-pin";
 import { PayrollCard } from "@/components/settings/payroll-card";
@@ -18,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -106,8 +108,9 @@ export function SettingsForm({ data }: { data: SettingsRow }) {
       <TabsContent value="director">
         <DirectorPanel data={data} />
       </TabsContent>
-      <TabsContent value="fiscal">
+      <TabsContent value="fiscal" className="space-y-4">
         <FiscalPanel data={data} />
+        <CorpTaxPanel data={data} />
       </TabsContent>
       <TabsContent value="selfpay">
         <SelfPayPanel data={data} />
@@ -447,7 +450,160 @@ function FiscalPanel({ data }: { data: SettingsRow }) {
   );
 }
 
-//  Self-pay 
+//  Corporate tax (T2)
+function CorpTaxPanel({ data }: { data: SettingsRow }) {
+  const [state, formAction, pending] = useActionState(
+    updateCorpTax,
+    undefined as Result | undefined,
+  );
+  const [dirty, setDirty] = useState(false);
+  const [isCcpc, setIsCcpc] = useState(data.isCcpc);
+  useFormResult(state, setDirty);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Corporate tax (T2)</CardTitle>
+        <CardDescription>
+          Drives SBD allocation, GRIP, RDTOH, CDA. Opening pool balances are editable only
+          while no T2 has been filed — after that, prior-FY closing rows become the source
+          of truth.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form
+          action={formAction}
+          className="space-y-5"
+          onChange={() => setDirty(true)}
+        >
+          <div className="flex items-center justify-between gap-3 rounded-md border border-border/40 bg-card/30 p-3">
+            <div>
+              <Label htmlFor="isCcpc">CCPC status</Label>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Canadian-Controlled Private Corp — gates the Small Business Deduction. Turn off
+                only for non-CCPC status (public, foreign-controlled, or voluntarily opted out).
+              </p>
+            </div>
+            <Switch
+              id="isCcpc"
+              name="isCcpc"
+              checked={isCcpc}
+              onCheckedChange={(v) => {
+                setIsCcpc(v);
+                setDirty(true);
+              }}
+            />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Prior-year AAII"
+              htmlFor="priorYearAaiiDollars"
+              hint="Dollars. Drives the SBD passive-income grind per ITA s.125(5.1) ($50K floor, $150K ceiling)."
+            >
+              <Input
+                id="priorYearAaiiDollars"
+                name="priorYearAaiiDollars"
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue={(data.priorYearAaiiCents / 100).toFixed(2)}
+                data-gramm="false"
+              />
+            </Field>
+            <Field
+              label="Ontario general rate (%)"
+              htmlFor="ontarioGeneralRatePercent"
+              hint="Standard Ontario corporate rate for full-rate income. 11.5% as of 2026."
+            >
+              <Input
+                id="ontarioGeneralRatePercent"
+                name="ontarioGeneralRatePercent"
+                type="number"
+                step="0.01"
+                min="0"
+                max="50"
+                defaultValue={(data.ontarioGeneralRateBps / 100).toFixed(2)}
+                data-gramm="false"
+              />
+            </Field>
+          </div>
+
+          <div className="rounded-md border border-border/40 bg-card/30 p-3">
+            <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Opening pool balances
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="GRIP opening ($)"
+                htmlFor="openingGripDollars"
+                hint="General Rate Income Pool — eligible-dividend capacity carried into your first FY."
+              >
+                <Input
+                  id="openingGripDollars"
+                  name="openingGripDollars"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={(data.openingGripCents / 100).toFixed(2)}
+                  data-gramm="false"
+                />
+              </Field>
+              <Field
+                label="ERDTOH opening ($)"
+                htmlFor="openingErdtohDollars"
+                hint="Eligible Refundable Dividend Tax On Hand. Zero unless migrating from an existing corp."
+              >
+                <Input
+                  id="openingErdtohDollars"
+                  name="openingErdtohDollars"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={(data.openingErdtohCents / 100).toFixed(2)}
+                  data-gramm="false"
+                />
+              </Field>
+              <Field
+                label="NERDTOH opening ($)"
+                htmlFor="openingNerdtohDollars"
+                hint="Non-Eligible Refundable Dividend Tax On Hand."
+              >
+                <Input
+                  id="openingNerdtohDollars"
+                  name="openingNerdtohDollars"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={(data.openingNerdtohCents / 100).toFixed(2)}
+                  data-gramm="false"
+                />
+              </Field>
+              <Field
+                label="CDA opening ($)"
+                htmlFor="openingCdaDollars"
+                hint="Capital Dividend Account — tax-free capital dividend capacity."
+              >
+                <Input
+                  id="openingCdaDollars"
+                  name="openingCdaDollars"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={(data.openingCdaCents / 100).toFixed(2)}
+                  data-gramm="false"
+                />
+              </Field>
+            </div>
+          </div>
+
+          <SaveBar pending={pending} dirty={dirty} />
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+//  Self-pay
 function SelfPayPanel({ data }: { data: SettingsRow }) {
   const [state, formAction, pending] = useActionState(updateSelfPay, undefined as Result | undefined);
   const [dirty, setDirty] = useState(false);

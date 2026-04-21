@@ -7,6 +7,7 @@ import { db } from "@/lib/db/client";
 import { dividends, settings, slips, auditLog, shareholderLoanEntries } from "@/lib/db/schema";
 import { auth } from "../../../auth";
 import { fiscalYearFor } from "@/lib/utils";
+import { t2PeriodLockError } from "./t2";
 
 type ActionResult = { ok?: string; error?: string };
 
@@ -93,6 +94,8 @@ export async function createDividend(
     if (await t5SlipIssuedFor(fiscalYear)) {
       return { error: `A T5 slip was already issued for FY ${fiscalYear}. Declare in a later year.` };
     }
+    const t2Lock = await t2PeriodLockError(declaredDate);
+    if (t2Lock) return { error: t2Lock };
 
     const [created] = await db
       .insert(dividends)
@@ -138,6 +141,12 @@ export async function updateDividend(
     if (fiscalYear !== existing.fiscalYear && (await t5SlipIssuedFor(fiscalYear))) {
       return { error: `A T5 slip was issued for FY ${fiscalYear}. Can't move a dividend into a closed year.` };
     }
+    const oldT2Lock = await t2PeriodLockError(existing.declaredDate);
+    if (oldT2Lock) return { error: oldT2Lock };
+    if (declaredDate !== existing.declaredDate) {
+      const newT2Lock = await t2PeriodLockError(declaredDate);
+      if (newT2Lock) return { error: newT2Lock };
+    }
 
     await db
       .update(dividends)
@@ -165,6 +174,8 @@ export async function deleteDividend(id: string): Promise<ActionResult> {
     if (await t5SlipIssuedFor(existing.fiscalYear)) {
       return { error: `A T5 slip was issued for FY ${existing.fiscalYear}. Delete blocked.` };
     }
+    const t2Lock = await t2PeriodLockError(existing.declaredDate);
+    if (t2Lock) return { error: t2Lock };
 
     // Cascade-delete: if this dividend was created via the "Declare as
     // dividend" reclassify flow, a shareholder_loan_entries row of type
@@ -243,6 +254,8 @@ export async function markDividendPaid(id: string, paidDate: string): Promise<Ac
     if (paidDate < existing.declaredDate) {
       return { error: "Paid date can't be before the declared date." };
     }
+    const t2Lock = await t2PeriodLockError(existing.declaredDate);
+    if (t2Lock) return { error: t2Lock };
     await db.update(dividends).set({ paidDate }).where(eq(dividends.id, id));
     await db.insert(auditLog).values({
       actorEmail: email,
@@ -260,6 +273,10 @@ export async function markDividendPaid(id: string, paidDate: string): Promise<Ac
 export async function markDividendUnpaid(id: string): Promise<ActionResult> {
   try {
     const email = await requireSession();
+    const [existing] = await db.select().from(dividends).where(eq(dividends.id, id));
+    if (!existing) return { error: "Dividend not found." };
+    const t2Lock = await t2PeriodLockError(existing.declaredDate);
+    if (t2Lock) return { error: t2Lock };
     await db.update(dividends).set({ paidDate: null }).where(eq(dividends.id, id));
     await db.insert(auditLog).values({
       actorEmail: email,

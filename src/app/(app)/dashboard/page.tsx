@@ -45,6 +45,8 @@ import {
   operatingExpensesForT2,
   revenueByMonth,
 } from "@/lib/dashboard-metrics";
+import { estimateT2Detailed } from "@/lib/t2";
+import { computeGrip, computeRdtoh, computeCda } from "@/lib/tax-pools";
 import { isTaxableSupplyInPeriod } from "@/lib/queries/invoice-slices";
 import { cn, fiscalYearFor, formatCAD } from "@/lib/utils";
 import { TONE } from "@/lib/tones";
@@ -177,7 +179,9 @@ export default async function DashboardPage() {
       86_400_000,
   );
 
-  // Corporate tax (T2) estimate — FY basis, fed 9% + ON blended.
+  // Corporate tax (T2) estimate — FY basis, fed 9% + ON blended. The
+  // dashboard uses the thin façade for the stat card, AND the detailed
+  // version to feed GRIP/RDTOH/CDA pool math.
   const t2 = estimateT2({
     periodStart: fyPeriod.start,
     periodEnd: fyPeriod.end,
@@ -185,9 +189,56 @@ export default async function DashboardPage() {
     operatingExpensesCents: fyOperatingDeductibleCents,
     salaryCents: fySalaryGross,
     employerCppCents: fyEmployerCpp,
+    isCcpc: s?.isCcpc ?? true,
+    priorYearAaiiCents: s?.priorYearAaiiCents ?? 0,
+  });
+  const t2Detailed = estimateT2Detailed({
+    periodStart: fyPeriod.start,
+    periodEnd: fyPeriod.end,
+    isCcpc: s?.isCcpc ?? true,
+    revenueCents: fyRevenueSubtotalCents,
+    operatingExpensesCents: fyOperatingDeductibleCents,
+    salaryCents: fySalaryGross,
+    employerCppCents: fyEmployerCpp,
+    ccaClaimedCents: 0, // dashboard simplification — detail page routes through CCA pools
+    priorYearAaiiCents: s?.priorYearAaiiCents ?? 0,
+    ontarioGeneralRateBps: s?.ontarioGeneralRateBps ?? 1150,
   });
 
-  // Cash position estimate — accrual basis, after every FY obligation.
+  // Tax pools — current FY. Opening = settings.opening* since Saïd's corp
+  // hasn't filed a T2 yet; once one is filed the /corp-tax detail page
+  // becomes authoritative (it resolves openings from prior-FY closings).
+  const eligibleDividendsPaidFY = fyDividends
+    .filter((d) => d.eligible && d.paidDate !== null)
+    .reduce((a, d) => a + d.amountCents, 0);
+  const nonEligibleDividendsPaidFY = fyDividends
+    .filter((d) => !d.eligible && d.paidDate !== null)
+    .reduce((a, d) => a + d.amountCents, 0);
+  const grip = computeGrip({
+    openingCents: s?.openingGripCents ?? 0,
+    fullRateIncomeCents: t2Detailed.fullRateIncomeCents,
+    eligibleDividendsPaidCents: eligibleDividendsPaidFY,
+  });
+  const rdtoh = computeRdtoh({
+    erdtohOpeningCents: s?.openingErdtohCents ?? 0,
+    nerdtohOpeningCents: s?.openingNerdtohCents ?? 0,
+    aaiiCents: 0,
+    partIVOnEligibleCents: 0,
+    partIVOnNonEligibleCents: 0,
+    eligibleDividendsPaidCents: eligibleDividendsPaidFY,
+    nonEligibleDividendsPaidCents: nonEligibleDividendsPaidFY,
+  });
+  const cda = computeCda({
+    openingCents: s?.openingCdaCents ?? 0,
+    capitalGainsNetCents: 0,
+    capitalDividendsReceivedCents: 0,
+    lifeInsuranceProceedsCents: 0,
+    capitalDividendsElectedCents: 0,
+  });
+
+  // Cash position estimate — accrual basis, after every FY obligation. The
+  // dividend refund (Schedule 3) comes back from CRA, so treat it as an
+  // inflow offsetting the T2 bill.
   const cash = estimateCashPosition({
     revenueTotalCents: fyRevenueTotalCents,
     expensesTotalCents: fyExpensesTotalCents,
@@ -196,6 +247,7 @@ export default async function DashboardPage() {
     dividendsCents: dividendsFYTotal,
     t2EstimateCents: t2.totalTaxCents,
     hstNetCents,
+    dividendRefundCents: rdtoh.dividendRefundCents,
   });
 
   // 12-month rolling revenue trend — ends on current month.
@@ -461,7 +513,10 @@ export default async function DashboardPage() {
                 On <span className="text-foreground">{formatCAD(t2.taxableIncomeCents)}</span> taxable ·
                 fed 9% + ON {onRatePct}%
                 {t2.sbdLimitWarning && (
-                  <span className="ml-1 text-rose-400">· SBD $500K limit exceeded</span>
+                  <span className="ml-1 text-rose-400">· over SBD</span>
+                )}
+                {t2.sbdGrindWarning && (
+                  <span className="ml-1 text-amber-400">· SBD grind</span>
                 )}
               </>
             )
@@ -469,6 +524,21 @@ export default async function DashboardPage() {
           icon={Landmark}
           tone="indigo"
           delayMs={580}
+        />
+        <StatCard
+          label={`Tax pools FY ${currentFY}`}
+          value={formatCAD(grip.closingCents)}
+          hint={
+            <>
+              <span className="text-cyan-400">GRIP</span> cap ·{" "}
+              <span className="text-emerald-400">{formatCAD(rdtoh.erdtoh.closingCents)}</span> ER /{" "}
+              <span className="text-amber-400">{formatCAD(rdtoh.nerdtoh.closingCents)}</span> NER ·{" "}
+              <span className="text-violet-400">{formatCAD(cda.closingCents)}</span> CDA
+            </>
+          }
+          icon={Landmark}
+          tone="indigo"
+          delayMs={620}
         />
         <StatCard
           label={`Cash position FY ${currentFY}`}
@@ -479,6 +549,14 @@ export default async function DashboardPage() {
                 {cashPositive ? "Retained" : "Shortfall"}
               </span>{" "}
               after payroll, dividends, HST, T2
+              {rdtoh.dividendRefundCents > 0 && (
+                <>
+                  {" · "}
+                  <span className="text-emerald-400">
+                    +{formatCAD(rdtoh.dividendRefundCents)} div refund
+                  </span>
+                </>
+              )}
             </>
           }
           icon={Banknote}

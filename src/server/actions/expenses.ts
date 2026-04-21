@@ -1,10 +1,5 @@
 "use server";
 
-// TODO(4C): block mutations once a T2 return is filed for the row's fiscal year.
-// TODO(4C): meals/entertainment subtotal is recorded in full; apply the 50%
-//           deduction cap (ITA s.67.1) at T2 P&L aggregation — do NOT mutate.
-// TODO(4C): CCA jsonb captures raw inputs; build the UCC pool engine in corp-tax phase.
-
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -15,6 +10,16 @@ import { expenses, documents, settings, auditLog } from "@/lib/db/schema";
 import { auth } from "../../../auth";
 import { fiscalYearFor } from "@/lib/utils";
 import { hstPeriodLockError } from "./hst";
+import { t2PeriodLockError } from "./t2";
+
+/** Checks BOTH HST and T2 filing locks for a given ISO date. Returns the
+ * first non-null error, or null if the period is fully open. Keeps the
+ * per-call site a single line while preserving specific error messages. */
+async function periodLockError(iso: string): Promise<string | null> {
+  const hst = await hstPeriodLockError(iso);
+  if (hst) return hst;
+  return t2PeriodLockError(iso);
+}
 
 type ActionResult = { ok?: string; error?: string; expenseId?: string };
 
@@ -186,7 +191,7 @@ export async function createExpense(
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
     const data = parsed.data;
 
-    const lockErr = await hstPeriodLockError(data.expenseDate);
+    const lockErr = await periodLockError(data.expenseDate);
     if (lockErr) return { error: lockErr };
 
     const fileCheck = await validatedReceiptFile(fd);
@@ -308,10 +313,10 @@ export async function updateExpense(
     const data = parsed.data;
 
     // Block edits in a filed period AND block moving a row into a filed period.
-    const oldLockErr = await hstPeriodLockError(existing.expenseDate);
+    const oldLockErr = await periodLockError(existing.expenseDate);
     if (oldLockErr) return { error: oldLockErr };
     if (data.expenseDate !== existing.expenseDate) {
-      const newLockErr = await hstPeriodLockError(data.expenseDate);
+      const newLockErr = await periodLockError(data.expenseDate);
       if (newLockErr) return { error: newLockErr };
     }
 
@@ -365,7 +370,7 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
     const [existing] = await db.select().from(expenses).where(eq(expenses.id, id));
     if (!existing) return { error: "Expense not found." };
 
-    const lockErr = await hstPeriodLockError(existing.expenseDate);
+    const lockErr = await periodLockError(existing.expenseDate);
     if (lockErr) return { error: lockErr };
 
     const auditEntry = db.insert(auditLog).values({
@@ -414,7 +419,7 @@ export async function uploadReceipt(expenseId: string, fd: FormData): Promise<Ac
     if (existing.receiptBlobUrl) {
       return { error: "A receipt is already attached. Use Replace to upload a new file." };
     }
-    const lockErr = await hstPeriodLockError(existing.expenseDate);
+    const lockErr = await periodLockError(existing.expenseDate);
     if (lockErr) return { error: lockErr };
 
     const fileCheck = await validatedReceiptFile(fd);
@@ -478,7 +483,7 @@ export async function replaceReceipt(expenseId: string, fd: FormData): Promise<A
     if (!existing.receiptBlobUrl) {
       return { error: "Nothing to replace. Attach a receipt first." };
     }
-    const lockErr = await hstPeriodLockError(existing.expenseDate);
+    const lockErr = await periodLockError(existing.expenseDate);
     if (lockErr) return { error: lockErr };
 
     const fileCheck = await validatedReceiptFile(fd);
@@ -552,7 +557,7 @@ export async function deleteReceipt(expenseId: string): Promise<ActionResult> {
     const [existing] = await db.select().from(expenses).where(eq(expenses.id, expenseId));
     if (!existing) return { error: "Expense not found." };
     if (!existing.receiptBlobUrl) return { error: "No receipt to remove." };
-    const lockErr = await hstPeriodLockError(existing.expenseDate);
+    const lockErr = await periodLockError(existing.expenseDate);
     if (lockErr) return { error: lockErr };
 
     const oldBlobUrl = existing.receiptBlobUrl;
