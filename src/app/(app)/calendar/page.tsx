@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { desc, asc } from "drizzle-orm";
-import { CalendarClock, AlertTriangle, Hourglass, CircleCheck, Check } from "lucide-react";
+import { asc, desc } from "drizzle-orm";
+import { format, parseISO, startOfMonth } from "date-fns";
+import { AlertTriangle, CalendarClock, Check, CircleCheck, Hourglass } from "lucide-react";
 import { db } from "@/lib/db/client";
-import { deadlines, remittances, type Deadline, type Remittance } from "@/lib/db/schema";
+import { deadlines, remittances } from "@/lib/db/schema";
 import { getSettings } from "@/lib/db/queries";
 import { syncAnnualDeadlines } from "@/server/actions/deadlines";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,14 +11,14 @@ import { Separator } from "@/components/ui/separator";
 import { DeadlineRow } from "@/components/calendar/deadline-row";
 import { CalendarRemittanceRow } from "@/components/calendar/remittance-row";
 import { AddDeadlineButton } from "@/components/calendar/add-deadline-button";
+import { ViewToggle } from "@/components/calendar/view-toggle";
+import { MonthNav } from "@/components/calendar/month-nav";
+import { MonthGrid } from "@/components/calendar/month-grid";
+import type { UnifiedItem } from "@/components/calendar/day-detail-dialog";
 
 export const dynamic = "force-dynamic";
 
 type Bucket = "overdue" | "due_soon" | "upcoming" | "completed";
-
-type UnifiedItem =
-  | { kind: "deadline"; dueDate: string; completed: boolean; row: Deadline }
-  | { kind: "remittance"; dueDate: string; completed: boolean; row: Remittance };
 
 function daysBetweenISO(a: string, b: string): number {
   const da = new Date(a + "T00:00:00Z").getTime();
@@ -33,18 +34,23 @@ function bucketFor(item: UnifiedItem, today: string): Bucket {
   return "upcoming";
 }
 
-export default async function CalendarPage() {
-  // Idempotent sync on load — so a freshly-saved FYE / incorp date / payroll
-  // toggle is reflected without the user needing to hit a "refresh" button.
+export default async function CalendarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string; month?: string }>;
+}) {
+  const params = await searchParams;
+  const view = params.view === "list" ? "list" : "calendar";
+  const defaultMonth = format(startOfMonth(new Date()), "yyyy-MM");
+  const monthIso = /^\d{4}-\d{2}$/.test(params.month ?? "") ? params.month! : defaultMonth;
+
+  // Idempotent sync — reflects freshly-saved Settings changes with no click.
   await syncAnnualDeadlines();
 
   const [s, allDeadlines, allRemittances] = await Promise.all([
     getSettings(),
     db.select().from(deadlines).orderBy(asc(deadlines.dueDate)),
-    db
-      .select()
-      .from(remittances)
-      .orderBy(desc(remittances.dueDate)),
+    db.select().from(remittances).orderBy(desc(remittances.dueDate)),
   ]);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -68,25 +74,9 @@ export default async function CalendarPage() {
     ),
   ];
 
-  const grouped: Record<Bucket, UnifiedItem[]> = {
-    overdue: [],
-    due_soon: [],
-    upcoming: [],
-    completed: [],
-  };
-  for (const it of items) grouped[bucketFor(it, today)].push(it);
-
-  // Sort: open buckets by dueDate ascending; completed by completion date desc.
-  grouped.overdue.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  grouped.due_soon.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  grouped.upcoming.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  grouped.completed.sort((a, b) => b.dueDate.localeCompare(a.dueDate));
-
-  const hasAny = items.length > 0;
-
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
+      <div className="flex flex-wrap items-end justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Deadlines</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -94,7 +84,10 @@ export default async function CalendarPage() {
             auto-derive from your fiscal settings.
           </p>
         </div>
-        <AddDeadlineButton />
+        <div className="flex items-center gap-2">
+          <ViewToggle current={view} />
+          <AddDeadlineButton />
+        </div>
       </div>
 
       {!s?.incorporationDate && (
@@ -111,62 +104,127 @@ export default async function CalendarPage() {
         </div>
       )}
 
-      {!hasAny ? (
-        <Card>
-          <CardHeader className="items-center text-center">
-            <div className="mb-2 flex size-12 items-center justify-center rounded-lg bg-sky-500/15 ring-1 ring-inset ring-sky-500/30">
-              <CalendarClock className="size-6 text-sky-400" />
-            </div>
-            <CardTitle>No deadlines yet</CardTitle>
-            <CardDescription>
-              Finalize fiscal year-end and incorporation date in Settings so the
-              annual deadlines auto-populate.
-            </CardDescription>
-          </CardHeader>
-          <CardContent />
-        </Card>
+      {view === "calendar" ? (
+        <CalendarView monthIso={monthIso} items={items} today={today} />
       ) : (
-        <>
-          <Bucket
-            title="Overdue"
-            description="Past due date, still open. File ASAP — CRA charges daily interest."
-            tone="rose"
-            icon={AlertTriangle}
-            items={grouped.overdue}
-            today={today}
-          />
-          <Bucket
-            title="Due soon"
-            description="Within 60 days."
-            tone="amber"
-            icon={Hourglass}
-            items={grouped.due_soon}
-            today={today}
-          />
-          <Bucket
-            title="Upcoming"
-            description="More than 60 days out."
-            tone="indigo"
-            icon={CalendarClock}
-            items={grouped.upcoming}
-            today={today}
-          />
-          <Bucket
-            title="Completed"
-            description="Filed and done. Kept for your audit trail."
-            tone="emerald"
-            icon={CircleCheck}
-            items={grouped.completed}
-            today={today}
-            collapsed
-          />
-        </>
+        <ListView items={items} today={today} />
       )}
     </div>
   );
 }
 
-function Bucket({
+function CalendarView({
+  monthIso,
+  items,
+  today,
+}: {
+  monthIso: string;
+  items: UnifiedItem[];
+  today: string;
+}) {
+  // Stats strip: what's in THIS month?
+  const monthStart = startOfMonth(parseISO(monthIso + "-01"));
+  const monthPrefix = format(monthStart, "yyyy-MM");
+  const monthItems = items.filter((i) => i.dueDate.startsWith(monthPrefix));
+  const monthOverdue = monthItems.filter((i) => !i.completed && i.dueDate < today).length;
+  const monthOpen = monthItems.filter((i) => !i.completed).length;
+  const monthCompleted = monthItems.length - monthOpen;
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0 pb-4">
+        <MonthNav monthIso={monthIso} />
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          {monthOverdue > 0 && (
+            <span className="inline-flex items-center gap-1 text-rose-400">
+              <AlertTriangle className="size-3.5" />
+              {monthOverdue} overdue
+            </span>
+          )}
+          <span>{monthOpen} open</span>
+          <span>{monthCompleted} done</span>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <MonthGrid monthIso={monthIso} items={items} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function ListView({ items, today }: { items: UnifiedItem[]; today: string }) {
+  const grouped: Record<Bucket, UnifiedItem[]> = {
+    overdue: [],
+    due_soon: [],
+    upcoming: [],
+    completed: [],
+  };
+  for (const it of items) grouped[bucketFor(it, today)].push(it);
+
+  grouped.overdue.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  grouped.due_soon.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  grouped.upcoming.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  grouped.completed.sort((a, b) => b.dueDate.localeCompare(a.dueDate));
+
+  const hasAny = items.length > 0;
+  if (!hasAny) {
+    return (
+      <Card>
+        <CardHeader className="items-center text-center">
+          <div className="mb-2 flex size-12 items-center justify-center rounded-lg bg-sky-500/15 ring-1 ring-inset ring-sky-500/30">
+            <CalendarClock className="size-6 text-sky-400" />
+          </div>
+          <CardTitle>No deadlines yet</CardTitle>
+          <CardDescription>
+            Finalize fiscal year-end and incorporation date in Settings so the
+            annual deadlines auto-populate.
+          </CardDescription>
+        </CardHeader>
+        <CardContent />
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <BucketSection
+        title="Overdue"
+        description="Past due date, still open. File ASAP — CRA charges daily interest."
+        tone="rose"
+        icon={AlertTriangle}
+        items={grouped.overdue}
+        today={today}
+      />
+      <BucketSection
+        title="Due soon"
+        description="Within 60 days."
+        tone="amber"
+        icon={Hourglass}
+        items={grouped.due_soon}
+        today={today}
+      />
+      <BucketSection
+        title="Upcoming"
+        description="More than 60 days out."
+        tone="indigo"
+        icon={CalendarClock}
+        items={grouped.upcoming}
+        today={today}
+      />
+      <BucketSection
+        title="Completed"
+        description="Filed and done. Kept for your audit trail."
+        tone="emerald"
+        icon={CircleCheck}
+        items={grouped.completed}
+        today={today}
+        collapsed
+      />
+    </>
+  );
+}
+
+function BucketSection({
   title,
   description,
   tone,
@@ -255,3 +313,4 @@ function CollapsedBucket({ children }: { children: React.ReactNode }) {
     </details>
   );
 }
+
