@@ -23,6 +23,15 @@ const securityHeaders = [
   },
 ];
 
+// Prevent browser back/forward cache (bfcache) from restoring a vault page
+// after the user has locked it. `no-store` tells the browser to never reuse
+// the response; combined with the client-side pageshow handler this gives
+// belt-and-braces against "press Back → see unlocked vault" leaks.
+const noStoreHeaders = [
+  { key: "Cache-Control", value: "no-store, no-cache, must-revalidate, private" },
+  { key: "Pragma", value: "no-cache" },
+];
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
@@ -34,7 +43,12 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["@node-rs/argon2", "@react-pdf/renderer"],
   async headers() {
-    return [{ source: "/(.*)", headers: securityHeaders }];
+    return [
+      { source: "/(.*)", headers: securityHeaders },
+      { source: "/vault", headers: noStoreHeaders },
+      { source: "/vault/:path*", headers: noStoreHeaders },
+      { source: "/api/documents/:path*", headers: noStoreHeaders },
+    ];
   },
 };
 
