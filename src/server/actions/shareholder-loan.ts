@@ -16,6 +16,9 @@ import { auth } from "../../../auth";
 import { fiscalYearFor, formatCAD } from "@/lib/utils";
 import { computeLoanTimeline, type LoanEntry, type RatePeriod } from "@/lib/shareholder-loan";
 import { t2PeriodLockError } from "./t2";
+import { t1PeriodLockError } from "./t1";
+import { t1Returns } from "@/lib/db/schema";
+import { gte, lte } from "drizzle-orm";
 
 type ActionResult = { ok?: string; error?: string };
 
@@ -101,6 +104,8 @@ export async function createLoanEntry(
     }
     const t2Lock = await t2PeriodLockError(entryDate);
     if (t2Lock) return { error: t2Lock };
+    const t1Lock = await t1PeriodLockError(entryDate);
+    if (t1Lock) return { error: t1Lock };
 
     const [created] = await db
       .insert(shareholderLoanEntries)
@@ -174,6 +179,12 @@ export async function updateLoanEntry(
       const newT2Lock = await t2PeriodLockError(entryDate);
       if (newT2Lock) return { error: newT2Lock };
     }
+    const oldT1Lock = await t1PeriodLockError(existing.entryDate);
+    if (oldT1Lock) return { error: oldT1Lock };
+    if (entryDate !== existing.entryDate) {
+      const newT1Lock = await t1PeriodLockError(entryDate);
+      if (newT1Lock) return { error: newT1Lock };
+    }
 
     await db
       .update(shareholderLoanEntries)
@@ -206,6 +217,8 @@ export async function deleteLoanEntry(id: string): Promise<ActionResult> {
     }
     const t2Lock = await t2PeriodLockError(existing.entryDate);
     if (t2Lock) return { error: t2Lock };
+    const t1Lock = await t1PeriodLockError(existing.entryDate);
+    if (t1Lock) return { error: t1Lock };
 
     // Cascade-delete: if this is a reclassification entry linked to a dividend
     // (created via the /shareholder-loan "Declare as dividend" flow), delete
@@ -321,6 +334,28 @@ export async function upsertPrescribedRate(
     if (overlap) {
       return {
         error: `Overlaps existing ${overlap.ratePercent}% period ${overlap.startDate} → ${overlap.endDate}. Fix or delete that period first.`,
+      };
+    }
+
+    // T1 filing-lock: a rate change retroactively rewrites 80.4 benefit math
+    // for every CY whose entries fall in the rate's effective window. Block
+    // the change if any of those CYs has a filed T1 — history is frozen.
+    const startYear = Number(startDate.slice(0, 4));
+    const endYear = Number(endDate.slice(0, 4));
+    const [filedInWindow] = await db
+      .select({ taxYear: t1Returns.taxYear })
+      .from(t1Returns)
+      .where(
+        and(
+          eq(t1Returns.status, "filed"),
+          gte(t1Returns.taxYear, startYear),
+          lte(t1Returns.taxYear, endYear),
+        ),
+      )
+      .limit(1);
+    if (filedInWindow) {
+      return {
+        error: `T1 return for CY ${filedInWindow.taxYear} is filed; rate changes inside that window would silently rewrite the T4A box 117 on that return. File a T1-ADJ if the rate was genuinely wrong.`,
       };
     }
 
@@ -459,6 +494,15 @@ export async function reclassifyDrawAsDividend(
     if (draw.entryDate !== declaredDate) {
       const drawT2Lock = await t2PeriodLockError(draw.entryDate);
       if (drawT2Lock) return { error: drawT2Lock };
+    }
+    // T1 lock: reclassify also rewrites T1 in both CYs (the paid dividend
+    // lands in the declared-date CY, while removing the draw from unpaid
+    // principal can shift the 80.4 benefit reported on the draw's CY).
+    const declaredT1Lock = await t1PeriodLockError(declaredDate);
+    if (declaredT1Lock) return { error: declaredT1Lock };
+    if (draw.entryDate !== declaredDate) {
+      const drawT1Lock = await t1PeriodLockError(draw.entryDate);
+      if (drawT1Lock) return { error: drawT1Lock };
     }
 
     // Atomic write via db.batch() — the neon-http driver doesn't support

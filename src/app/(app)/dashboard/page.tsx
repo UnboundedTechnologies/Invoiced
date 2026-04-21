@@ -30,6 +30,7 @@ import {
   Landmark,
   Banknote,
   TrendingUp,
+  Calculator,
 } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { QuickActionTile } from "@/components/quick-action-tile";
@@ -45,6 +46,8 @@ import {
   revenueByMonth,
 } from "@/lib/dashboard-metrics";
 import { estimateT2Detailed } from "@/lib/t2";
+import { computeT1, marginalRateOnNextDollar } from "@/lib/t1";
+import { buildT1Inputs } from "@/lib/queries/personal-tax-slices";
 import { computeGrip, computeRdtoh, computeCda } from "@/lib/tax-pools";
 import { isTaxableSupplyInPeriod } from "@/lib/queries/invoice-slices";
 import { cn, fiscalYearFor, formatCAD } from "@/lib/utils";
@@ -193,6 +196,14 @@ export default async function DashboardPage() {
     priorYearAaiiCents: s?.priorYearAaiiCents ?? 0,
     ontarioGeneralRateBps: s?.ontarioGeneralRateBps ?? 1150,
   });
+
+  // Personal tax (T1) estimate — current CY basis. Reads from the shared
+  // slice façade (`buildT1Inputs`) that /personal-tax also uses, so numbers
+  // are bit-identical across pages. Phase 6 will consume the same compute.
+  const currentCY = new Date().getUTCFullYear();
+  const t1Input = await buildT1Inputs(currentCY);
+  const t1 = computeT1(t1Input);
+  const t1Marginal = marginalRateOnNextDollar(t1Input, 100_00);
 
   // Tax pools — current FY. Opening = settings.opening* since Saïd's corp
   // hasn't filed a T2 yet; once one is filed the /corp-tax detail page
@@ -551,6 +562,31 @@ export default async function DashboardPage() {
           icon={Banknote}
           tone={cashPositive ? "emerald" : "rose"}
           delayMs={660}
+        />
+        <StatCard
+          label={`Est. personal tax CY ${currentCY}`}
+          value={formatCAD(t1.totalTaxPayableCents)}
+          hint={
+            t1.totalTaxPayableCents === 0 && t1.totalIncomeCents === 0 ? (
+              "No personal-tax activity yet"
+            ) : (
+              <>
+                <span
+                  className={
+                    t1.refundOrOwingCents > 0 ? "text-rose-400" : "text-emerald-400"
+                  }
+                >
+                  {t1.refundOrOwingCents > 0
+                    ? `+${formatCAD(Math.abs(t1.refundOrOwingCents))} owing`
+                    : `${formatCAD(Math.abs(t1.refundOrOwingCents))} refund`}
+                </span>{" "}
+                · marg {(t1Marginal.combinedBps / 100).toFixed(1)}%
+              </>
+            )
+          }
+          icon={Calculator}
+          tone="rose"
+          delayMs={700}
         />
       </div>
 

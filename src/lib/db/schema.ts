@@ -49,6 +49,7 @@ export const auditActionEnum = pgEnum("audit_action", ["create", "update", "dele
 export const hstFilingMethodEnum = pgEnum("hst_filing_method", ["regular", "quick"]);
 export const hstReturnStatusEnum = pgEnum("hst_return_status", ["draft", "filed"]);
 export const t2ReturnStatusEnum = pgEnum("t2_return_status", ["draft", "filed"]);
+export const t1ReturnStatusEnum = pgEnum("t1_return_status", ["draft", "filed"]);
 export const taxPoolEnum = pgEnum("tax_pool", ["grip", "erdtoh", "nerdtoh", "cda"]);
 export const ccaClassEnum = pgEnum("cca_class", ["8", "10", "10.1", "12", "50", "other"]);
 
@@ -122,6 +123,11 @@ export const settings = pgTable("settings", {
   openingErdtohCents: bigint("opening_erdtoh_cents", { mode: "number" }).notNull().default(0),
   openingNerdtohCents: bigint("opening_nerdtoh_cents", { mode: "number" }).notNull().default(0),
   openingCdaCents: bigint("opening_cda_cents", { mode: "number" }).notNull().default(0),
+  // T1 / personal-tax configuration — UI deferred to RRSP feature phase.
+  // Starting RRSP deduction room (from most recent CRA notice of assessment).
+  // Null until the user enters it; Phase 6's self-pay planner reads this to
+  // surface "salary unlocks $X RRSP room for next year" hints.
+  rrspRoomCents: bigint("rrsp_room_cents", { mode: "number" }),
   // Self-pay
   paymentStrategy: payStrategyEnum("payment_strategy").notNull().default("blend"),
   targetAnnualSalaryCents: bigint("target_annual_salary_cents", { mode: "number" }).default(7130000), // $71,300
@@ -460,6 +466,80 @@ export const taxPools = pgTable(
   (t) => [uniqueIndex("tax_pools_fy_pool_unique").on(t.fiscalYear, t.pool)],
 );
 
+// T1 returns — one row per calendar year. Drafts recompute live from
+// paycheques + dividends + shareholder-loan ledger. Filing snapshots every
+// number into frozen columns so downstream edits can't silently rewrite a
+// filed return. The `status='filed'` transition also gates mutations on
+// every paycheque / dividend / loan entry whose date falls inside the CY
+// (same lock pattern as hst_returns and t2_returns).
+export const t1Returns = pgTable(
+  "t1_returns",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    taxYear: integer("tax_year").notNull(),
+    status: t1ReturnStatusEnum("status").notNull().default("draft"),
+    // T4 box snapshot (cents; null while draft)
+    t4Box14Cents: bigint("t4_box_14_cents", { mode: "number" }),       // employment income
+    t4Box16Cents: bigint("t4_box_16_cents", { mode: "number" }),       // CPP base employee
+    t4Box16aCents: bigint("t4_box_16a_cents", { mode: "number" }),     // CPP2 employee
+    t4Box18Cents: bigint("t4_box_18_cents", { mode: "number" }),       // EI — always 0 for owner-mgr
+    t4Box22Cents: bigint("t4_box_22_cents", { mode: "number" }),       // fed tax withheld
+    t4Box24Cents: bigint("t4_box_24_cents", { mode: "number" }),       // EI insurable earnings — 0
+    t4Box26Cents: bigint("t4_box_26_cents", { mode: "number" }),       // CPP pensionable earnings
+    t4Box52Cents: bigint("t4_box_52_cents", { mode: "number" }),       // pension adjustment — 0 in v1
+    onTaxWithheldCents: bigint("on_tax_withheld_cents", { mode: "number" }), // from paycheques.provincialTaxCents
+    // T5 snapshot
+    t5EligibleActualCents: bigint("t5_eligible_actual_cents", { mode: "number" }),
+    t5EligibleGrossedUpCents: bigint("t5_eligible_grossed_up_cents", { mode: "number" }),
+    t5NonEligibleActualCents: bigint("t5_non_eligible_actual_cents", { mode: "number" }),
+    t5NonEligibleGrossedUpCents: bigint("t5_non_eligible_grossed_up_cents", { mode: "number" }),
+    // T4A box 117 (Loan Benefits — line 13000)
+    t4aBox117Cents: bigint("t4a_box_117_cents", { mode: "number" }),
+    // Income-flow snapshot
+    totalIncomeCents: bigint("total_income_cents", { mode: "number" }),                   // 15000
+    cppEnhancedDeductionCents: bigint("cpp_enhanced_deduction_cents", { mode: "number" }), // 22215 — s.60(e)
+    cpp2DeductionCents: bigint("cpp2_deduction_cents", { mode: "number" }),                // 22200 — s.60(e.1)
+    netIncomeCents: bigint("net_income_cents", { mode: "number" }),                        // 23600
+    taxableIncomeCents: bigint("taxable_income_cents", { mode: "number" }),                // 26000
+    // Federal snapshot
+    federalBracketTaxCents: bigint("federal_bracket_tax_cents", { mode: "number" }),
+    federalBpaAmountCents: bigint("federal_bpa_amount_cents", { mode: "number" }),         // 30000
+    federalCeaAmountCents: bigint("federal_cea_amount_cents", { mode: "number" }),         // 31260
+    federalCppBaseAmountCents: bigint("federal_cpp_base_amount_cents", { mode: "number" }), // 30800
+    federalCreditsAmountCents: bigint("federal_credits_amount_cents", { mode: "number" }), // 33500
+    federalCreditsTaxCents: bigint("federal_credits_tax_cents", { mode: "number" }),       // 35000
+    federalDtcEligibleCents: bigint("federal_dtc_eligible_cents", { mode: "number" }),
+    federalDtcNonEligibleCents: bigint("federal_dtc_non_eligible_cents", { mode: "number" }),
+    federalTaxPayableCents: bigint("federal_tax_payable_cents", { mode: "number" }),       // 42000
+    // Ontario snapshot (ON428)
+    ontarioBracketTaxCents: bigint("ontario_bracket_tax_cents", { mode: "number" }),
+    ontarioBpaAmountCents: bigint("ontario_bpa_amount_cents", { mode: "number" }),
+    ontarioCppBaseAmountCents: bigint("ontario_cpp_base_amount_cents", { mode: "number" }),
+    ontarioBasicTaxAfterCreditsCents: bigint("ontario_basic_tax_after_credits_cents", { mode: "number" }),
+    ontarioSurtaxTier1Cents: bigint("ontario_surtax_tier1_cents", { mode: "number" }),
+    ontarioSurtaxTier2Cents: bigint("ontario_surtax_tier2_cents", { mode: "number" }),
+    ontarioDtcEligibleCents: bigint("ontario_dtc_eligible_cents", { mode: "number" }),
+    ontarioDtcNonEligibleCents: bigint("ontario_dtc_non_eligible_cents", { mode: "number" }),
+    ontarioHealthPremiumCents: bigint("ontario_health_premium_cents", { mode: "number" }),
+    ontarioTaxPayableCents: bigint("ontario_tax_payable_cents", { mode: "number" }),
+    // Totals
+    totalTaxPayableCents: bigint("total_tax_payable_cents", { mode: "number" }),           // 43500
+    totalWithheldCents: bigint("total_withheld_cents", { mode: "number" }),
+    cpp2OverpaymentCents: bigint("cpp2_overpayment_cents", { mode: "number" }),
+    refundOrOwingCents: bigint("refund_or_owing_cents", { mode: "number" }),
+    // Rate-file metadata (for reproducibility on re-render years later)
+    ratesEditionTag: text("rates_edition_tag"),
+    // Filing metadata
+    craConfirmationNumber: text("cra_confirmation_number"),
+    filedAt: timestamp("filed_at", { withTimezone: true }),
+    filedBy: text("filed_by"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("t1_returns_tax_year_unique").on(t.taxYear)],
+);
+
 // Year-end slips (T4 / T5 / T4A)
 export const slips = pgTable(
   "slips",
@@ -639,6 +719,8 @@ export type HstReturn = typeof hstReturns.$inferSelect;
 export type NewHstReturn = typeof hstReturns.$inferInsert;
 export type T2Return = typeof t2Returns.$inferSelect;
 export type NewT2Return = typeof t2Returns.$inferInsert;
+export type T1Return = typeof t1Returns.$inferSelect;
+export type NewT1Return = typeof t1Returns.$inferInsert;
 export type CcaPool = typeof ccaPools.$inferSelect;
 export type NewCcaPool = typeof ccaPools.$inferInsert;
 export type TaxPool = typeof taxPools.$inferSelect;

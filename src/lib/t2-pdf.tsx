@@ -10,6 +10,7 @@ import { Document, Page, Text, View, Image, StyleSheet } from "@react-pdf/render
 import { formatLongDate } from "@/lib/utils";
 import type { LiveT2Aggregate } from "@/server/actions/t2";
 import type { T2Return } from "@/lib/db/schema";
+import { DraftWatermark } from "@/lib/pdf-watermark";
 
 export type T2PrepPDFProps = {
   fiscalYear: number;
@@ -68,23 +69,6 @@ const styles = StyleSheet.create({
     fontFamily: "Helvetica",
     color: COLORS.ink,
     lineHeight: 1.4,
-  },
-  watermark: {
-    // Positioned lower than HST (500 vs 380) because the T2 prep summary
-    // is taller — page 1 ends around the tax-calc block, and this keeps
-    // the watermark clear of the diagonal page-edge clipping that would
-    // happen higher up with this fontSize + letterSpacing.
-    position: "absolute",
-    top: 500,
-    left: 50,
-    right: 50,
-    fontSize: 88,
-    fontFamily: "Helvetica-Bold",
-    letterSpacing: 12,
-    color: COLORS.watermark,
-    textAlign: "center",
-    transform: "rotate(-45deg)",
-    transformOrigin: "center",
   },
   header: {
     flexDirection: "row",
@@ -320,11 +304,7 @@ export function T2PrepPDF(props: T2PrepPDFProps) {
       creator="Invoiced"
     >
       <Page size="LETTER" style={styles.page} wrap>
-        {status === "draft" && (
-          <Text style={styles.watermark} fixed>
-            DRAFT
-          </Text>
-        )}
+        {status === "draft" && <DraftWatermark top={500} />}
 
         <View style={styles.header}>
           <View>
