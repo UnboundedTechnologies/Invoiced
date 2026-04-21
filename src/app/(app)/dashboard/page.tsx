@@ -8,7 +8,7 @@ import {
   shareholderLoanEntries,
   prescribedRatePeriods,
 } from "@/lib/db/schema";
-import { asc, eq } from "drizzle-orm";
+import { asc } from "drizzle-orm";
 import { getSettings } from "@/lib/db/queries";
 import { hstReturns } from "@/lib/db/schema";
 import {
@@ -40,7 +40,6 @@ import { LoanRiskBanner } from "@/components/shareholder-loan/risk-banner";
 import { computePsbRisk } from "@/lib/psb";
 import { computeLoanTimeline, type LoanEntry, type RatePeriod } from "@/lib/shareholder-loan";
 import {
-  estimateT2,
   estimateCashPosition,
   operatingExpensesForT2,
   revenueByMonth,
@@ -63,6 +62,7 @@ export default async function DashboardPage() {
     rateRows,
     allInvoices,
     allExpenses,
+    allHstReturns,
   ] = await Promise.all([
     getSettings(),
     db.select().from(dividends),
@@ -75,6 +75,7 @@ export default async function DashboardPage() {
     db.select().from(prescribedRatePeriods).orderBy(asc(prescribedRatePeriods.startDate)),
     db.select().from(invoices),
     db.select().from(expenses),
+    db.select().from(hstReturns),
   ]);
   const firstName = s?.directorLegalName?.split(" ")[0] ?? "there";
   const fyeMonth = s?.fiscalYearEndMonth ?? 12;
@@ -127,10 +128,7 @@ export default async function DashboardPage() {
   // draft return exists we pick up its method + first-year flag; otherwise
   // fall back to regular-method projection.
   const hstDueIso = hstFilingDueDate(fyPeriod.end);
-  const [currentFyReturn] = await db
-    .select()
-    .from(hstReturns)
-    .where(eq(hstReturns.fiscalYear, currentFY));
+  const currentFyReturn = allHstReturns.find((r) => r.fiscalYear === currentFY);
   const hstMethod = currentFyReturn?.method ?? "regular";
   const hstFirstQm = currentFyReturn?.isFirstQmFy ?? false;
   const hstStatus = currentFyReturn?.status ?? "draft";
@@ -179,20 +177,11 @@ export default async function DashboardPage() {
       86_400_000,
   );
 
-  // Corporate tax (T2) estimate — FY basis, fed 9% + ON blended. The
-  // dashboard uses the thin façade for the stat card, AND the detailed
-  // version to feed GRIP/RDTOH/CDA pool math.
-  const t2 = estimateT2({
-    periodStart: fyPeriod.start,
-    periodEnd: fyPeriod.end,
-    revenueCents: fyRevenueSubtotalCents,
-    operatingExpensesCents: fyOperatingDeductibleCents,
-    salaryCents: fySalaryGross,
-    employerCppCents: fyEmployerCpp,
-    isCcpc: s?.isCcpc ?? true,
-    priorYearAaiiCents: s?.priorYearAaiiCents ?? 0,
-  });
-  const t2Detailed = estimateT2Detailed({
+  // Corporate tax (T2) estimate — FY basis, fed 9% + ON blended. Single
+  // compute feeds both the stat card and the GRIP/RDTOH/CDA pool math.
+  // Dashboard simplification: ccaClaimedCents = 0 (the /corp-tax detail
+  // page routes through CCA pools for the real number).
+  const t2 = estimateT2Detailed({
     periodStart: fyPeriod.start,
     periodEnd: fyPeriod.end,
     isCcpc: s?.isCcpc ?? true,
@@ -200,7 +189,7 @@ export default async function DashboardPage() {
     operatingExpensesCents: fyOperatingDeductibleCents,
     salaryCents: fySalaryGross,
     employerCppCents: fyEmployerCpp,
-    ccaClaimedCents: 0, // dashboard simplification — detail page routes through CCA pools
+    ccaClaimedCents: 0,
     priorYearAaiiCents: s?.priorYearAaiiCents ?? 0,
     ontarioGeneralRateBps: s?.ontarioGeneralRateBps ?? 1150,
   });
@@ -216,7 +205,7 @@ export default async function DashboardPage() {
     .reduce((a, d) => a + d.amountCents, 0);
   const grip = computeGrip({
     openingCents: s?.openingGripCents ?? 0,
-    fullRateIncomeCents: t2Detailed.fullRateIncomeCents,
+    fullRateIncomeCents: t2.fullRateIncomeCents,
     eligibleDividendsPaidCents: eligibleDividendsPaidFY,
   });
   const rdtoh = computeRdtoh({
@@ -310,7 +299,7 @@ export default async function DashboardPage() {
   })();
 
   const cashPositive = cash.netCents >= 0;
-  const onRatePct = (t2.ontarioRate * 100).toFixed(2);
+  const onRatePct = (t2.ontarioBlendedSbdRateBps / 100).toFixed(2);
 
   return (
     <div className="space-y-8">
@@ -512,10 +501,10 @@ export default async function DashboardPage() {
               <>
                 On <span className="text-foreground">{formatCAD(t2.taxableIncomeCents)}</span> taxable ·
                 fed 9% + ON {onRatePct}%
-                {t2.sbdLimitWarning && (
+                {t2.fullRateIncomeCents > 0 && (
                   <span className="ml-1 text-rose-400">· over SBD</span>
                 )}
-                {t2.sbdGrindWarning && (
+                {t2.sbdGrindCents > 0 && (
                   <span className="ml-1 text-amber-400">· SBD grind</span>
                 )}
               </>
