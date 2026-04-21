@@ -16,7 +16,11 @@ import { db } from "../src/lib/db/client";
 import { documents, contracts, invoices, paycheques, expenses, auditLog } from "../src/lib/db/schema";
 
 const APPLY = process.argv.includes("--apply");
-const ALLOWED_EMAIL = process.env.ALLOWED_LOGIN_EMAIL?.toLowerCase() ?? "cli:cleanup-phantom-docs";
+const ALLOWED_EMAIL =
+  (process.env.ALLOWED_LOGIN_EMAILS ?? process.env.ALLOWED_LOGIN_EMAIL ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)[0] ?? "cli:cleanup-phantom-docs";
 
 async function headBlob(url: string, timeoutMs = 8_000): Promise<{ ok: boolean; status: number }> {
   const ctrl = new AbortController();

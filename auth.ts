@@ -12,7 +12,15 @@ const loginSchema = z.object({
   password: z.string().min(8).max(256),
 });
 
-const ALLOWED_EMAIL = process.env.ALLOWED_LOGIN_EMAIL?.toLowerCase();
+// Comma-separated allowlist. First entry is the admin (the only email that
+// can bootstrap from ADMIN_PASSWORD_HASH on first login). Additional entries
+// are test/visitor accounts — their users rows must already exist (create
+// via `pnpm set-password <email>`).
+const ALLOWED_EMAILS = (process.env.ALLOWED_LOGIN_EMAILS ?? process.env.ALLOWED_LOGIN_EMAIL ?? "")
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+const ADMIN_EMAIL = ALLOWED_EMAILS[0];
 const ENV_HASH = process.env.ADMIN_PASSWORD_HASH;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -30,8 +38,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const { email, password } = parsed.data;
         const normalizedEmail = email.toLowerCase();
 
-        // Single-user lockdown: email must match the env allowlist
-        if (!ALLOWED_EMAIL || normalizedEmail !== ALLOWED_EMAIL) {
+        // Email must be in the env allowlist.
+        if (!ALLOWED_EMAILS.length || !ALLOWED_EMAILS.includes(normalizedEmail)) {
           return null;
         }
 
@@ -46,8 +54,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           if (userRow.lockedUntil && userRow.lockedUntil > new Date()) return null;
           userId = userRow.id;
           storedHash = userRow.passwordHash;
-        } else if (ENV_HASH) {
-          // First-run bootstrap: insert from env hash
+        } else if (ENV_HASH && normalizedEmail === ADMIN_EMAIL) {
+          // First-run bootstrap — admin only. Other allowlisted emails must
+          // have a users row already (created via `pnpm set-password <email>`).
           storedHash = ENV_HASH;
           const inserted = await db
             .insert(users)

@@ -11,7 +11,11 @@ import { eq } from "drizzle-orm";
 import { db } from "../src/lib/db/client";
 import { settings, vaultPinAttempts, auditLog } from "../src/lib/db/schema";
 
-const ALLOWED_EMAIL = process.env.ALLOWED_LOGIN_EMAIL?.toLowerCase() ?? "cli:reset-vault-pin";
+const ALLOWED_EMAIL =
+  (process.env.ALLOWED_LOGIN_EMAILS ?? process.env.ALLOWED_LOGIN_EMAIL ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)[0] ?? "cli:reset-vault-pin";
 
 async function main() {
   const rl = createInterface({ input: process.stdin, output: process.stdout });

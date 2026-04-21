@@ -16,6 +16,7 @@
     "seed": "tsx --env-file=.env.local src/lib/db/seed.ts",
     "set-password": "tsx --env-file=.env.local scripts/set-password.ts",
     "reset-password": "tsx --env-file=.env.local scripts/reset-password.ts",
+    "remove-user": "tsx --env-file=.env.local scripts/remove-user.ts",
     "reset-vault-pin": "tsx --env-file=.env.local scripts/reset-vault-pin.ts",
     "optimize-logo": "tsx scripts/optimize-logo.ts",
     "optimize-banner": "tsx scripts/optimize-banner.ts",

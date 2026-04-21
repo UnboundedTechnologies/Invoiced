@@ -11,11 +11,15 @@ import { db } from "../src/lib/db/client";
 import { users, auditLog } from "../src/lib/db/schema";
 import { eq } from "drizzle-orm";
 
-const ALLOWED_EMAIL = process.env.ALLOWED_LOGIN_EMAIL?.toLowerCase();
+// Admin = first entry in ALLOWED_LOGIN_EMAILS (falls back to legacy singular).
+const ALLOWED_EMAIL = (process.env.ALLOWED_LOGIN_EMAILS ?? process.env.ALLOWED_LOGIN_EMAIL ?? "")
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean)[0];
 
 async function main() {
   if (!ALLOWED_EMAIL) {
-    console.error("✘ ALLOWED_LOGIN_EMAIL is not set in .env.local");
+    console.error("✘ ALLOWED_LOGIN_EMAILS (or legacy ALLOWED_LOGIN_EMAIL) is not set in .env.local");
     process.exit(1);
   }
 

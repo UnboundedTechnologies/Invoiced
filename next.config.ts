@@ -39,7 +39,7 @@ const nextConfig: NextConfig = {
     position: "bottom-right",
   },
   experimental: {
-    serverActions: { bodySizeLimit: "5mb" },
+    serverActions: { bodySizeLimit: "4mb" },
   },
   serverExternalPackages: ["@node-rs/argon2", "@react-pdf/renderer"],
   async headers() {
