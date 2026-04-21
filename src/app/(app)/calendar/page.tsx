@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { asc, desc } from "drizzle-orm";
-import { format, parseISO, startOfMonth } from "date-fns";
+import { format, startOfMonth } from "date-fns";
 import { AlertTriangle, CalendarClock, Check, CircleCheck, Hourglass } from "lucide-react";
 import { db } from "@/lib/db/client";
 import { deadlines, remittances } from "@/lib/db/schema";
@@ -12,8 +12,7 @@ import { DeadlineRow } from "@/components/calendar/deadline-row";
 import { CalendarRemittanceRow } from "@/components/calendar/remittance-row";
 import { AddDeadlineButton } from "@/components/calendar/add-deadline-button";
 import { ViewToggle } from "@/components/calendar/view-toggle";
-import { MonthNav } from "@/components/calendar/month-nav";
-import { MonthGrid } from "@/components/calendar/month-grid";
+import { CalendarShell } from "@/components/calendar/calendar-shell";
 import type { UnifiedItem } from "@/components/calendar/day-detail-dialog";
 
 export const dynamic = "force-dynamic";
@@ -105,50 +104,11 @@ export default async function CalendarPage({
       )}
 
       {view === "calendar" ? (
-        <CalendarView monthIso={monthIso} items={items} today={today} />
+        <CalendarShell initialMonthIso={monthIso} items={items} />
       ) : (
         <ListView items={items} today={today} />
       )}
     </div>
-  );
-}
-
-function CalendarView({
-  monthIso,
-  items,
-  today,
-}: {
-  monthIso: string;
-  items: UnifiedItem[];
-  today: string;
-}) {
-  // Stats strip: what's in THIS month?
-  const monthStart = startOfMonth(parseISO(monthIso + "-01"));
-  const monthPrefix = format(monthStart, "yyyy-MM");
-  const monthItems = items.filter((i) => i.dueDate.startsWith(monthPrefix));
-  const monthOverdue = monthItems.filter((i) => !i.completed && i.dueDate < today).length;
-  const monthOpen = monthItems.filter((i) => !i.completed).length;
-  const monthCompleted = monthItems.length - monthOpen;
-
-  return (
-    <Card className="overflow-hidden">
-      <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0 pb-4">
-        <MonthNav monthIso={monthIso} />
-        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          {monthOverdue > 0 && (
-            <span className="inline-flex items-center gap-1 text-rose-400">
-              <AlertTriangle className="size-3.5" />
-              {monthOverdue} overdue
-            </span>
-          )}
-          <span>{monthOpen} open</span>
-          <span>{monthCompleted} done</span>
-        </div>
-      </CardHeader>
-      <CardContent className="pt-0">
-        <MonthGrid monthIso={monthIso} items={items} />
-      </CardContent>
-    </Card>
   );
 }
 
