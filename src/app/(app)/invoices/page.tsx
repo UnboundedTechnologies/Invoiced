@@ -7,21 +7,33 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/invoices/status-badge";
 import { DeleteInvoiceButton } from "@/components/invoices/delete-invoice-button";
-import { formatCAD } from "@/lib/utils";
+import { getSettings } from "@/lib/db/queries";
+import { fiscalYearFor, formatCAD } from "@/lib/utils";
+import { hstPeriodFor } from "@/lib/hst";
+import { isTaxableSupplyInPeriod } from "@/lib/queries/invoice-slices";
 
 export const dynamic = "force-dynamic";
 
 export default async function InvoicesPage() {
-  const rows = await db
-    .select({ invoice: invoices, contract: contracts, client: clients })
-    .from(invoices)
-    .innerJoin(contracts, eq(contracts.id, invoices.contractId))
-    .innerJoin(clients, eq(clients.id, contracts.clientId))
-    .orderBy(desc(invoices.issueDate), desc(invoices.invoiceNumber));
+  const [rows, s] = await Promise.all([
+    db
+      .select({ invoice: invoices, contract: contracts, client: clients })
+      .from(invoices)
+      .innerJoin(contracts, eq(contracts.id, invoices.contractId))
+      .innerJoin(clients, eq(clients.id, contracts.clientId))
+      .orderBy(desc(invoices.issueDate), desc(invoices.invoiceNumber)),
+    getSettings(),
+  ]);
 
-  const totalsYTD = rows
-    .filter((r) => r.invoice.issueDate.startsWith(String(new Date().getUTCFullYear())))
-    .reduce((acc, r) => acc + r.invoice.totalCents, 0);
+  const fyeMonth = s?.fiscalYearEndMonth ?? 12;
+  const fyeDay = s?.fiscalYearEndDay ?? 31;
+  const currentFY = fiscalYearFor(new Date().toISOString().slice(0, 10), fyeMonth, fyeDay);
+  const fyPeriod = hstPeriodFor(currentFY, fyeMonth, fyeDay);
+  // Revenue = issued invoices via the shared predicate. Matches every other
+  // page that shows a FY revenue number.
+  const fyRevenueCents = rows
+    .filter((r) => isTaxableSupplyInPeriod(r.invoice, fyPeriod))
+    .reduce((acc, r) => acc + r.invoice.subtotalCents, 0);
 
   return (
     <div className="space-y-6">
@@ -29,7 +41,7 @@ export default async function InvoicesPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Invoices</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {rows.length} total · YTD {formatCAD(totalsYTD)}
+            {rows.length} total · FY {currentFY} revenue {formatCAD(fyRevenueCents)}
           </p>
         </div>
         <Button asChild variant="brand" className="gap-1.5">

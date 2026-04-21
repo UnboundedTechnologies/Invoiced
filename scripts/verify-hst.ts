@@ -184,19 +184,19 @@ const scenarios: Scenario[] = [
     },
   },
   {
-    name: "6) Void + draft invoices filtered: only paid/sent/overdue count",
+    name: "6) Void + draft invoices filtered: only sent/paid/overdue count",
     fiscalYear: 2026,
     invoices: [
       inv("PAID", 100_000_00, 13_000_00, "2026-03-15", "paid"),
       inv("VOID", 50_000_00, 6_500_00, "2026-04-10", "void"),
-      inv("DRAFT", 40_000_00, 5_200_00, "2026-05-01", "draft"), // drafts DO count; only void excluded
+      inv("DRAFT", 40_000_00, 5_200_00, "2026-05-01", "draft"),
     ],
     expenses: [],
     expect: {
       regular: {
-        line101: 140_000_00,   // PAID + DRAFT (void excluded)
-        line103: 18_200_00,
-        line109: 18_200_00,
+        line101: 100_000_00,   // only PAID — a draft is not yet a taxable supply, void cancelled
+        line103: 13_000_00,
+        line109: 13_000_00,
       },
     },
   },

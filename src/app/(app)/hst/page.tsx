@@ -12,6 +12,7 @@ import {
   formatLongDate,
 } from "@/lib/utils";
 import { hstFilingDueDate, hstPeriodFor } from "@/lib/hst";
+import { isTaxableSupply } from "@/lib/queries/invoice-slices";
 
 export const dynamic = "force-dynamic";
 
@@ -27,10 +28,11 @@ export default async function HstPage() {
   const today = new Date().toISOString().slice(0, 10);
   const currentFY = fiscalYearFor(today, fyeMonth, fyeDay);
 
-  // Every FY that has at least one non-void invoice → candidate for a return.
+  // Every FY that has at least one taxable supply → candidate for a return.
+  // Shared predicate with the aggregator.
   const invoiceFYs = new Set<number>();
   for (const i of invs) {
-    if (i.status === "void") continue;
+    if (!isTaxableSupply(i)) continue;
     invoiceFYs.add(fiscalYearFor(i.issueDate, fyeMonth, fyeDay));
   }
   const existingFYs = new Set(returns.map((r) => r.fiscalYear));
