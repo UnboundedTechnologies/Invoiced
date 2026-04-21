@@ -294,14 +294,32 @@ export default async function DashboardPage() {
             TONE.emerald.topBar,
           )}
         />
-        <CardHeader className="pb-1">
-          <div className="flex items-center justify-between gap-3">
-            <div>
+        <CardHeader className="pb-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-2">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">
                 Revenue trend
               </div>
               <div className="text-3xl font-bold leading-none tracking-tight tabular-nums">
                 {formatCAD(trend12moTotal)}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {nonEmptyMonths > 0 ? (
+                  <>
+                    12-month total · avg{" "}
+                    <span className="text-foreground">{formatCAD(trendAvg)}</span>/mo over{" "}
+                    {nonEmptyMonths} active month{nonEmptyMonths === 1 ? "" : "s"}
+                    {trendPeakLabel && (
+                      <>
+                        {" · peak "}
+                        <span className="text-foreground">{formatCAD(trendPeak)}</span> in{" "}
+                        {trendPeakLabel}
+                      </>
+                    )}
+                  </>
+                ) : (
+                  "No invoiced revenue in the past 12 months"
+                )}
               </div>
             </div>
             <div
@@ -315,32 +333,13 @@ export default async function DashboardPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-2 pt-0">
           <Sparkline
             data={trendValues}
             tone="emerald"
-            height={60}
+            height={72}
             ariaLabel="12-month revenue sparkline"
           />
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <div>
-              {nonEmptyMonths > 0 ? (
-                <>
-                  12-month total · avg{" "}
-                  <span className="text-foreground">{formatCAD(trendAvg)}</span>/mo over{" "}
-                  {nonEmptyMonths} active month{nonEmptyMonths === 1 ? "" : "s"}
-                </>
-              ) : (
-                "No invoiced revenue in the past 12 months"
-              )}
-            </div>
-            {trendPeakLabel && (
-              <div>
-                Peak{" "}
-                <span className="text-foreground">{formatCAD(trendPeak)}</span> in {trendPeakLabel}
-              </div>
-            )}
-          </div>
           <div className="flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground/70">
             <span>{monthNameShort(trendSeries[0]!.month)}</span>
             <span>{monthNameShort(trendSeries[trendSeries.length - 1]!.month)}</span>
