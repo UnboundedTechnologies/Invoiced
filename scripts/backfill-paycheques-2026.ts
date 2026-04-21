@@ -25,7 +25,11 @@ import { computePayroll, payPeriodsFromCadence } from "../src/lib/payroll-2026";
 import { formatCAD } from "../src/lib/utils";
 
 const APPLY = process.argv.includes("--apply");
-const ALLOWED_EMAIL = process.env.ALLOWED_LOGIN_EMAIL?.toLowerCase() ?? "cli:backfill-paycheques-2026";
+const ALLOWED_EMAIL =
+  (process.env.ALLOWED_LOGIN_EMAILS ?? process.env.ALLOWED_LOGIN_EMAIL ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)[0] ?? "cli:backfill-paycheques-2026";
 
 function fmtDelta(oldV: number, newV: number): string {
   const diff = newV - oldV;
