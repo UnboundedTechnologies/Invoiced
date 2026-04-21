@@ -14,10 +14,10 @@ import {
   FileSpreadsheet,
   FolderLock,
   Building2,
-  User,
   Settings,
   ShieldAlert,
   Landmark,
+  Calculator,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -67,7 +67,7 @@ const SECTIONS: { label: string; tone: Tone; items: NavItem[] }[] = [
       { href: "/expenses", label: "Expenses", icon: Receipt, tone: "rose" },
       { href: "/hst", label: "HST return", icon: FileSpreadsheet, tone: "rose" },
       { href: "/corp-tax", label: "Corporate tax (T2)", icon: Landmark, tone: "indigo" },
-      { href: "/personal-tax", label: "Personal tax (T1)", icon: User, tone: "rose" },
+      { href: "/personal-tax", label: "Personal tax (T1)", icon: Calculator, tone: "rose" },
     ],
   },
   {

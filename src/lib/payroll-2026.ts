@@ -1,8 +1,9 @@
 /**
  * Canadian payroll deduction formulas — 2026 (Ontario).
  *
- * Source: CRA T4127 Payroll Deductions Formulas, January 1 2026 edition.
- *   https://www.canada.ca/en/revenue-agency/services/forms-publications/payroll/t4127-payroll-deductions-formulas.html
+ * Source: CRA T4127 Payroll Deductions Formulas, January 1 2026 edition
+ * (122nd edition, indexed 2.0% over 2025).
+ *   https://www.canada.ca/en/revenue-agency/services/forms-publications/payroll/t4127-payroll-deductions-formulas/t4127-jan.html
  *
  * Scope / assumptions:
  * - Owner-manager of a CCPC with > 40% voting shares → EXEMPT from EI (employee and employer both = 0).
@@ -16,18 +17,18 @@
  * dollars-as-number (IEEE-754) so the constants match CRA tables verbatim;
  * every result is `Math.round`ed back to cents at the end.
  *
- * Every constant in this file must cite T4127 January 2026. If CRA releases
+ * Every constant in this file must cite T4127 January 1 2026. If CRA releases
  * a mid-year update, snapshot the numbers as `payroll-2026-07.ts` rather than
  * mutating this file.
  */
 
 // ───── CPP & CPP2 (2026) ─────
 
-/** Year's Maximum Pensionable Earnings (CPP1 ceiling). T4127 §3.1 */
-export const CPP_YMPE_2026 = 71_300;
+/** Year's Maximum Pensionable Earnings (CPP1 ceiling). T4127 §3.1 — Jan 1 2026. */
+export const CPP_YMPE_2026 = 74_600;
 
-/** Year's Additional Maximum Pensionable Earnings (CPP2 ceiling). T4127 §3.1 */
-export const CPP_YAMPE_2026 = 81_200;
+/** Year's Additional Maximum Pensionable Earnings (CPP2 ceiling). T4127 §3.1 — Jan 1 2026. */
+export const CPP_YAMPE_2026 = 85_000;
 
 /** Annual basic exemption — no CPP on the first $3,500. T4127 §3.1 */
 export const CPP_BASIC_EXEMPTION_2026 = 3_500;
@@ -38,58 +39,107 @@ export const CPP_RATE_2026 = 0.0595;
 /** CPP2 (enhanced) contribution rate (employee AND employer each). T4127 §3.1 */
 export const CPP2_RATE_2026 = 0.04;
 
-/** Max annual CPP1 (employee portion): (YMPE − exemption) × rate = 67,800 × 5.95% = $4,034.10 */
+/** Max annual CPP1 (employee portion): (YMPE − exemption) × rate = 71,100 × 5.95% = $4,230.45 */
 export const CPP_MAX_ANNUAL_2026 = (CPP_YMPE_2026 - CPP_BASIC_EXEMPTION_2026) * CPP_RATE_2026;
 
-/** Max annual CPP2 (employee portion): (YAMPE − YMPE) × rate = 9,900 × 4% = $396.00 */
+/** Max annual CPP2 (employee portion): (YAMPE − YMPE) × rate = 10,400 × 4% = $416.00 */
 export const CPP2_MAX_ANNUAL_2026 = (CPP_YAMPE_2026 - CPP_YMPE_2026) * CPP2_RATE_2026;
 
 // ───── Federal tax 2026 ─────
-// T4127 Chapter 3 Table — rates and constants current for Jan 1 2026.
+// T4127 Chapter 3 — Jan 1 2026 indexation (+2.0% over 2025).
 
-/** Federal basic personal amount — income-tested but for income ≤ $173,205 this is the flat value. */
-export const FEDERAL_BPA_2026 = 16_129;
+/**
+ * Federal basic personal amount — **income-phased**.
+ *
+ * For net income ≤ $181,440 the BPA is the maximum $16,452. For net income
+ * ≥ $258,482 it is the indexed "old" BPA of $14,829. Between the two, it
+ * reduces linearly. See `federalBpaFor` below.
+ *
+ * The bare constant is exported as the max for quick reference; callers that
+ * need the phased value must use `federalBpaFor(annualNetIncome)`.
+ */
+export const FEDERAL_BPA_MAX_2026 = 16_452;
+export const FEDERAL_BPA_MIN_2026 = 14_829;
+export const FEDERAL_BPA_PHASE_START_2026 = 181_440;
+export const FEDERAL_BPA_PHASE_END_2026 = 258_482;
+/** Back-compat export — refers to the max value. Prefer `federalBpaFor()` elsewhere. */
+export const FEDERAL_BPA_2026 = FEDERAL_BPA_MAX_2026;
+
+/**
+ * Returns the federal BPA for a given annualized net income (dollars).
+ * Linear phase-out between $181,440 (net) and $258,482 (net).
+ *
+ * Per T4127 §3.3: at PDOC time, "net income" used for BPA determination is
+ * approximated by annualized remuneration — the exact T1 net income isn't
+ * knowable per-pay. T1 compute (src/lib/t1.ts) uses the actual T1 net income.
+ */
+export function federalBpaFor(annualNetIncome: number): number {
+  if (annualNetIncome <= FEDERAL_BPA_PHASE_START_2026) return FEDERAL_BPA_MAX_2026;
+  if (annualNetIncome >= FEDERAL_BPA_PHASE_END_2026) return FEDERAL_BPA_MIN_2026;
+  const delta = FEDERAL_BPA_MAX_2026 - FEDERAL_BPA_MIN_2026; // 1,623
+  const range = FEDERAL_BPA_PHASE_END_2026 - FEDERAL_BPA_PHASE_START_2026; // 77,042
+  return FEDERAL_BPA_MAX_2026 - delta * ((annualNetIncome - FEDERAL_BPA_PHASE_START_2026) / range);
+}
 
 /** Lowest-bracket federal rate, also used for non-refundable credit conversion. */
 export const FEDERAL_CREDIT_RATE_2026 = 0.14;
 
-/** Federal tax brackets with T4127-style cumulative K constant. */
+/**
+ * Federal tax brackets with T4127-style cumulative K constant.
+ * T1 = R × A − K − K1 − K2 where R = bracket rate, A = annualized taxable.
+ *
+ * K values are the cumulative "step-down" amounts that make the piecewise-
+ * linear bracket formula equivalent to the true marginal calculation.
+ * Recomputed from 2026 ceilings below:
+ *   K2 = (0.205 - 0.14)  × 58,523  = 3,803.995
+ *   K3 = K2 + (0.26 - 0.205)  × 117,045 = 10,241.470
+ *   K4 = K3 + (0.29 - 0.26)   × 181,440 = 15,684.670
+ *   K5 = K4 + (0.33 - 0.29)   × 258,482 = 26,023.950
+ */
 export const FEDERAL_BRACKETS_2026 = [
-  { upTo: 57_375, rate: 0.14, k: 0 },
-  { upTo: 114_750, rate: 0.205, k: 3_729.375 },       // (0.205 - 0.14) × 57,375
-  { upTo: 177_882, rate: 0.26, k: 10_040.625 },       // prev + (0.26 - 0.205) × 114,750
-  { upTo: 253_414, rate: 0.29, k: 15_377.085 },       // prev + (0.29 - 0.26) × 177,882
-  { upTo: Infinity, rate: 0.33, k: 25_513.645 },      // prev + (0.33 - 0.29) × 253,414
+  { upTo: 58_523, rate: 0.14, k: 0 },
+  { upTo: 117_045, rate: 0.205, k: 3_803.995 },
+  { upTo: 181_440, rate: 0.26, k: 10_241.470 },
+  { upTo: 258_482, rate: 0.29, k: 15_684.670 },
+  { upTo: Infinity, rate: 0.33, k: 26_023.950 },
 ] as const;
 
 // ───── Ontario tax 2026 ─────
-// T4127 Chapter 9. Rates and Ontario-specific constants for Jan 1 2026.
+// T4127 Chapter 9 — Jan 1 2026 indexation (+1.9% over 2025, except brackets
+// 3 and 4 which are not indexed per Ontario Taxation Act s.4(3)).
 
 /** Ontario basic personal amount. */
-export const ONTARIO_BPA_2026 = 12_747;
+export const ONTARIO_BPA_2026 = 12_989;
 
 /** Ontario lowest-bracket rate / credit rate. */
 export const ONTARIO_CREDIT_RATE_2026 = 0.0505;
 
-/** Ontario tax brackets with cumulative V constant. */
+/**
+ * Ontario tax brackets with cumulative V constant.
+ * V values recomputed from 2026 ceilings below:
+ *   V2 = (0.0915 - 0.0505) × 53,891  = 2,209.531
+ *   V3 = V2 + (0.1116 - 0.0915) × 107,785 = 4,376.0095
+ *   V4 = V3 + (0.1216 - 0.1116) × 150,000 = 5,876.0095
+ *   V5 = V4 + (0.1316 - 0.1216) × 220,000 = 8,076.0095
+ */
 export const ONTARIO_BRACKETS_2026 = [
-  { upTo: 54_531, rate: 0.0505, v: 0 },
-  { upTo: 109_062, rate: 0.0915, v: 2_235.771 },      // (0.0915 - 0.0505) × 54,531
-  { upTo: 150_000, rate: 0.1116, v: 4_427.917 },      // prev + (0.1116 - 0.0915) × 109,062
-  { upTo: 220_000, rate: 0.1216, v: 5_927.917 },      // prev + (0.1216 - 0.1116) × 150,000
-  { upTo: Infinity, rate: 0.1316, v: 8_127.917 },     // prev + (0.1316 - 0.1216) × 220,000
+  { upTo: 53_891, rate: 0.0505, v: 0 },
+  { upTo: 107_785, rate: 0.0915, v: 2_209.531 },
+  { upTo: 150_000, rate: 0.1116, v: 4_376.0095 },
+  { upTo: 220_000, rate: 0.1216, v: 5_876.0095 },
+  { upTo: Infinity, rate: 0.1316, v: 8_076.0095 },
 ] as const;
 
-/** Ontario surtax thresholds. T4127 §9.6 */
+/** Ontario surtax thresholds. T4127 §9.6 — Jan 1 2026. */
 export const ONTARIO_SURTAX = {
-  tier1Threshold: 5_710,
+  tier1Threshold: 5_818,
   tier1Rate: 0.20,
-  tier2Threshold: 7_307,
+  tier2Threshold: 7_446,
   tier2Rate: 0.36,
 } as const;
 
-/** Ontario Health Premium — annual, applied to income > $20,000. T4127 §9.7 */
-function ontarioHealthPremiumAnnual(annualTaxableIncome: number): number {
+/** Ontario Health Premium — annual, applied to income > $20,000. T4127 §9.7 (unchanged since 2005). */
+export function ontarioHealthPremiumAnnual(annualTaxableIncome: number): number {
   if (annualTaxableIncome <= 20_000) return 0;
   if (annualTaxableIncome <= 25_000) return Math.min(300, (annualTaxableIncome - 20_000) * 0.06);
   if (annualTaxableIncome <= 36_000) return 300;
@@ -210,8 +260,11 @@ export function computePayroll(input: PayrollInput): PayrollResult {
   const annualTaxable = gross * periods;
   // Annual CPP credit = CPP1 annualized (credit is on basic portion only; simplified model).
   const annualCppCredit = cpp * periods;
+  // BPA phased by annualized net — at PDOC time we don't have true T1 net income,
+  // so annualTaxable is the best proxy (matches T4127 §3.3).
+  const annualBpa = federalBpaFor(annualTaxable);
 
-  const fedTaxAnnual = federalTaxAnnual(annualTaxable, FEDERAL_BPA_2026, annualCppCredit);
+  const fedTaxAnnual = federalTaxAnnual(annualTaxable, annualBpa, annualCppCredit);
   const onTaxAnnual = ontarioTaxAnnual(annualTaxable, ONTARIO_BPA_2026, annualCppCredit);
   const ohpAnnual = ontarioHealthPremiumAnnual(annualTaxable);
 

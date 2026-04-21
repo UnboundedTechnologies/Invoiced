@@ -47,6 +47,23 @@ import { computeGrip, computeRdtoh, computeCda } from "../src/lib/tax-pools";
 import { buildCcaPools, totalCcaClaimed, CLASS_RATE_BPS } from "../src/lib/cca";
 import { toGifiCsv } from "../src/lib/gifi-export";
 import { computePsbRisk } from "../src/lib/psb";
+import {
+  computeT1,
+  dividendGrossUp,
+  marginalRateAt,
+  marginalRateOnNextDollar,
+  type T1Input,
+} from "../src/lib/t1";
+import {
+  CPP_BASE_CREDIT_FRACTION,
+  CPP_ENHANCED_DEDUCTION_FRACTION,
+  ELIGIBLE_GROSS_UP_RATE,
+  FEDERAL_DTC_ELIGIBLE_RATE,
+  FEDERAL_DTC_NON_ELIGIBLE_RATE,
+  NON_ELIGIBLE_GROSS_UP_RATE,
+  ONTARIO_DTC_ELIGIBLE_RATE,
+  ONTARIO_DTC_NON_ELIGIBLE_RATE_2026,
+} from "../src/lib/t1-rates-2026";
 import { fiscalYearFor, formatCAD } from "../src/lib/utils";
 
 // ——— canonical fixture ———
@@ -1014,6 +1031,166 @@ function addDaysISO(iso: string, days: number): string {
   expect(failures, "CDA addition = 50% gain", gain.additionCents, 5_000_00);
   expect(failures, "CDA negative addition = -50% loss", loss.additionCents, -5_000_00);
   record("CDA · 50% inclusion rate is symmetric on gains and losses", failures);
+}
+
+// ——— T1 coherence checks (10) ———
+
+// Canonical T1 fixture — salary + mixed dividends + box 117.
+const t1Fixture: T1Input = {
+  taxYear: 2026,
+  t4: {
+    box14EmploymentIncomeCents: 80_000_00,
+    box16CppBaseCents: Math.round((74_600 - 3_500) * 0.0595 * 100),
+    box16aCpp2Cents: Math.round((80_000 - 74_600) * 0.04 * 100),
+    box18EiCents: 0,
+    box22FedTaxWithheldCents: 12_000_00,
+    box24EiInsurableCents: 0,
+    box26CppPensionableCents: 74_600_00,
+    box52PensionAdjustmentCents: 0,
+    ontarioTaxWithheldCents: 4_500_00,
+  },
+  t5: {
+    eligibleActualCents: 10_000_00,
+    nonEligibleActualCents: 5_000_00,
+  },
+  t4aBox117Cents: 500_00,
+};
+
+{
+  const r = computeT1(t1Fixture);
+  const failures: string[] = [];
+  const expectedGrossedUpEligible = Math.round(10_000_00 * (1 + ELIGIBLE_GROSS_UP_RATE));
+  const expectedGrossedUpNonElig = Math.round(5_000_00 * (1 + NON_ELIGIBLE_GROSS_UP_RATE));
+  const expectedTotalIncome =
+    t1Fixture.t4.box14EmploymentIncomeCents +
+    expectedGrossedUpEligible +
+    expectedGrossedUpNonElig +
+    t1Fixture.t4aBox117Cents;
+  expect(failures, "T1 totalIncome identity", r.totalIncomeCents, expectedTotalIncome);
+  record("T1 · totalIncome ≡ box14 + grossedUp(eligible) + grossedUp(non-elig) + box117", failures);
+}
+
+{
+  const r = computeT1(t1Fixture);
+  const failures: string[] = [];
+  const expectedDeduction = Math.round(t1Fixture.t4.box16CppBaseCents * CPP_ENHANCED_DEDUCTION_FRACTION);
+  expect(failures, "CPP enhanced deduction (s.60(e))", r.cppEnhancedDeductionCents, expectedDeduction);
+  record("T1 · CPP enhanced deduction = box16 × (1/5.95) — line 22215", failures);
+}
+
+{
+  const r = computeT1(t1Fixture);
+  const failures: string[] = [];
+  expect(failures, "CPP2 full deduction (s.60(e.1))", r.cpp2DeductionCents, t1Fixture.t4.box16aCpp2Cents);
+  record("T1 · CPP2 deduction = box16a (100%) — line 22200", failures);
+}
+
+{
+  const r = computeT1(t1Fixture);
+  const failures: string[] = [];
+  const expectedCredit = Math.round(t1Fixture.t4.box16CppBaseCents * CPP_BASE_CREDIT_FRACTION);
+  expect(failures, "Federal CPP base credit (line 30800)", r.federal.cppBaseAmountCents, expectedCredit);
+  expect(failures, "Ontario CPP base credit (line 58240)", r.ontario.cppBaseAmountCents, expectedCredit);
+  record("T1 · CPP base credit = box16 × (4.95/5.95) — lines 30800 + 58240", failures);
+}
+
+{
+  const failures: string[] = [];
+  const gEligible = dividendGrossUp(12_345_67, ELIGIBLE_GROSS_UP_RATE);
+  expect(failures, "eligible 38% gross-up", gEligible, Math.round(12_345_67 * 1.38));
+  const gNonElig = dividendGrossUp(12_345_67, NON_ELIGIBLE_GROSS_UP_RATE);
+  expect(failures, "non-eligible 15% gross-up", gNonElig, Math.round(12_345_67 * 1.15));
+  record("T1 · dividend gross-up: eligible 38%, non-eligible 15%", failures);
+}
+
+{
+  const r = computeT1(t1Fixture);
+  const failures: string[] = [];
+  const grossEligible = Math.round(10_000_00 * 1.38);
+  const grossNonElig = Math.round(5_000_00 * 1.15);
+  expect(
+    failures,
+    "federal DTC eligible (15.0198% of grossed-up)",
+    r.federal.dtcEligibleCents,
+    Math.round(grossEligible * FEDERAL_DTC_ELIGIBLE_RATE),
+  );
+  expect(
+    failures,
+    "federal DTC non-eligible (9.0301% of grossed-up)",
+    r.federal.dtcNonEligibleCents,
+    Math.round(grossNonElig * FEDERAL_DTC_NON_ELIGIBLE_RATE),
+  );
+  record("T1 · federal DTC: 15.0198% eligible + 9.0301% non-elig (of grossed-up)", failures);
+}
+
+{
+  const r = computeT1(t1Fixture);
+  const failures: string[] = [];
+  const grossEligible = Math.round(10_000_00 * 1.38);
+  const grossNonElig = Math.round(5_000_00 * 1.15);
+  expect(
+    failures,
+    "Ontario DTC eligible (10% of grossed-up)",
+    r.ontario.dtcEligibleCents,
+    Math.round(grossEligible * ONTARIO_DTC_ELIGIBLE_RATE),
+  );
+  expect(
+    failures,
+    "Ontario DTC non-eligible (2.9863% of grossed-up 2026)",
+    r.ontario.dtcNonEligibleCents,
+    Math.round(grossNonElig * ONTARIO_DTC_NON_ELIGIBLE_RATE_2026),
+  );
+  record("T1 · Ontario DTC: 10% eligible + 2.9863% non-elig (2026, of grossed-up)", failures);
+}
+
+{
+  const r = computeT1(t1Fixture);
+  const failures: string[] = [];
+  expect(
+    failures,
+    "totalTaxPayable = federal + Ontario",
+    r.totalTaxPayableCents,
+    r.federal.federalTaxPayableCents + r.ontario.ontarioTaxPayableCents,
+  );
+  record("T1 · totalTaxPayable ≡ federal + Ontario (line 43500)", failures);
+}
+
+{
+  const r = computeT1(t1Fixture);
+  const failures: string[] = [];
+  expect(
+    failures,
+    "refundOrOwing = totalTax − withheld − cpp2Overpayment",
+    r.refundOrOwingCents,
+    r.totalTaxPayableCents - r.totalWithheldCents - r.cpp2OverpaymentCents,
+  );
+  expect(
+    failures,
+    "totalWithheld = box22 + Ontario withheld",
+    r.totalWithheldCents,
+    t1Fixture.t4.box22FedTaxWithheldCents + t1Fixture.t4.ontarioTaxWithheldCents,
+  );
+  record("T1 · refund/owing identity and totalWithheld ≡ box22 + Ontario withheld", failures);
+}
+
+{
+  const r = computeT1(t1Fixture);
+  const failures: string[] = [];
+  expect(
+    failures,
+    "combined marginal bps = fed + Ontario",
+    r.marginalRateCombinedBps,
+    r.marginalRateFedBps + r.marginalRateOnBps,
+  );
+  // marginalRateAt at a bracket boundary
+  const atFedBrk2 = marginalRateAt(58_524_00);
+  expect(failures, "fed bracket 2 rate at $58,524", atFedBrk2.federalBps, 2050);
+  // marginalRateOnNextDollar plausibility — low-income bump is in ~14-20% + ~5-9% range
+  const marg = marginalRateOnNextDollar(t1Fixture, 100_00);
+  if (marg.combinedBps < 1500 || marg.combinedBps > 5000) {
+    failures.push(`marginalRateOnNextDollar plausibility: got ${marg.combinedBps} bps`);
+  }
+  record("T1 · marginalRateAt + marginalRateOnNextDollar identity + plausibility", failures);
 }
 
 // ——— runner ———

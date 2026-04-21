@@ -19,6 +19,11 @@ import {
   CPP_YMPE_2026,
   CPP2_MAX_ANNUAL_2026,
   CPP2_RATE_2026,
+  FEDERAL_BPA_MAX_2026,
+  FEDERAL_BPA_MIN_2026,
+  FEDERAL_BPA_PHASE_END_2026,
+  FEDERAL_BPA_PHASE_START_2026,
+  federalBpaFor,
 } from "../src/lib/payroll-2026";
 import { formatCAD } from "../src/lib/utils";
 
@@ -352,6 +357,48 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
   });
   expectNear(failures, "high income → $75/mo OHP (max)", high.ohpCents, 75_00, 50);
   record("OHP: scales through 2026 Ontario Health Premium tiers", failures);
+})();
+
+// ——— Test 14: Federal BPA phase-out (Jan 1 2026) ———
+
+(() => {
+  const failures: string[] = [];
+  // Boundary: at or below phase start → max BPA
+  expectEq(
+    failures,
+    "BPA at phase start ($181,440)",
+    federalBpaFor(FEDERAL_BPA_PHASE_START_2026),
+    FEDERAL_BPA_MAX_2026,
+  );
+  // Below phase start → max BPA
+  expectEq(
+    failures,
+    "BPA below phase start",
+    federalBpaFor(100_000),
+    FEDERAL_BPA_MAX_2026,
+  );
+  // At or above phase end → min BPA
+  expectEq(
+    failures,
+    "BPA at phase end ($258,482)",
+    federalBpaFor(FEDERAL_BPA_PHASE_END_2026),
+    FEDERAL_BPA_MIN_2026,
+  );
+  expectEq(
+    failures,
+    "BPA above phase end",
+    federalBpaFor(300_000),
+    FEDERAL_BPA_MIN_2026,
+  );
+  // Midpoint: at $220,000 (exactly midway through 181,440→258,482 range)
+  // BPA = 16,452 − 1,623 × (220,000 − 181,440) / 77,042
+  //     ≈ 16,452 − 1,623 × 0.50050856 ≈ 16,452 − 812.325 ≈ 15,639.68
+  const midpoint = federalBpaFor(220_000);
+  const expectedMid = FEDERAL_BPA_MAX_2026 - 1_623 * ((220_000 - FEDERAL_BPA_PHASE_START_2026) / 77_042);
+  if (Math.abs(midpoint - expectedMid) > 0.01) {
+    failures.push(`BPA at $220K midpoint: want ≈${expectedMid.toFixed(2)}, got ${midpoint.toFixed(2)}`);
+  }
+  record("Federal BPA phase-out: 16,452 at $181,440 → 14,829 at $258,482 (linear)", failures);
 })();
 
 // ——— runner ———

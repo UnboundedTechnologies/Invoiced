@@ -6,6 +6,7 @@ import { db } from "@/lib/db/client";
 import { deadlines, remittances } from "@/lib/db/schema";
 import { getSettings } from "@/lib/db/queries";
 import { syncAnnualDeadlines } from "@/server/actions/deadlines";
+import { syncT1Deadlines } from "@/server/actions/t1";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { DeadlineRow } from "@/components/calendar/deadline-row";
@@ -44,7 +45,7 @@ export default async function CalendarPage({
   const monthIso = /^\d{4}-\d{2}$/.test(params.month ?? "") ? params.month! : defaultMonth;
 
   // Idempotent sync — reflects freshly-saved Settings changes with no click.
-  await syncAnnualDeadlines();
+  await Promise.all([syncAnnualDeadlines(), syncT1Deadlines()]);
 
   const [s, allDeadlines, allRemittances] = await Promise.all([
     getSettings(),

@@ -8,6 +8,7 @@ import { dividends, settings, slips, auditLog, shareholderLoanEntries } from "@/
 import { auth } from "../../../auth";
 import { fiscalYearFor } from "@/lib/utils";
 import { t2PeriodLockError } from "./t2";
+import { t1PeriodLockError } from "./t1";
 
 type ActionResult = { ok?: string; error?: string };
 
@@ -96,6 +97,11 @@ export async function createDividend(
     }
     const t2Lock = await t2PeriodLockError(declaredDate);
     if (t2Lock) return { error: t2Lock };
+    // T1 lock on paid date — T1 cares about CY of payment, not declaration.
+    if (paidDate) {
+      const t1Lock = await t1PeriodLockError(paidDate);
+      if (t1Lock) return { error: t1Lock };
+    }
 
     const [created] = await db
       .insert(dividends)
@@ -147,6 +153,15 @@ export async function updateDividend(
       const newT2Lock = await t2PeriodLockError(declaredDate);
       if (newT2Lock) return { error: newT2Lock };
     }
+    // T1 locks on paidDate — both old (if set) and new (if set and changed).
+    if (existing.paidDate) {
+      const oldT1Lock = await t1PeriodLockError(existing.paidDate);
+      if (oldT1Lock) return { error: oldT1Lock };
+    }
+    if (paidDate && paidDate !== existing.paidDate) {
+      const newT1Lock = await t1PeriodLockError(paidDate);
+      if (newT1Lock) return { error: newT1Lock };
+    }
 
     await db
       .update(dividends)
@@ -176,6 +191,12 @@ export async function deleteDividend(id: string): Promise<ActionResult> {
     }
     const t2Lock = await t2PeriodLockError(existing.declaredDate);
     if (t2Lock) return { error: t2Lock };
+    // T1 lock on paidDate — deleting a paid dividend removes it from the T1
+    // of its payment CY, which is history rewriting if that T1 is filed.
+    if (existing.paidDate) {
+      const t1Lock = await t1PeriodLockError(existing.paidDate);
+      if (t1Lock) return { error: t1Lock };
+    }
 
     // Cascade-delete: if this dividend was created via the "Declare as
     // dividend" reclassify flow, a shareholder_loan_entries row of type
@@ -256,6 +277,9 @@ export async function markDividendPaid(id: string, paidDate: string): Promise<Ac
     }
     const t2Lock = await t2PeriodLockError(existing.declaredDate);
     if (t2Lock) return { error: t2Lock };
+    // T1 lock on the new paid date — it puts a dividend into that CY's T1.
+    const t1Lock = await t1PeriodLockError(paidDate);
+    if (t1Lock) return { error: t1Lock };
     await db.update(dividends).set({ paidDate }).where(eq(dividends.id, id));
     await db.insert(auditLog).values({
       actorEmail: email,
@@ -277,6 +301,12 @@ export async function markDividendUnpaid(id: string): Promise<ActionResult> {
     if (!existing) return { error: "Dividend not found." };
     const t2Lock = await t2PeriodLockError(existing.declaredDate);
     if (t2Lock) return { error: t2Lock };
+    // T1 lock on the existing paid date — unpaying it removes a dividend
+    // from that CY's T1 (history rewrite if the T1 is filed).
+    if (existing.paidDate) {
+      const t1Lock = await t1PeriodLockError(existing.paidDate);
+      if (t1Lock) return { error: t1Lock };
+    }
     await db.update(dividends).set({ paidDate: null }).where(eq(dividends.id, id));
     await db.insert(auditLog).values({
       actorEmail: email,
