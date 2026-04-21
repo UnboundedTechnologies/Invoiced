@@ -1,28 +1,20 @@
 "use client";
 
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { addMonths, format, parseISO, startOfMonth, subMonths } from "date-fns";
 import { Button } from "@/components/ui/button";
 
-export function MonthNav({ monthIso }: { monthIso: string }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
+export function MonthNav({
+  monthIso,
+  onChange,
+}: {
+  monthIso: string;
+  onChange: (monthIso: string) => void;
+}) {
   const current = parseISO(monthIso + "-01");
   const prev = format(subMonths(current, 1), "yyyy-MM");
   const next = format(addMonths(current, 1), "yyyy-MM");
   const todayIso = format(startOfMonth(new Date()), "yyyy-MM");
-
-  function go(m: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (m === todayIso) params.delete("month");
-    else params.set("month", m);
-    const qs = params.toString();
-    router.push(qs ? `${pathname}?${qs}` : pathname);
-  }
-
   const title = format(current, "MMMM yyyy");
   const isToday = monthIso === todayIso;
 
@@ -32,7 +24,7 @@ export function MonthNav({ monthIso }: { monthIso: string }) {
         variant="ghost"
         size="icon"
         className="size-8"
-        onClick={() => go(prev)}
+        onClick={() => onChange(prev)}
         aria-label="Previous month"
       >
         <ChevronLeft className="size-4" />
@@ -44,7 +36,7 @@ export function MonthNav({ monthIso }: { monthIso: string }) {
         variant="ghost"
         size="icon"
         className="size-8"
-        onClick={() => go(next)}
+        onClick={() => onChange(next)}
         aria-label="Next month"
       >
         <ChevronRight className="size-4" />
@@ -53,7 +45,7 @@ export function MonthNav({ monthIso }: { monthIso: string }) {
         variant="ghost"
         size="sm"
         className="ml-1 h-8 text-xs"
-        onClick={() => go(todayIso)}
+        onClick={() => onChange(todayIso)}
         disabled={isToday}
       >
         Today
