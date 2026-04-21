@@ -43,6 +43,7 @@ drizzle/migrations/meta/_journal.json.bak
 # ───── Private tax reference (keep local only) ─────
 TAX_OPTIMIZATION.md
 TAX_OPTIMIZATION.pdf
+ACCOUNTANT_GIFI_REVIEW.md
 
 # ───── Logs ─────
 npm-debug.log*

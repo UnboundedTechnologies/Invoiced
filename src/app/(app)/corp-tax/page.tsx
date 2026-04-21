@@ -15,7 +15,7 @@ import { StartT2ReturnButton } from "@/components/corp-tax/start-return-button";
 import { fiscalYearFor, formatCAD, formatLongDate } from "@/lib/utils";
 import { hstPeriodFor } from "@/lib/hst";
 import { isTaxableSupply } from "@/lib/queries/invoice-slices";
-import { t2FilingDueDate } from "@/server/actions/t2";
+import { t2FilingDueDate } from "@/lib/t2";
 
 export const dynamic = "force-dynamic";
 
