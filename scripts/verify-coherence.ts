@@ -44,6 +44,14 @@ import {
 } from "../src/lib/dashboard-metrics";
 import { estimateT2Detailed } from "../src/lib/t2";
 import { computeGrip, computeRdtoh, computeCda } from "../src/lib/tax-pools";
+import {
+  simulateScenario,
+  synthesizeT4,
+  canonicalInputJson,
+  CPP_YMPE_2026 as PLAN_YMPE,
+  type ScenarioInput,
+} from "../src/lib/self-pay-planner";
+import { computePayroll } from "../src/lib/payroll-2026";
 import { buildCcaPools, totalCcaClaimed, CLASS_RATE_BPS } from "../src/lib/cca";
 import { toGifiCsv } from "../src/lib/gifi-export";
 import { computePsbRisk } from "../src/lib/psb";
@@ -1192,6 +1200,167 @@ const t1Fixture: T1Input = {
   }
   record("T1 · marginalRateAt + marginalRateOnNextDollar identity + plausibility", failures);
 }
+
+// ——— Phase 6 planner coherence ———
+
+(() => {
+  const failures: string[] = [];
+  const base: ScenarioInput = {
+    fiscalYear: 2026,
+    periodStart: "2026-01-01",
+    periodEnd: "2026-12-31",
+    projectedRevenueCents: 200_000_00,
+    projectedOpexCents: 10_000_00,
+    salaryCents: 0,
+    eligibleDividendCents: 0,
+    nonEligibleDividendCents: 0,
+    ccaClaimedCents: 0,
+    priorYearAaiiCents: 0,
+    openingGripCents: 0,
+  };
+
+  // (1) Zero-mix planner ≡ /corp-tax T2 façade with same inputs
+  const zeroMix = simulateScenario(base);
+  const t2Direct = estimateT2Detailed({
+    periodStart: base.periodStart,
+    periodEnd: base.periodEnd,
+    isCcpc: true,
+    revenueCents: base.projectedRevenueCents,
+    operatingExpensesCents: base.projectedOpexCents,
+    salaryCents: 0,
+    employerCppCents: 0,
+    ccaClaimedCents: 0,
+    priorYearAaiiCents: 0,
+  });
+  expect(
+    failures,
+    "planner zero-mix corpTax ≡ estimateT2Detailed totalTax",
+    zeroMix.corpTaxCents,
+    t2Direct.totalTaxCents,
+    0,
+  );
+  // Zero-mix personal tax floors at 0 (no income flows to T1)
+  expect(failures, "planner zero-mix personalTax = 0", zeroMix.personalTaxCents, 0, 0);
+
+  record("Planner · zero-mix ≡ /corp-tax T2 façade (no double-count)", failures);
+})();
+
+(() => {
+  const failures: string[] = [];
+  // (2) synthesizeT4($74,600, 12) sum ≡ 12-paycheque manual loop via computePayroll
+  const salary = PLAN_YMPE * 100;
+  const synth = synthesizeT4(salary, 12);
+  let ytdCpp = 0, ytdCpp2 = 0, ytdGross = 0;
+  let box14 = 0, box16 = 0, box16a = 0, box22 = 0, onTax = 0;
+  const basePer = Math.floor(salary / 12);
+  const residual = salary - basePer * 12;
+  for (let i = 0; i < 12; i++) {
+    const per = i === 11 ? basePer + residual : basePer;
+    const s = computePayroll({
+      grossCents: per,
+      ytdCppCents: ytdCpp,
+      ytdCpp2Cents: ytdCpp2,
+      ytdGrossCents: ytdGross,
+      payPeriodsPerYear: 12,
+    });
+    box14 += s.grossCents; box16 += s.cppCents; box16a += s.cpp2Cents;
+    box22 += s.federalTaxCents; onTax += s.provincialTaxCents;
+    ytdCpp += s.cppCents; ytdCpp2 += s.cpp2Cents; ytdGross += s.grossCents;
+  }
+  expect(failures, "synthT4 box14 identity", synth.box14EmploymentIncomeCents, box14, 0);
+  expect(failures, "synthT4 CPP1 identity", synth.box16CppBaseCents, box16, 0);
+  expect(failures, "synthT4 CPP2 identity", synth.box16aCpp2Cents, box16a, 0);
+  expect(failures, "synthT4 fed tax identity", synth.box22FedTaxWithheldCents, box22, 0);
+  expect(failures, "synthT4 ON tax identity", synth.ontarioTaxWithheldCents, onTax, 0);
+  record("Planner · synthesizeT4(YMPE, 12) ≡ 12× computePayroll loop", failures);
+})();
+
+(() => {
+  const failures: string[] = [];
+  // (3) totalHouseholdTax ≡ corpTax + personalTax across a realistic mix
+  const s = simulateScenario({
+    fiscalYear: 2026,
+    periodStart: "2026-01-01",
+    periodEnd: "2026-12-31",
+    projectedRevenueCents: 180_000_00,
+    projectedOpexCents: 12_000_00,
+    salaryCents: 70_000_00,
+    eligibleDividendCents: 0,
+    nonEligibleDividendCents: 20_000_00,
+    ccaClaimedCents: 0,
+    priorYearAaiiCents: 0,
+    openingGripCents: 0,
+  });
+  expect(
+    failures,
+    "planner no-double-count",
+    s.totalHouseholdTaxCents,
+    s.corpTaxCents + s.personalTaxCents,
+    0,
+  );
+  record("Planner · totalHouseholdTax = corpTax + personalTax (no double-count)", failures);
+})();
+
+(() => {
+  const failures: string[] = [];
+  // (4) canonicalInputJson stability — distinct construction orders produce same string
+  const a: ScenarioInput = {
+    fiscalYear: 2026,
+    periodStart: "2026-01-01",
+    periodEnd: "2026-12-31",
+    projectedRevenueCents: 150_000_00,
+    projectedOpexCents: 10_000_00,
+    salaryCents: 74_600_00,
+    eligibleDividendCents: 5_000_00,
+    nonEligibleDividendCents: 10_000_00,
+    ccaClaimedCents: 0,
+    priorYearAaiiCents: 0,
+    openingGripCents: 0,
+  };
+  const b: ScenarioInput = {
+    nonEligibleDividendCents: 10_000_00,
+    eligibleDividendCents: 5_000_00,
+    salaryCents: 74_600_00,
+    projectedOpexCents: 10_000_00,
+    projectedRevenueCents: 150_000_00,
+    periodEnd: "2026-12-31",
+    periodStart: "2026-01-01",
+    fiscalYear: 2026,
+    ccaClaimedCents: 0,
+    priorYearAaiiCents: 0,
+    openingGripCents: 0,
+  };
+  expectEq(failures, "canonicalInputJson stable across key order", canonicalInputJson(a), canonicalInputJson(b));
+  record("Planner · canonicalInputJson stability (drift-detection)", failures);
+})();
+
+(() => {
+  const failures: string[] = [];
+  // (5) Cash waterfall identity — corp net-income-for-tax = revenue − opex − salary − ERcpp − cca
+  const r = simulateScenario({
+    fiscalYear: 2026,
+    periodStart: "2026-01-01",
+    periodEnd: "2026-12-31",
+    projectedRevenueCents: 160_000_00,
+    projectedOpexCents: 8_000_00,
+    salaryCents: 60_000_00,
+    eligibleDividendCents: 0,
+    nonEligibleDividendCents: 15_000_00,
+    ccaClaimedCents: 0,
+    priorYearAaiiCents: 0,
+    openingGripCents: 0,
+  });
+  const erCpp = r.syntheticT4.box16CppBaseCents + r.syntheticT4.box16aCpp2Cents;
+  const expected = 160_000_00 - 8_000_00 - 60_000_00 - erCpp - 0;
+  expect(
+    failures,
+    "planner corp net-income-for-tax identity",
+    r.corpNetIncomeForTaxCents,
+    expected,
+    2,
+  );
+  record("Planner · cash-waterfall (corp net = revenue − opex − salary − ERcpp − cca)", failures);
+})();
 
 // ——— runner ———
 

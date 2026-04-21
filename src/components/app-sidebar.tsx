@@ -18,6 +18,7 @@ import {
   ShieldAlert,
   Landmark,
   Calculator,
+  Target,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -55,6 +56,7 @@ const SECTIONS: { label: string; tone: Tone; items: NavItem[] }[] = [
     label: "Self-pay",
     tone: "amber",
     items: [
+      { href: "/planner", label: "Self-pay planner", icon: Target, tone: "sky" },
       { href: "/paycheques", label: "Paycheques (T4)", icon: BadgeDollarSign, tone: "amber" },
       { href: "/dividends", label: "Dividends (T5)", icon: PiggyBank, tone: "violet" },
       { href: "/shareholder-loan", label: "Shareholder loan", icon: Coins, tone: "cyan" },

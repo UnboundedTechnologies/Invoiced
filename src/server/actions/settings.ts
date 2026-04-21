@@ -295,6 +295,7 @@ const corpTaxSchema = z.object({
   openingErdtohDollars: z.coerce.number().min(0).max(100_000_000),
   openingNerdtohDollars: z.coerce.number().min(0).max(100_000_000),
   openingCdaDollars: z.coerce.number().min(0).max(100_000_000),
+  openingRetainedEarningsDollars: z.coerce.number().min(0).max(100_000_000),
 });
 
 export async function updateCorpTax(
@@ -311,6 +312,7 @@ export async function updateCorpTax(
       openingErdtohDollars: fd.get("openingErdtohDollars"),
       openingNerdtohDollars: fd.get("openingNerdtohDollars"),
       openingCdaDollars: fd.get("openingCdaDollars"),
+      openingRetainedEarningsDollars: fd.get("openingRetainedEarningsDollars"),
     });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
@@ -322,12 +324,14 @@ export async function updateCorpTax(
       openingErdtohCents: Math.round(parsed.data.openingErdtohDollars * 100),
       openingNerdtohCents: Math.round(parsed.data.openingNerdtohDollars * 100),
       openingCdaCents: Math.round(parsed.data.openingCdaDollars * 100),
+      openingRetainedEarningsCents: Math.round(parsed.data.openingRetainedEarningsDollars * 100),
     };
     const openingsChanged =
       current.openingGripCents !== newOpenings.openingGripCents ||
       current.openingErdtohCents !== newOpenings.openingErdtohCents ||
       current.openingNerdtohCents !== newOpenings.openingNerdtohCents ||
-      current.openingCdaCents !== newOpenings.openingCdaCents;
+      current.openingCdaCents !== newOpenings.openingCdaCents ||
+      current.openingRetainedEarningsCents !== newOpenings.openingRetainedEarningsCents;
     if (openingsChanged) {
       const [anyFiled] = await db
         .select({ id: t2Returns.id })
