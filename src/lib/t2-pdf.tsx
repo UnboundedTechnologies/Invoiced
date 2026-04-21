@@ -316,7 +316,11 @@ export function T2PrepPDF(props: T2PrepPDFProps) {
       creator="Invoiced"
     >
       <Page size="LETTER" style={styles.page} wrap>
-        {status === "draft" && <Text style={styles.watermark}>DRAFT</Text>}
+        {status === "draft" && (
+          <Text style={styles.watermark} fixed>
+            DRAFT
+          </Text>
+        )}
 
         <View style={styles.header}>
           <View>
@@ -563,7 +567,11 @@ export function T2PrepPDF(props: T2PrepPDFProps) {
         </View>
 
         {live.warnings.length > 0 ? (
-          <View style={styles.warningsBlock}>
+          // wrap={false} keeps the Notes block together so a long warning
+          // list doesn't split mid-item across pages (which would leave an
+          // almost-blank page 2). If the list ever grows > 1 page tall,
+          // React-PDF drops wrap={false} gracefully rather than crashing.
+          <View style={styles.warningsBlock} wrap={false}>
             <Text style={[styles.sectionLabel, { color: "#76591a", marginTop: 0, marginBottom: 4 }]}>
               NOTES
             </Text>
