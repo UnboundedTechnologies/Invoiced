@@ -42,6 +42,10 @@ import {
   FED_SBD_RATE,
   ontarioSmallBizRate,
 } from "../src/lib/dashboard-metrics";
+import { estimateT2Detailed } from "../src/lib/t2";
+import { computeGrip, computeRdtoh, computeCda } from "../src/lib/tax-pools";
+import { buildCcaPools, totalCcaClaimed, CLASS_RATE_BPS } from "../src/lib/cca";
+import { toGifiCsv } from "../src/lib/gifi-export";
 import { computePsbRisk } from "../src/lib/psb";
 import { fiscalYearFor, formatCAD } from "../src/lib/utils";
 
@@ -703,10 +707,12 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
       `more expenses must reduce T2: base ${formatCAD(base.totalTaxCents)}, more ${formatCAD(more.totalTaxCents)}`,
     );
   }
-  // Delta: $40K extra expenses × combined rate ≈ expected drop
+  // Delta: $40K extra expenses × combined rate ≈ expected drop. Allow a few
+  // cents of tolerance — the facade combinedRate is bps-rounded for display,
+  // while estimateT2Detailed applies the exact blended float rate internally.
   const expectedDrop = Math.round((50_000_00 - 10_000_00) * base.combinedRate);
   const actualDrop = base.totalTaxCents - more.totalTaxCents;
-  expect(failures, "T2 drop proportional to combined rate", actualDrop, expectedDrop, 1);
+  expect(failures, "T2 drop proportional to combined rate", actualDrop, expectedDrop, 200);
   record("T2 monotonicity: more operating expenses → less tax, proportional to combined rate", failures);
 })();
 
@@ -809,6 +815,201 @@ function addDaysISO(iso: string, days: number): string {
   const d = new Date(iso + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+// ————————————————————————————————————————————————————————————————
+// T2 cross-feature coherence (Phase 4C)
+// ————————————————————————————————————————————————————————————————
+// Asserts that the three T2 presentation paths agree on the same inputs:
+//   1. Dashboard façade (estimateT2)
+//   2. /corp-tax/[fy] detail (estimateT2Detailed)
+//   3. T2 prep PDF + GIFI CSV (frozen snapshot → CSV line 9970 / 8670)
+// Regression guard: every equality below must hold for the canonical fixture.
+//
+// Also verifies the CCA pool engine plus the estimateCashPosition dividend
+// refund passthrough (Phase 4C addition to the cash formula).
+// ————————————————————————————————————————————————————————————————
+
+{
+  const t2Input = {
+    periodStart: fyPeriod.start,
+    periodEnd: fyPeriod.end,
+    revenueCents: EXPECTED.revenueSubtotal,
+    operatingExpensesCents: EXPECTED.opExpensesForT2,
+    salaryCents: 50_000_00,
+    employerCppCents: 2_000_00,
+  };
+  const facade = estimateT2(t2Input);
+  const detailed = estimateT2Detailed({
+    ...t2Input,
+    isCcpc: true,
+    ccaClaimedCents: 0,
+    priorYearAaiiCents: 0,
+  });
+
+  const failures: string[] = [];
+  expect(failures, "dashboard façade taxable === detailed.taxable", facade.taxableIncomeCents, detailed.taxableIncomeCents);
+  expect(failures, "dashboard façade fed === detailed.fed", facade.fedTaxCents, detailed.fedTaxCents);
+  expect(failures, "dashboard façade ontario === detailed.ontario", facade.ontarioTaxCents, detailed.ontarioTaxCents);
+  expect(failures, "dashboard façade total === detailed.total", facade.totalTaxCents, detailed.totalTaxCents);
+  expect(
+    failures,
+    "facade.combinedRate × 10000 === detailed SBD combined bps",
+    Math.round(facade.combinedRate * 10_000),
+    detailed.combinedRateOnSbdBps,
+  );
+  record("T2 · dashboard façade ≡ estimateT2Detailed", failures);
+}
+
+{
+  // CCA pool: opening empty, add a $3000 Class 50 laptop + $400 Class 12
+  // software. Sum of claimed CCA must match what GIFI exports on line 8670.
+  const ccaRows = buildCcaPools({
+    openingPools: [],
+    additions: [
+      { class: "50", classRateBps: CLASS_RATE_BPS["50"], acquisitionCostCents: 3_000_00, businessUsePercent: 100, halfYearRuleApplies: true, description: null },
+      { class: "12", classRateBps: CLASS_RATE_BPS["12"], acquisitionCostCents: 400_00, businessUsePercent: 100, halfYearRuleApplies: false, description: null },
+    ],
+  });
+  const total = totalCcaClaimed(ccaRows);
+  const csv = toGifiCsv({
+    fiscalYear: 2026,
+    revenueCents: 0,
+    salaryCents: 0,
+    employerCppCents: 0,
+    ccaClaimedCents: total,
+    netIncomeForTaxCents: 0,
+    totalTaxCents: 0,
+    expenses: [],
+  });
+  const line8670 = csv.split("\n").find((l) => l.startsWith("8670,"));
+  const csvCents = line8670 ? Number(line8670.split(",")[2]) : -1;
+
+  const failures: string[] = [];
+  expect(failures, "GIFI line 8670 === sum of CCA claimed", csvCents, total);
+  record("GIFI · line 8670 amortization ≡ totalCcaClaimed", failures);
+}
+
+{
+  // GIFI line 9970 (net income before tax) === detailed.netIncomeForTaxCents
+  // for the same inputs.
+  const t2Input = {
+    periodStart: fyPeriod.start,
+    periodEnd: fyPeriod.end,
+    isCcpc: true,
+    revenueCents: 200_000_00,
+    operatingExpensesCents: 30_000_00,
+    salaryCents: 50_000_00,
+    employerCppCents: 2_000_00,
+    ccaClaimedCents: 1_200_00,
+    priorYearAaiiCents: 0,
+  };
+  const detailed = estimateT2Detailed(t2Input);
+  const csv = toGifiCsv({
+    fiscalYear: 2026,
+    revenueCents: t2Input.revenueCents,
+    salaryCents: t2Input.salaryCents,
+    employerCppCents: t2Input.employerCppCents,
+    ccaClaimedCents: t2Input.ccaClaimedCents,
+    netIncomeForTaxCents: detailed.netIncomeForTaxCents,
+    totalTaxCents: detailed.totalTaxCents,
+    expenses: [],
+  });
+  const line9970 = csv.split("\n").find((l) => l.startsWith("9970,"));
+  const csvNet = line9970 ? Number(line9970.split(",")[2]) : -1;
+
+  const failures: string[] = [];
+  expect(failures, "GIFI line 9970 === detailed.netIncomeForTaxCents", csvNet, detailed.netIncomeForTaxCents);
+  record("GIFI · line 9970 net income ≡ detailed net income", failures);
+}
+
+{
+  // Cash position: dividend refund passthrough must add to inflow.
+  const baseInput = {
+    revenueTotalCents: 100_000_00,
+    expensesTotalCents: 20_000_00,
+    salaryGrossCents: 40_000_00,
+    employerCppCents: 1_500_00,
+    dividendsCents: 10_000_00,
+    t2EstimateCents: 3_000_00,
+    hstNetCents: 5_000_00,
+  };
+  const without = estimateCashPosition(baseInput);
+  const with_ = estimateCashPosition({ ...baseInput, dividendRefundCents: 800_00 });
+
+  const failures: string[] = [];
+  expect(
+    failures,
+    "dividend refund $800 increases inflow by exactly $800",
+    with_.inflowCents,
+    without.inflowCents + 800_00,
+  );
+  expect(failures, "outflow unchanged by refund", with_.outflowCents, without.outflowCents);
+  expect(
+    failures,
+    "net increases by exactly $800",
+    with_.netCents,
+    without.netCents + 800_00,
+  );
+  record("Cash position · dividend refund increases inflow 1:1", failures);
+}
+
+{
+  // RDTOH ordering guard: non-elig dividend paid depletes NERDTOH FIRST,
+  // then spills to ERDTOH. This statutory rule (ITA s.129(1)) must stay
+  // stable — if it flips silently, the dividend refund becomes wrong.
+  const r = computeRdtoh({
+    erdtohOpeningCents: 5_000_00,
+    nerdtohOpeningCents: 2_000_00,
+    aaiiCents: 0,
+    partIVOnEligibleCents: 0,
+    partIVOnNonEligibleCents: 0,
+    eligibleDividendsPaidCents: 0,
+    nonEligibleDividendsPaidCents: 20_000_00,
+  });
+  const failures: string[] = [];
+  // 38.33% × 20_000_00 = 7_666_00; NERDTOH drained first (2_000_00), then
+  // ERDTOH takes the rest (5_000_00 cap). Total refund = 7_000_00.
+  expect(failures, "NERDTOH refund = 2000 (fully drained first)", r.nerdtoh.refundCents, 2_000_00);
+  expect(failures, "ERDTOH refund = 5000 (spill cap)", r.erdtoh.refundCents, 5_000_00);
+  expect(failures, "total dividend refund = 7000", r.dividendRefundCents, 7_000_00);
+  record("RDTOH · ITA s.129(1) ordering: NERDTOH-first, ERDTOH-spill", failures);
+}
+
+{
+  // GRIP coefficient: 72% of full-rate income. Hardcoded-constant drift
+  // would break every eligible-dividend cap across the app.
+  const r = computeGrip({
+    openingCents: 0,
+    fullRateIncomeCents: 10_000_00,
+    eligibleDividendsPaidCents: 0,
+  });
+  const failures: string[] = [];
+  expect(failures, "GRIP addition = 72% × 10000 = 7200", r.additionCents, 7_200_00);
+  record("GRIP · 72% addition coefficient (Schedule 53)", failures);
+}
+
+{
+  // CDA: 50% of realized capital gains credits the pool; negative net
+  // reduces it by 50% of the loss. Symmetry must hold.
+  const gain = computeCda({
+    openingCents: 0,
+    capitalGainsNetCents: 10_000_00,
+    capitalDividendsReceivedCents: 0,
+    lifeInsuranceProceedsCents: 0,
+    capitalDividendsElectedCents: 0,
+  });
+  const loss = computeCda({
+    openingCents: 10_000_00,
+    capitalGainsNetCents: -10_000_00,
+    capitalDividendsReceivedCents: 0,
+    lifeInsuranceProceedsCents: 0,
+    capitalDividendsElectedCents: 0,
+  });
+  const failures: string[] = [];
+  expect(failures, "CDA addition = 50% gain", gain.additionCents, 5_000_00);
+  expect(failures, "CDA negative addition = -50% loss", loss.additionCents, -5_000_00);
+  record("CDA · 50% inclusion rate is symmetric on gains and losses", failures);
 }
 
 // ——— runner ———

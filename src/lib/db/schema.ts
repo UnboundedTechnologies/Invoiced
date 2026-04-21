@@ -48,6 +48,9 @@ export const loanEntryTypeEnum = pgEnum("loan_entry_type", [
 export const auditActionEnum = pgEnum("audit_action", ["create", "update", "delete", "login", "logout", "download"]);
 export const hstFilingMethodEnum = pgEnum("hst_filing_method", ["regular", "quick"]);
 export const hstReturnStatusEnum = pgEnum("hst_return_status", ["draft", "filed"]);
+export const t2ReturnStatusEnum = pgEnum("t2_return_status", ["draft", "filed"]);
+export const taxPoolEnum = pgEnum("tax_pool", ["grip", "erdtoh", "nerdtoh", "cda"]);
+export const ccaClassEnum = pgEnum("cca_class", ["8", "10", "10.1", "12", "50", "other"]);
 
 // Identity & Auth (single user enforced via CHECK + allowlist)
 export const users = pgTable(
@@ -108,6 +111,17 @@ export const settings = pgTable("settings", {
   incorporationDate: date("incorporation_date"), // drives Ontario annual return anniversary
   hstFilingFrequency: text("hst_filing_frequency").notNull().default("annual"), // annual|quarterly|monthly
   hstRateBps: integer("hst_rate_bps").notNull().default(1300), // basis points (1300 = 13.00%)
+  // T2 / corporate-tax configuration
+  isCcpc: boolean("is_ccpc").notNull().default(true), // Canadian-Controlled Private Corp — gates SBD
+  priorYearAaiiCents: bigint("prior_year_aaii_cents", { mode: "number" }).notNull().default(0), // drives SBD grind per ITA s.125(5.1)
+  ontarioGeneralRateBps: integer("ontario_general_rate_bps").notNull().default(1150), // 11.5% (ON general corp rate, for ABI over $500K)
+  // Opening tax-pool balances — zero for a blank-slate corp; only non-zero when
+  // migrating from an existing entity. Editable only while no T2 return is filed;
+  // after that, prior-FY closing rows in `tax_pools` are the source of truth.
+  openingGripCents: bigint("opening_grip_cents", { mode: "number" }).notNull().default(0),
+  openingErdtohCents: bigint("opening_erdtoh_cents", { mode: "number" }).notNull().default(0),
+  openingNerdtohCents: bigint("opening_nerdtoh_cents", { mode: "number" }).notNull().default(0),
+  openingCdaCents: bigint("opening_cda_cents", { mode: "number" }).notNull().default(0),
   // Self-pay
   paymentStrategy: payStrategyEnum("payment_strategy").notNull().default("blend"),
   targetAnnualSalaryCents: bigint("target_annual_salary_cents", { mode: "number" }).default(7130000), // $71,300
@@ -333,6 +347,119 @@ export const hstReturns = pgTable(
   (t) => [uniqueIndex("hst_returns_fiscal_year_unique").on(t.fiscalYear)],
 );
 
+// T2 returns — one row per fiscal year. Drafts recompute live from invoices +
+// expenses + paycheques + dividends + CCA pools. Filing snapshots every number
+// into frozen columns so downstream edits can't silently rewrite a filed
+// return. The `status='filed'` transition also gates mutations on every row
+// whose date falls inside the fiscal period (same lock pattern as hst_returns).
+export const t2Returns = pgTable(
+  "t2_returns",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    fiscalYear: integer("fiscal_year").notNull(),
+    periodStart: date("period_start").notNull(),
+    periodEnd: date("period_end").notNull(),
+    status: t2ReturnStatusEnum("status").notNull().default("draft"),
+    // CCPC status + passive-income drivers frozen at filing time. isCcpc lets
+    // the corp opt out of CCPC treatment (rare — included for completeness).
+    isCcpc: boolean("is_ccpc").notNull().default(true),
+    priorYearAaiiCents: bigint("prior_year_aaii_cents", { mode: "number" }).notNull().default(0),
+    // Frozen P&L (cents) — populated on file. Null while draft.
+    revenueCents: bigint("revenue_cents", { mode: "number" }),
+    operatingExpensesCents: bigint("operating_expenses_cents", { mode: "number" }),
+    salaryCents: bigint("salary_cents", { mode: "number" }),
+    employerCppCents: bigint("employer_cpp_cents", { mode: "number" }),
+    ccaClaimedCents: bigint("cca_claimed_cents", { mode: "number" }),
+    netIncomeForTaxCents: bigint("net_income_for_tax_cents", { mode: "number" }),
+    taxableIncomeCents: bigint("taxable_income_cents", { mode: "number" }),
+    // Frozen SBD allocation + tax calc
+    sbdClaimedCents: bigint("sbd_claimed_cents", { mode: "number" }),
+    sbdGrindCents: bigint("sbd_grind_cents", { mode: "number" }),
+    sbdLimitAfterGrindCents: bigint("sbd_limit_after_grind_cents", { mode: "number" }),
+    fullRateIncomeCents: bigint("full_rate_income_cents", { mode: "number" }),
+    fedSbdPortionCents: bigint("fed_sbd_portion_cents", { mode: "number" }),
+    fedGeneralPortionCents: bigint("fed_general_portion_cents", { mode: "number" }),
+    fedTaxCents: bigint("fed_tax_cents", { mode: "number" }),
+    ontarioSbdPortionCents: bigint("ontario_sbd_portion_cents", { mode: "number" }),
+    ontarioGeneralPortionCents: bigint("ontario_general_portion_cents", { mode: "number" }),
+    ontarioTaxCents: bigint("ontario_tax_cents", { mode: "number" }),
+    ontarioBlendedSbdRateBps: integer("ontario_blended_sbd_rate_bps"), // 0-9999 bps
+    totalTaxCents: bigint("total_tax_cents", { mode: "number" }),
+    // Frozen pool deltas — running totals live in tax_pools. These give the
+    // filing-time snapshot so an accountant reading a filed PDF sees what
+    // flowed this FY, not just where things stand today.
+    gripOpeningCents: bigint("grip_opening_cents", { mode: "number" }),
+    gripAdditionCents: bigint("grip_addition_cents", { mode: "number" }),
+    gripUsedCents: bigint("grip_used_cents", { mode: "number" }),
+    gripClosingCents: bigint("grip_closing_cents", { mode: "number" }),
+    erdtohOpeningCents: bigint("erdtoh_opening_cents", { mode: "number" }),
+    erdtohAdditionCents: bigint("erdtoh_addition_cents", { mode: "number" }),
+    erdtohRefundCents: bigint("erdtoh_refund_cents", { mode: "number" }),
+    erdtohClosingCents: bigint("erdtoh_closing_cents", { mode: "number" }),
+    nerdtohOpeningCents: bigint("nerdtoh_opening_cents", { mode: "number" }),
+    nerdtohAdditionCents: bigint("nerdtoh_addition_cents", { mode: "number" }),
+    nerdtohRefundCents: bigint("nerdtoh_refund_cents", { mode: "number" }),
+    nerdtohClosingCents: bigint("nerdtoh_closing_cents", { mode: "number" }),
+    cdaOpeningCents: bigint("cda_opening_cents", { mode: "number" }),
+    cdaAdditionCents: bigint("cda_addition_cents", { mode: "number" }),
+    cdaUsedCents: bigint("cda_used_cents", { mode: "number" }),
+    cdaClosingCents: bigint("cda_closing_cents", { mode: "number" }),
+    dividendRefundCents: bigint("dividend_refund_cents", { mode: "number" }), // ERDTOH + NERDTOH refunds combined
+    // Filing metadata
+    craConfirmationNumber: text("cra_confirmation_number"),
+    filedAt: timestamp("filed_at", { withTimezone: true }),
+    filedBy: text("filed_by"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("t2_returns_fiscal_year_unique").on(t.fiscalYear)],
+);
+
+// Per-class per-FY UCC pool (Schedule 8 equivalent). One row per (FY, class).
+// Opening UCC derives from the prior-FY closing; first-FY opening is 0.
+// Additions are this FY's capital_asset expenses (business-use adjusted).
+// claimFractionBps lets Saïd claim less than max CCA (e.g. loss-year deferral):
+// 10000 = 100% claim (default), 0 = claim nothing, 5000 = half.
+export const ccaPools = pgTable(
+  "cca_pools",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    fiscalYear: integer("fiscal_year").notNull(),
+    ccaClass: ccaClassEnum("cca_class").notNull(),
+    classRateBps: integer("class_rate_bps").notNull(), // 2000 = 20%
+    openingUccCents: bigint("opening_ucc_cents", { mode: "number" }).notNull().default(0),
+    additionsCents: bigint("additions_cents", { mode: "number" }).notNull().default(0),
+    dispositionsCents: bigint("dispositions_cents", { mode: "number" }).notNull().default(0),
+    halfYearAdjustmentCents: bigint("half_year_adjustment_cents", { mode: "number" }).notNull().default(0),
+    ccaBaseCents: bigint("cca_base_cents", { mode: "number" }).notNull().default(0),
+    claimFractionBps: integer("claim_fraction_bps").notNull().default(10_000), // 10000 = 100%
+    ccaClaimedCents: bigint("cca_claimed_cents", { mode: "number" }).notNull().default(0),
+    closingUccCents: bigint("closing_ucc_cents", { mode: "number" }).notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("cca_pools_fy_class_unique").on(t.fiscalYear, t.ccaClass)],
+);
+
+// Tax pools — running balances for GRIP, ERDTOH, NERDTOH, CDA. One row per
+// (FY, pool). Opening = prior FY closing; first-FY opening = settings.opening*.
+// Row persisted on T2 filing; drafts compute live on every page load.
+export const taxPools = pgTable(
+  "tax_pools",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    fiscalYear: integer("fiscal_year").notNull(),
+    pool: taxPoolEnum("pool").notNull(),
+    openingCents: bigint("opening_cents", { mode: "number" }).notNull().default(0),
+    additionsCents: bigint("additions_cents", { mode: "number" }).notNull().default(0),
+    usedCents: bigint("used_cents", { mode: "number" }).notNull().default(0),
+    closingCents: bigint("closing_cents", { mode: "number" }).notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("tax_pools_fy_pool_unique").on(t.fiscalYear, t.pool)],
+);
+
 // Year-end slips (T4 / T5 / T4A)
 export const slips = pgTable(
   "slips",
@@ -510,3 +637,9 @@ export type PrescribedRatePeriod = typeof prescribedRatePeriods.$inferSelect;
 export type NewPrescribedRatePeriod = typeof prescribedRatePeriods.$inferInsert;
 export type HstReturn = typeof hstReturns.$inferSelect;
 export type NewHstReturn = typeof hstReturns.$inferInsert;
+export type T2Return = typeof t2Returns.$inferSelect;
+export type NewT2Return = typeof t2Returns.$inferInsert;
+export type CcaPool = typeof ccaPools.$inferSelect;
+export type NewCcaPool = typeof ccaPools.$inferInsert;
+export type TaxPool = typeof taxPools.$inferSelect;
+export type NewTaxPool = typeof taxPools.$inferInsert;

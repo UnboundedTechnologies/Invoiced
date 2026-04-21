@@ -7,8 +7,6 @@ import { redirect } from "next/navigation";
 import { put, del } from "@vercel/blob";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { db } from "@/lib/db/client";
 import {
   paycheques,
@@ -20,6 +18,8 @@ import {
 import { auth } from "../../../auth";
 import { computePayroll, payPeriodsFromCadence } from "@/lib/payroll-2026";
 import { PaystubPDF } from "@/lib/paystub-pdf";
+import { getBannerDataUri } from "@/lib/pdf-banner";
+import { t2PeriodLockError } from "./t2";
 
 type ActionResult = { ok?: string; error?: string };
 
@@ -27,21 +27,6 @@ async function requireSession() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
-}
-
-let _bannerDataUri: string | null = null;
-async function getBannerDataUri(): Promise<string | undefined> {
-  if (_bannerDataUri) return _bannerDataUri;
-  for (const candidate of ["public/banner-pdf.png", "public/banner.png", "public/logo-full.png", "public/logo.png"]) {
-    try {
-      const buffer = await readFile(resolve(process.cwd(), candidate));
-      _bannerDataUri = `data:image/png;base64,${buffer.toString("base64")}`;
-      return _bannerDataUri;
-    } catch {
-      continue;
-    }
-  }
-  return undefined;
 }
 
 function revalidate() {
@@ -86,6 +71,9 @@ export async function createPaycheque(
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
     const data = parsed.data;
     if (data.periodEnd < data.periodStart) return { error: "Period end must be on or after period start." };
+
+    const t2Lock = await t2PeriodLockError(data.payDate);
+    if (t2Lock) return { error: t2Lock };
 
     const [s] = await db.select().from(settings).where(eq(settings.id, 1));
     if (!s) return { error: "Settings not seeded." };
@@ -253,6 +241,9 @@ export async function setPaychequeStatus(id: string, status: string): Promise<Ac
     const [pq] = await db.select().from(paycheques).where(eq(paycheques.id, id));
     if (!pq) return { error: "Paycheque not found." };
 
+    const t2Lock = await t2PeriodLockError(pq.payDate);
+    if (t2Lock) return { error: t2Lock };
+
     await db.update(paycheques).set({ status: parsed.data }).where(eq(paycheques.id, id));
 
     // When transitioning to issued: create the remittance row (once per pay period).
@@ -315,6 +306,9 @@ export async function deleteDraftPaycheque(id: string): Promise<ActionResult> {
     const [pq] = await db.select().from(paycheques).where(eq(paycheques.id, id));
     if (!pq) return { error: "Paycheque not found." };
     if (pq.status !== "draft") return { error: "Only draft paycheques can be deleted." };
+
+    const t2Lock = await t2PeriodLockError(pq.payDate);
+    if (t2Lock) return { error: t2Lock };
 
     if (pq.pdfBlobUrl) {
       try {

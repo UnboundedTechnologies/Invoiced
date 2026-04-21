@@ -17,6 +17,12 @@
  */
 
 import { isTaxableSupply } from "./queries/invoice-slices";
+import { FED_SBD_RATE, ontarioSmallBizRate } from "./t2-rates";
+import { estimateT2Detailed } from "./t2";
+
+// Re-export so existing callers (scripts/verify-*, dashboard page) keep
+// working with a single import site.
+export { FED_SBD_RATE, ontarioSmallBizRate };
 
 export type RevenueInvoiceSlice = {
   issueDate: string;
@@ -65,37 +71,6 @@ export function revenueByMonth(
   return buckets;
 }
 
-// ——— Ontario blended rate ———
-
-/** Flat federal CCPC SBD rate (first $500K active business income). */
-export const FED_SBD_RATE = 0.09;
-
-const ON_RATE_BEFORE = 0.032;
-const ON_RATE_AFTER = 0.022;
-const ON_TRANSITION_ISO = "2026-07-01";
-
-/**
- * Blended Ontario SBD rate across a fiscal period. Prorates across the
- * 2026-07-01 transition day-by-day when the period straddles it.
- */
-export function ontarioSmallBizRate(periodStart: string, periodEnd: string): number {
-  const s = utcDays(periodStart);
-  const e = utcDays(periodEnd);
-  if (e < s) return ON_RATE_BEFORE;
-  const t = utcDays(ON_TRANSITION_ISO);
-  if (e < t) return ON_RATE_BEFORE;
-  if (s >= t) return ON_RATE_AFTER;
-  const totalDays = e - s + 1;
-  const daysBefore = t - s;
-  const daysAfter = totalDays - daysBefore;
-  return (daysBefore * ON_RATE_BEFORE + daysAfter * ON_RATE_AFTER) / totalDays;
-}
-
-function utcDays(iso: string): number {
-  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
-  return Math.round(Date.UTC(y, m - 1, d) / 86_400_000);
-}
-
 // ——— Operating-expense aggregator for T2 ———
 
 /**
@@ -115,6 +90,11 @@ export function operatingExpensesForT2(expenses: ExpenseSlice[]): number {
 }
 
 // ——— T2 estimate ———
+// Thin façade over `estimateT2Detailed` in `src/lib/t2.ts`. Exists so the
+// dashboard stat card keeps its historical shape while routing through the
+// canonical compute lib — one source of truth for taxable income, fed + ON
+// tax, and SBD allocation. All new callers should use estimateT2Detailed
+// directly.
 
 export type T2Input = {
   periodStart: string;
@@ -123,6 +103,9 @@ export type T2Input = {
   operatingExpensesCents: number;
   salaryCents: number;
   employerCppCents: number;
+  ccaClaimedCents?: number; // defaults to 0 for dashboard (CCA wired in detail page only)
+  isCcpc?: boolean; // defaults to true
+  priorYearAaiiCents?: number; // defaults to 0 (dashboard reads settings)
 };
 
 export type T2Estimate = {
@@ -133,26 +116,31 @@ export type T2Estimate = {
   ontarioRate: number;
   combinedRate: number;
   sbdLimitWarning: boolean;
+  sbdGrindWarning: boolean;
 };
 
 export function estimateT2(input: T2Input): T2Estimate {
-  const gross =
-    input.revenueCents -
-    input.operatingExpensesCents -
-    input.salaryCents -
-    input.employerCppCents;
-  const taxable = Math.max(0, gross);
-  const fed = Math.round(taxable * FED_SBD_RATE);
-  const onRate = ontarioSmallBizRate(input.periodStart, input.periodEnd);
-  const on = Math.round(taxable * onRate);
+  const detailed = estimateT2Detailed({
+    periodStart: input.periodStart,
+    periodEnd: input.periodEnd,
+    isCcpc: input.isCcpc ?? true,
+    revenueCents: input.revenueCents,
+    operatingExpensesCents: input.operatingExpensesCents,
+    salaryCents: input.salaryCents,
+    employerCppCents: input.employerCppCents,
+    ccaClaimedCents: input.ccaClaimedCents ?? 0,
+    priorYearAaiiCents: input.priorYearAaiiCents ?? 0,
+  });
+
   return {
-    taxableIncomeCents: taxable,
-    fedTaxCents: fed,
-    ontarioTaxCents: on,
-    totalTaxCents: fed + on,
-    ontarioRate: onRate,
-    combinedRate: FED_SBD_RATE + onRate,
-    sbdLimitWarning: taxable > 500_000_00,
+    taxableIncomeCents: detailed.taxableIncomeCents,
+    fedTaxCents: detailed.fedTaxCents,
+    ontarioTaxCents: detailed.ontarioTaxCents,
+    totalTaxCents: detailed.totalTaxCents,
+    ontarioRate: detailed.ontarioBlendedSbdRateBps / 10_000,
+    combinedRate: detailed.combinedRateOnSbdBps / 10_000,
+    sbdLimitWarning: detailed.fullRateIncomeCents > 0,
+    sbdGrindWarning: detailed.sbdGrindCents > 0,
   };
 }
 
@@ -166,6 +154,8 @@ export type CashPositionInput = {
   dividendsCents: number;
   t2EstimateCents: number;
   hstNetCents: number;
+  /** Phase 4C: ERDTOH + NERDTOH refund from dividends paid in FY. Inflow. */
+  dividendRefundCents?: number;
 };
 
 export type CashPosition = {
@@ -176,12 +166,16 @@ export type CashPosition = {
 
 /**
  * Cash position proxy — revenue inflow minus every FY obligation (operating
- * spend, gross self-pay, employer CPP, dividends, T2, HST remittance). Uses
- * totals (incl HST) + signed HST net so both Regular and Quick Method fall
- * out of the same formula. Assumes invoiced = collected.
+ * spend, gross self-pay, employer CPP, dividends, T2, HST remittance), plus
+ * any Part IV / Part I dividend refund coming back from CRA. Uses totals
+ * (incl HST) + signed HST net so both Regular and Quick Method fall out of
+ * the same formula. Assumes invoiced = collected.
  */
 export function estimateCashPosition(input: CashPositionInput): CashPosition {
-  const inflow = input.revenueTotalCents + Math.max(0, -input.hstNetCents);
+  const inflow =
+    input.revenueTotalCents +
+    Math.max(0, -input.hstNetCents) +
+    (input.dividendRefundCents ?? 0);
   const outflow =
     input.expensesTotalCents +
     input.salaryGrossCents +

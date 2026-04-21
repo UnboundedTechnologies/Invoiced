@@ -15,6 +15,7 @@ import {
 import { auth } from "../../../auth";
 import { fiscalYearFor, formatCAD } from "@/lib/utils";
 import { computeLoanTimeline, type LoanEntry, type RatePeriod } from "@/lib/shareholder-loan";
+import { t2PeriodLockError } from "./t2";
 
 type ActionResult = { ok?: string; error?: string };
 
@@ -98,6 +99,8 @@ export async function createLoanEntry(
     if (await t4aSlipIssuedFor(fiscalYear)) {
       return { error: `A T4A slip was issued for FY ${fiscalYear}. Can't add a new entry in a closed year.` };
     }
+    const t2Lock = await t2PeriodLockError(entryDate);
+    if (t2Lock) return { error: t2Lock };
 
     const [created] = await db
       .insert(shareholderLoanEntries)
@@ -165,6 +168,12 @@ export async function updateLoanEntry(
     if (fiscalYear !== existing.fiscalYear && (await t4aSlipIssuedFor(fiscalYear))) {
       return { error: `A T4A slip was issued for FY ${fiscalYear}. Can't move an entry into a closed year.` };
     }
+    const oldT2Lock = await t2PeriodLockError(existing.entryDate);
+    if (oldT2Lock) return { error: oldT2Lock };
+    if (entryDate !== existing.entryDate) {
+      const newT2Lock = await t2PeriodLockError(entryDate);
+      if (newT2Lock) return { error: newT2Lock };
+    }
 
     await db
       .update(shareholderLoanEntries)
@@ -195,6 +204,8 @@ export async function deleteLoanEntry(id: string): Promise<ActionResult> {
     if (await t4aSlipIssuedFor(existing.fiscalYear)) {
       return { error: `A T4A slip was issued for FY ${existing.fiscalYear}. Delete blocked.` };
     }
+    const t2Lock = await t2PeriodLockError(existing.entryDate);
+    if (t2Lock) return { error: t2Lock };
 
     // Cascade-delete: if this is a reclassification entry linked to a dividend
     // (created via the /shareholder-loan "Declare as dividend" flow), delete
@@ -439,6 +450,15 @@ export async function reclassifyDrawAsDividend(
     }
     if (await t4aSlipIssuedFor(draw.fiscalYear)) {
       return { error: `A T4A slip was issued for the draw's FY ${draw.fiscalYear}. Reclassifying would rewrite closed-year history.` };
+    }
+    // T2 filing-lock: both the declared-date FY (where the dividend lands)
+    // and the draw's original FY (where history is being rewritten) must
+    // still be open.
+    const declaredT2Lock = await t2PeriodLockError(declaredDate);
+    if (declaredT2Lock) return { error: declaredT2Lock };
+    if (draw.entryDate !== declaredDate) {
+      const drawT2Lock = await t2PeriodLockError(draw.entryDate);
+      if (drawT2Lock) return { error: drawT2Lock };
     }
 
     // Atomic write via db.batch() — the neon-http driver doesn't support

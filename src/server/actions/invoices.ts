@@ -7,8 +7,6 @@ import { redirect } from "next/navigation";
 import { put, del } from "@vercel/blob";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { db } from "@/lib/db/client";
 import {
   invoices,
@@ -22,30 +20,22 @@ import {
 import { auth } from "../../../auth";
 import { addDaysISO, calculateHst, paymentTermsToDays } from "@/lib/utils";
 import { InvoicePDF } from "@/lib/invoice-pdf";
+import { getBannerDataUri } from "@/lib/pdf-banner";
 import { hstPeriodLockError } from "./hst";
+import { t2PeriodLockError } from "./t2";
 
 type ActionResult = { ok?: string; error?: string; invoiceId?: string };
+
+async function periodLockError(iso: string): Promise<string | null> {
+  const hst = await hstPeriodLockError(iso);
+  if (hst) return hst;
+  return t2PeriodLockError(iso);
+}
 
 async function requireSession() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
-}
-
-let _bannerDataUri: string | null = null;
-async function getBannerDataUri(): Promise<string | undefined> {
-  if (_bannerDataUri) return _bannerDataUri;
-  // Prefer the trimmed, optimized banner; fall back to raw banner; then logo.
-  for (const candidate of ["public/banner-pdf.png", "public/banner.png", "public/logo-full.png", "public/logo.png"]) {
-    try {
-      const buffer = await readFile(resolve(process.cwd(), candidate));
-      _bannerDataUri = `data:image/png;base64,${buffer.toString("base64")}`;
-      return _bannerDataUri;
-    } catch {
-      continue;
-    }
-  }
-  return undefined;
 }
 
 const createSchema = z.object({
@@ -79,7 +69,7 @@ export async function createInvoice(_prev: ActionResult | undefined, fd: FormDat
     const data = parsed.data;
     if (data.periodEnd < data.periodStart) return { error: "Period end must be on or after period start." };
 
-    const lockErr = await hstPeriodLockError(data.issueDate);
+    const lockErr = await periodLockError(data.issueDate);
     if (lockErr) return { error: lockErr };
 
     const [contract] = await db.select().from(contracts).where(eq(contracts.id, data.contractId));
@@ -241,7 +231,7 @@ export async function setInvoiceStatus(id: string, status: string): Promise<Acti
 
     const [existing] = await db.select().from(invoices).where(eq(invoices.id, id));
     if (!existing) return { error: "Invoice not found." };
-    const lockErr = await hstPeriodLockError(existing.issueDate);
+    const lockErr = await periodLockError(existing.issueDate);
     if (lockErr) return { error: lockErr };
 
     const patch: { status: typeof parsed.data; paidAt?: Date | null } = { status: parsed.data };
@@ -270,7 +260,7 @@ export async function deleteDraftInvoice(id: string): Promise<ActionResult> {
     const [inv] = await db.select().from(invoices).where(eq(invoices.id, id));
     if (!inv) return { error: "Invoice not found." };
     if (inv.status !== "draft") return { error: "Only draft invoices can be deleted." };
-    const lockErr = await hstPeriodLockError(inv.issueDate);
+    const lockErr = await periodLockError(inv.issueDate);
     if (lockErr) return { error: lockErr };
 
     // Delete the blob + the vault documents row that mirrored this invoice's PDF
