@@ -621,6 +621,22 @@ function CorpTaxPanel({
                   disabled={openingPoolsLocked}
                 />
               </Field>
+              <Field
+                label="Retained earnings opening ($)"
+                htmlFor="openingRetainedEarningsDollars"
+                hint="Cumulative retained earnings at onboarding. Feeds the Holdco-trigger card on /planner. Zero for a blank-slate corp."
+              >
+                <Input
+                  id="openingRetainedEarningsDollars"
+                  name="openingRetainedEarningsDollars"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue={(data.openingRetainedEarningsCents / 100).toFixed(2)}
+                  data-gramm="false"
+                  disabled={openingPoolsLocked}
+                />
+              </Field>
             </div>
           </div>
 

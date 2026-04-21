@@ -123,6 +123,10 @@ export const settings = pgTable("settings", {
   openingErdtohCents: bigint("opening_erdtoh_cents", { mode: "number" }).notNull().default(0),
   openingNerdtohCents: bigint("opening_nerdtoh_cents", { mode: "number" }).notNull().default(0),
   openingCdaCents: bigint("opening_cda_cents", { mode: "number" }).notNull().default(0),
+  // Retained earnings at Invoiced onboarding — zero for a blank-slate corp. Feeds
+  // the Phase 6 Holdco-countdown card formula: opening + Σ(filed T2 net-after-tax)
+  // − Σ(dividends declared). Editable while no T2 return is filed; locked after.
+  openingRetainedEarningsCents: bigint("opening_retained_earnings_cents", { mode: "number" }).notNull().default(0),
   // T1 / personal-tax configuration — UI deferred to RRSP feature phase.
   // Starting RRSP deduction room (from most recent CRA notice of assessment).
   // Null until the user enters it; Phase 6's self-pay planner reads this to
@@ -664,6 +668,48 @@ export const psbSnapshots = pgTable(
   (t) => [index("psb_snapshots_date_idx").on(t.snapshotDate)],
 );
 
+// Phase 6 self-pay planner scenarios — one row per (fiscalYear, name). Stores
+// user inputs + a server-recomputed output snapshot at save time. Forward-looking
+// tool; no filing lock. Stale-snapshot detection: `inputDigest` + `ratesEditionTag`
+// fingerprint the save; on load, `/planner/[fy]` re-runs `simulateScenario` and
+// renders a "stale — recompute" banner if outputs no longer reproduce.
+export const plannerScenarios = pgTable(
+  "planner_scenarios",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    fiscalYear: integer("fiscal_year").notNull(),
+    name: text("name").notNull(),
+    isPinned: boolean("is_pinned").notNull().default(false),
+    // Inputs
+    projectedRevenueCents: bigint("projected_revenue_cents", { mode: "number" }).notNull(),
+    projectedOpexCents: bigint("projected_opex_cents", { mode: "number" }).notNull(),
+    salaryCents: bigint("salary_cents", { mode: "number" }).notNull(),
+    eligibleDividendCents: bigint("eligible_dividend_cents", { mode: "number" }).notNull().default(0),
+    nonEligibleDividendCents: bigint("non_eligible_dividend_cents", { mode: "number" }).notNull().default(0),
+    ccaClaimedCents: bigint("cca_claimed_cents", { mode: "number" }).notNull().default(0),
+    priorYearAaiiCents: bigint("prior_year_aaii_cents", { mode: "number" }).notNull().default(0),
+    // Output snapshot (recomputed server-side on save)
+    corpTaxCents: bigint("corp_tax_cents", { mode: "number" }).notNull(),
+    personalTaxCents: bigint("personal_tax_cents", { mode: "number" }).notNull(),
+    totalHouseholdTaxCents: bigint("total_household_tax_cents", { mode: "number" }).notNull(),
+    takeHomeCents: bigint("take_home_cents", { mode: "number" }).notNull(),
+    cppContribCents: bigint("cpp_contrib_cents", { mode: "number" }).notNull(),
+    rrspRoomGeneratedCents: bigint("rrsp_room_generated_cents", { mode: "number" }).notNull(),
+    warnings: jsonb("warnings").notNull().default(sql`'[]'::jsonb`),
+    // Drift detection
+    ratesEditionTag: text("rates_edition_tag").notNull(),
+    inputDigest: text("input_digest").notNull(),
+    // Optimistic lock
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("planner_scenarios_fy_name_unique").on(t.fiscalYear, t.name),
+    index("planner_scenarios_fy_idx").on(t.fiscalYear),
+  ],
+);
+
 // Audit log (every write + login + download)
 export const auditLog = pgTable(
   "audit_log",
@@ -725,3 +771,5 @@ export type CcaPool = typeof ccaPools.$inferSelect;
 export type NewCcaPool = typeof ccaPools.$inferInsert;
 export type TaxPool = typeof taxPools.$inferSelect;
 export type NewTaxPool = typeof taxPools.$inferInsert;
+export type PlannerScenario = typeof plannerScenarios.$inferSelect;
+export type NewPlannerScenario = typeof plannerScenarios.$inferInsert;

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { db } from "@/lib/db/client";
 import {
   dividends,
@@ -7,8 +8,9 @@ import {
   psbChecklistItems,
   shareholderLoanEntries,
   prescribedRatePeriods,
+  plannerScenarios,
 } from "@/lib/db/schema";
-import { asc } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { getSettings } from "@/lib/db/queries";
 import { hstReturns } from "@/lib/db/schema";
 import {
@@ -31,6 +33,8 @@ import {
   Banknote,
   TrendingUp,
   Calculator,
+  Target,
+  Percent as PercentIcon,
 } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { QuickActionTile } from "@/components/quick-action-tile";
@@ -87,6 +91,19 @@ export default async function DashboardPage() {
   const today = new Date().toISOString().slice(0, 10);
   const currentFY = fiscalYearFor(today, fyeMonth, fyeDay);
   const fyPeriod = hstPeriodFor(currentFY, fyeMonth, fyeDay);
+
+  // Pinned planner scenario for the current FY — displayed as a "Projected FY"
+  // stat card alongside YTD actuals. One row max (pin is 0-1 per FY).
+  const [pinnedScenario] = await db
+    .select()
+    .from(plannerScenarios)
+    .where(
+      and(
+        eq(plannerScenarios.fiscalYear, currentFY),
+        eq(plannerScenarios.isPinned, true),
+      ),
+    )
+    .limit(1);
   const fyDividends = allDividends.filter((d) => d.fiscalYear === currentFY);
   const dividendsFYTotal = fyDividends.reduce((a, d) => a + d.amountCents, 0);
   const eligibleTotal = fyDividends.filter((d) => d.eligible).reduce((a, d) => a + d.amountCents, 0);
@@ -588,6 +605,90 @@ export default async function DashboardPage() {
           tone="rose"
           delayMs={700}
         />
+        <StatCard
+          label={
+            pinnedScenario
+              ? `Planner · FY ${currentFY} projected`
+              : `Planner · FY ${currentFY}`
+          }
+          value={
+            pinnedScenario
+              ? formatCAD(pinnedScenario.takeHomeCents)
+              : "—"
+          }
+          hint={
+            pinnedScenario ? (
+              <>
+                <span className="text-emerald-400">
+                  {formatCAD(pinnedScenario.takeHomeCents)}
+                </span>{" "}
+                take-home ·{" "}
+                <span>
+                  {formatCAD(pinnedScenario.totalHouseholdTaxCents)} tax
+                </span>
+                <span className="block text-[10px] text-muted-foreground/80">
+                  YTD actual corp tax {formatCAD(t2.totalTaxCents)} · Δ{" "}
+                  {formatCAD(
+                    Math.abs(pinnedScenario.corpTaxCents - t2.totalTaxCents),
+                  )}
+                </span>
+              </>
+            ) : (
+              <>
+                Pin a scenario on{" "}
+                <Link
+                  href="/planner"
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
+                  /planner
+                </Link>{" "}
+                to project full-FY tax here
+              </>
+            )
+          }
+          icon={Target}
+          tone="sky"
+          delayMs={740}
+        />
+        <StatCard
+          label={`AAII · SBD grind watcher`}
+          value={
+            (s?.priorYearAaiiCents ?? 0) === 0
+              ? "$0"
+              : formatCAD(s?.priorYearAaiiCents ?? 0)
+          }
+          hint={(() => {
+            const aaii = s?.priorYearAaiiCents ?? 0;
+            if (aaii === 0)
+              return "No passive income. Activates at $50K prior-FY AAII.";
+            if (aaii <= 5_000_000)
+              return `${formatCAD(5_000_000 - aaii)} to $50K SBD-grind threshold`;
+            if (aaii < 15_000_000) {
+              const grind = Math.round(
+                500_000_00 *
+                  Math.min(1, (aaii - 5_000_000) / (15_000_000 - 5_000_000)),
+              );
+              return (
+                <>
+                  SBD limit ground by{" "}
+                  <span className="text-amber-400">{formatCAD(grind)}</span>
+                </>
+              );
+            }
+            return (
+              <span className="text-rose-400">SBD fully ground out (AAII ≥ $150K)</span>
+            );
+          })()}
+          icon={PercentIcon}
+          tone={(() => {
+            const aaii = s?.priorYearAaiiCents ?? 0;
+            if (aaii === 0) return "emerald";
+            if (aaii <= 5_000_000) return "sky";
+            if (aaii < 15_000_000) return "amber";
+            return "rose";
+          })()}
+          delayMs={780}
+        />
       </div>
 
       {/* Quick actions */}
@@ -638,6 +739,14 @@ export default async function DashboardPage() {
             icon={CalendarClock}
             tone="sky"
             delayMs={540}
+          />
+          <QuickActionTile
+            href={`/planner/${currentFY}`}
+            label="Self-pay planner"
+            description="Simulate salary/div mix"
+            icon={Target}
+            tone="sky"
+            delayMs={570}
           />
           <QuickActionTile
             href="/settings"
