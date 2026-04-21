@@ -70,8 +70,12 @@ const styles = StyleSheet.create({
     lineHeight: 1.4,
   },
   watermark: {
+    // Positioned lower than HST (500 vs 380) because the T2 prep summary
+    // is taller — page 1 ends around the tax-calc block, and this keeps
+    // the watermark clear of the diagonal page-edge clipping that would
+    // happen higher up with this fontSize + letterSpacing.
     position: "absolute",
-    top: 380,
+    top: 500,
     left: 50,
     right: 50,
     fontSize: 88,
