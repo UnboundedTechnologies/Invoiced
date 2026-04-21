@@ -15,6 +15,8 @@
  *  - No adjustments, bad-debt recoveries, credit notes, or installments.
  */
 
+import { isTaxableSupplyInPeriod } from "./queries/invoice-slices";
+
 const QUICK_METHOD_ELIGIBILITY_CAP_CENTS = 400_000 * 100; // $400K prior-4-FY worldwide taxable supplies
 const QUICK_CREDIT_THRESHOLD_CENTS = 30_000 * 100;        // 1% credit on first $30K HST-included supplies
 const QUICK_CREDIT_RATE_BPS = 100;                        // 1%
@@ -117,7 +119,7 @@ export function aggregateRegular({
   period,
 }: AggregateInput): AggregateRegularResult {
   const invs = invoices.filter(
-    (i) => i.status !== "void" && inPeriod(i.issueDate, period),
+    (i) => isTaxableSupplyInPeriod(i, period),
   );
   const exps = expenses.filter((e) => inPeriod(e.expenseDate, period));
   const meals = exps.filter((e) => e.category === "meals_entertainment");
@@ -171,7 +173,7 @@ export function aggregateQuickMethod({
   isFirstQmFy,
 }: AggregateInput & { isFirstQmFy: boolean }): AggregateQuickResult {
   const invs = invoices.filter(
-    (i) => i.status !== "void" && inPeriod(i.issueDate, period),
+    (i) => isTaxableSupplyInPeriod(i, period),
   );
   const exps = expenses.filter((e) => inPeriod(e.expenseDate, period));
   const capitalExps = exps.filter((e) => e.category === "capital_asset");

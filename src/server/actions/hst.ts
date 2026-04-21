@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { and, desc, eq, sql as drizzleSql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql as drizzleSql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { readFile } from "node:fs/promises";
@@ -27,6 +27,7 @@ import {
   type ExpenseSlice,
 } from "@/lib/hst";
 import { fiscalYearFor } from "@/lib/utils";
+import { TAXABLE_SUPPLY_STATUSES } from "@/lib/queries/invoice-slices";
 import { HstReturnPDF } from "@/lib/hst-pdf";
 
 type ActionResult = { ok?: string; error?: string; pdfBase64?: string };
@@ -182,7 +183,7 @@ export async function loadLiveAggregate({
       and(
         drizzleSql`${invoices.issueDate} >= ${priorStart}`,
         drizzleSql`${invoices.issueDate} <= ${priorEnd}`,
-        drizzleSql`${invoices.status} != 'void'`,
+        inArray(invoices.status, [...TAXABLE_SUPPLY_STATUSES]),
       ),
     );
   const priorFourFyRevenueCents = Number(priorAgg?.total ?? 0);

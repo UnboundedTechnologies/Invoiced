@@ -8,7 +8,7 @@ import {
   shareholderLoanEntries,
   prescribedRatePeriods,
 } from "@/lib/db/schema";
-import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { getSettings } from "@/lib/db/queries";
 import { hstReturns } from "@/lib/db/schema";
 import {
@@ -27,22 +27,31 @@ import {
   CalendarClock,
   Coins,
   Settings,
+  Landmark,
+  Banknote,
+  TrendingUp,
 } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { QuickActionTile } from "@/components/quick-action-tile";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Sparkline } from "@/components/sparkline";
 import { PsbDashboardBanner } from "@/components/psb/dashboard-banner";
 import { LoanRiskBanner } from "@/components/shareholder-loan/risk-banner";
 import { computePsbRisk } from "@/lib/psb";
 import { computeLoanTimeline, type LoanEntry, type RatePeriod } from "@/lib/shareholder-loan";
-import { fiscalYearFor, formatCAD } from "@/lib/utils";
+import {
+  estimateT2,
+  estimateCashPosition,
+  operatingExpensesForT2,
+  revenueByMonth,
+} from "@/lib/dashboard-metrics";
+import { isTaxableSupplyInPeriod } from "@/lib/queries/invoice-slices";
+import { cn, fiscalYearFor, formatCAD } from "@/lib/utils";
+import { TONE } from "@/lib/tones";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const calYear = new Date().getUTCFullYear();
-  const yearStart = `${calYear}-01-01`;
-  const yearEnd = `${calYear}-12-31`;
-
   const [
     s,
     allDividends,
@@ -50,7 +59,6 @@ export default async function DashboardPage() {
     psbItems,
     loanEntriesRaw,
     rateRows,
-    invoiceTotals,
     allInvoices,
     allExpenses,
   ] = await Promise.all([
@@ -63,22 +71,6 @@ export default async function DashboardPage() {
       .from(shareholderLoanEntries)
       .orderBy(asc(shareholderLoanEntries.entryDate), asc(shareholderLoanEntries.createdAt)),
     db.select().from(prescribedRatePeriods).orderBy(asc(prescribedRatePeriods.startDate)),
-    // YTD revenue + HST aggregates — accrual basis, i.e. invoices that have
-    // been issued (sent/paid/overdue), excluding drafts and voids.
-    db
-      .select({
-        subtotal: sql<number>`COALESCE(SUM(${invoices.subtotalCents}), 0)`,
-        hst: sql<number>`COALESCE(SUM(${invoices.hstCents}), 0)`,
-        count: sql<number>`COUNT(*)::int`,
-      })
-      .from(invoices)
-      .where(
-        and(
-          inArray(invoices.status, ["sent", "paid", "overdue"]),
-          gte(invoices.issueDate, yearStart),
-          lte(invoices.issueDate, yearEnd),
-        ),
-      ),
     db.select().from(invoices),
     db.select().from(expenses),
   ]);
@@ -88,33 +80,51 @@ export default async function DashboardPage() {
   const fyEnd = `${String(fyeMonth).padStart(2, "0")}-${String(fyeDay).padStart(2, "0")}`;
   const today = new Date().toISOString().slice(0, 10);
   const currentFY = fiscalYearFor(today, fyeMonth, fyeDay);
+  const fyPeriod = hstPeriodFor(currentFY, fyeMonth, fyeDay);
   const fyDividends = allDividends.filter((d) => d.fiscalYear === currentFY);
   const dividendsFYTotal = fyDividends.reduce((a, d) => a + d.amountCents, 0);
   const eligibleTotal = fyDividends.filter((d) => d.eligible).reduce((a, d) => a + d.amountCents, 0);
   const nonEligibleTotal = dividendsFYTotal - eligibleTotal;
 
-  const ytdPaycheques = allPaycheques.filter(
-    (p) => p.status === "issued" && p.payDate >= yearStart && p.payDate <= yearEnd,
+  // FY-based paycheque totals — drives the Self-pay stat card plus T2 + cash
+  // position estimates. Matches the FY basis already used for dividends so
+  // the blended "salary + dividends" number stays coherent regardless of the
+  // corp's FYE.
+  const fyPaycheques = allPaycheques.filter(
+    (p) => p.status === "issued" && p.payDate >= fyPeriod.start && p.payDate <= fyPeriod.end,
   );
-  const salaryYTD = ytdPaycheques.reduce((a, p) => a + p.grossCents, 0);
-  const selfPayYTD = salaryYTD + dividendsFYTotal;
+  const fySalaryGross = fyPaycheques.reduce((a, p) => a + p.grossCents, 0);
+  const fyEmployerCpp = fyPaycheques.reduce(
+    (a, p) => a + p.employerCppCents + p.employerCpp2Cents,
+    0,
+  );
+  const selfPayFY = fySalaryGross + dividendsFYTotal;
 
-  // SQL COALESCE returns 0 for empty sets; Number() is belt-and-suspenders
-  // in case the driver returns bigint-as-string for the SUM.
-  const ytdRevenueCents = Number(invoiceTotals[0]?.subtotal ?? 0);
-  const ytdHstCents = Number(invoiceTotals[0]?.hst ?? 0);
-  const ytdInvoiceCount = Number(invoiceTotals[0]?.count ?? 0);
+  // FY-based revenue (shared predicate with the HST aggregator and
+  // /invoices header via src/lib/queries/invoice-slices).
+  const fyRevenueInvoices = allInvoices.filter((i) =>
+    isTaxableSupplyInPeriod(i, fyPeriod),
+  );
+  const fyRevenueSubtotalCents = fyRevenueInvoices.reduce((a, i) => a + i.subtotalCents, 0);
+  const fyRevenueTotalCents = fyRevenueInvoices.reduce((a, i) => a + i.totalCents, 0);
+  const fyHstCollectedCents = fyRevenueInvoices.reduce((a, i) => a + i.hstCents, 0);
+  const fyInvoiceCount = fyRevenueInvoices.length;
 
   const fyExpenses = allExpenses.filter((e) => e.fiscalYear === currentFY);
   const fyExpensesTotalCents = fyExpenses.reduce((a, e) => a + e.totalCents, 0);
-  const fyExpensesHstCents = fyExpenses.reduce((a, e) => a + e.hstPaidCents, 0);
   const fyExpensesCount = fyExpenses.length;
+  const fyOperatingDeductibleCents = operatingExpensesForT2(
+    fyExpenses.map((e) => ({
+      category: e.category,
+      subtotalCents: e.subtotalCents,
+      totalCents: e.totalCents,
+    })),
+  );
 
   // HST net tax (line 109) projected for the current fiscal year. When a
   // draft return exists we pick up its method + first-year flag; otherwise
   // fall back to regular-method projection.
-  const hstPeriod = hstPeriodFor(currentFY, fyeMonth, fyeDay);
-  const hstDueIso = hstFilingDueDate(hstPeriod.end);
+  const hstDueIso = hstFilingDueDate(fyPeriod.end);
   const [currentFyReturn] = await db
     .select()
     .from(hstReturns)
@@ -140,26 +150,72 @@ export default async function DashboardPage() {
     hstPaidCents: e.hstPaidCents,
     totalCents: e.totalCents,
   }));
+  const liveAggregate =
+    hstMethod === "quick"
+      ? aggregateQuickMethod({
+          invoices: hstInvoiceSlices,
+          expenses: hstExpenseSlices,
+          period: fyPeriod,
+          isFirstQmFy: hstFirstQm,
+        })
+      : aggregateRegular({
+          invoices: hstInvoiceSlices,
+          expenses: hstExpenseSlices,
+          period: fyPeriod,
+        });
   const hstNetCents =
     hstStatus === "filed"
       ? currentFyReturn?.line109Cents ?? 0
-      : hstMethod === "quick"
-        ? aggregateQuickMethod({
-            invoices: hstInvoiceSlices,
-            expenses: hstExpenseSlices,
-            period: hstPeriod,
-            isFirstQmFy: hstFirstQm,
-          }).line109Cents
-        : aggregateRegular({
-            invoices: hstInvoiceSlices,
-            expenses: hstExpenseSlices,
-            period: hstPeriod,
-          }).line109Cents;
+      : liveAggregate.line109Cents;
+  const liveItcRecoverableCents =
+    hstStatus === "filed"
+      ? currentFyReturn?.line108Cents ?? 0
+      : liveAggregate.line108Cents;
   const hstDaysToDue = Math.round(
     (new Date(hstDueIso + "T00:00:00Z").getTime() -
       new Date(today + "T00:00:00Z").getTime()) /
       86_400_000,
   );
+
+  // Corporate tax (T2) estimate — FY basis, fed 9% + ON blended.
+  const t2 = estimateT2({
+    periodStart: fyPeriod.start,
+    periodEnd: fyPeriod.end,
+    revenueCents: fyRevenueSubtotalCents,
+    operatingExpensesCents: fyOperatingDeductibleCents,
+    salaryCents: fySalaryGross,
+    employerCppCents: fyEmployerCpp,
+  });
+
+  // Cash position estimate — accrual basis, after every FY obligation.
+  const cash = estimateCashPosition({
+    revenueTotalCents: fyRevenueTotalCents,
+    expensesTotalCents: fyExpensesTotalCents,
+    salaryGrossCents: fySalaryGross,
+    employerCppCents: fyEmployerCpp,
+    dividendsCents: dividendsFYTotal,
+    t2EstimateCents: t2.totalTaxCents,
+    hstNetCents,
+  });
+
+  // 12-month rolling revenue trend — ends on current month.
+  const currentIsoMonth = today.slice(0, 7);
+  const trendSeries = revenueByMonth(
+    allInvoices.map((i) => ({
+      issueDate: i.issueDate,
+      subtotalCents: i.subtotalCents,
+      status: i.status,
+    })),
+    currentIsoMonth,
+  );
+  const trendValues = trendSeries.map((b) => b.cents);
+  const trend12moTotal = trendValues.reduce((a, v) => a + v, 0);
+  const nonEmptyMonths = trendValues.filter((v) => v > 0).length;
+  const trendAvg = nonEmptyMonths > 0 ? Math.round(trend12moTotal / nonEmptyMonths) : 0;
+  const trendPeak = Math.max(...trendValues, 0);
+  const trendPeakBucket = trendSeries.find((b) => b.cents === trendPeak);
+  const trendPeakLabel =
+    trendPeak > 0 && trendPeakBucket ? monthNameShort(trendPeakBucket.month) : null;
 
   const psb = computePsbRisk(psbItems);
 
@@ -201,6 +257,9 @@ export default async function DashboardPage() {
     return "You → corp";
   })();
 
+  const cashPositive = cash.netCents >= 0;
+  const onRatePct = (t2.ontarioRate * 100).toFixed(2);
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -224,15 +283,80 @@ export default async function DashboardPage() {
         />
       )}
 
+      {/* Revenue trend */}
+      <Card
+        className="relative overflow-hidden animate-in fade-in slide-in-from-bottom-2 fill-mode-backwards"
+        style={{ animationDuration: "500ms", animationDelay: "60ms" }}
+      >
+        <div
+          className={cn(
+            "absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r",
+            TONE.emerald.topBar,
+          )}
+        />
+        <CardHeader className="pb-1">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                Revenue trend
+              </div>
+              <div className="text-3xl font-bold leading-none tracking-tight tabular-nums">
+                {formatCAD(trend12moTotal)}
+              </div>
+            </div>
+            <div
+              className={cn(
+                "flex size-9 shrink-0 items-center justify-center rounded-lg ring-1 ring-inset",
+                TONE.emerald.bg,
+                TONE.emerald.border,
+              )}
+            >
+              <TrendingUp className={cn("size-[1.05rem]", TONE.emerald.text)} />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Sparkline
+            data={trendValues}
+            tone="emerald"
+            height={60}
+            ariaLabel="12-month revenue sparkline"
+          />
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <div>
+              {nonEmptyMonths > 0 ? (
+                <>
+                  12-month total · avg{" "}
+                  <span className="text-foreground">{formatCAD(trendAvg)}</span>/mo over{" "}
+                  {nonEmptyMonths} active month{nonEmptyMonths === 1 ? "" : "s"}
+                </>
+              ) : (
+                "No invoiced revenue in the past 12 months"
+              )}
+            </div>
+            {trendPeakLabel && (
+              <div>
+                Peak{" "}
+                <span className="text-foreground">{formatCAD(trendPeak)}</span> in {trendPeakLabel}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground/70">
+            <span>{monthNameShort(trendSeries[0]!.month)}</span>
+            <span>{monthNameShort(trendSeries[trendSeries.length - 1]!.month)}</span>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
         <StatCard
-          label="YTD revenue"
-          value={formatCAD(ytdRevenueCents)}
+          label={`Revenue FY ${currentFY}`}
+          value={formatCAD(fyRevenueSubtotalCents)}
           hint={
-            ytdInvoiceCount === 0
+            fyInvoiceCount === 0
               ? "No invoices issued yet"
-              : `${ytdInvoiceCount} invoice${ytdInvoiceCount === 1 ? "" : "s"} issued in ${calYear}`
+              : `${fyInvoiceCount} invoice${fyInvoiceCount === 1 ? "" : "s"} issued in FY ${currentFY}`
           }
           icon={CircleDollarSign}
           tone="emerald"
@@ -244,14 +368,23 @@ export default async function DashboardPage() {
           hint={
             hstStatus === "filed" ? (
               <span className="text-emerald-400">
-                Filed · {formatCAD(ytdHstCents)} HST collected YTD
+                Filed · {formatCAD(fyHstCollectedCents)} HST collected FY {currentFY}
               </span>
-            ) : (
+            ) : hstNetCents === 0 ? (
+              <>Nothing to remit · return due in {hstDaysToDue} days</>
+            ) : hstNetCents > 0 ? (
               <>
-                {hstNetCents >= 0 ? "Owed to CRA" : "Refund"} ·{" "}
+                Owed to CRA ·{" "}
                 {hstDaysToDue >= 0
                   ? `due in ${hstDaysToDue} day${hstDaysToDue === 1 ? "" : "s"}`
                   : `${Math.abs(hstDaysToDue)} days overdue`}
+              </>
+            ) : (
+              <>
+                Refund ·{" "}
+                {hstDaysToDue >= 0
+                  ? `file by ${hstDaysToDue} day${hstDaysToDue === 1 ? "" : "s"} from now`
+                  : `${Math.abs(hstDaysToDue)} days past due`}
               </>
             )
           }
@@ -260,11 +393,11 @@ export default async function DashboardPage() {
           delayMs={180}
         />
         <StatCard
-          label="Self-pay (YTD)"
-          value={formatCAD(selfPayYTD)}
+          label={`Self-pay FY ${currentFY}`}
+          value={formatCAD(selfPayFY)}
           hint={
             <>
-              <span className="text-amber-400">{formatCAD(salaryYTD)} salary</span>
+              <span className="text-amber-400">{formatCAD(fySalaryGross)} salary</span>
               {" · "}
               <span className="text-violet-400">{formatCAD(dividendsFYTotal)} dividends</span>
             </>
@@ -303,18 +436,55 @@ export default async function DashboardPage() {
           label={`Expenses FY ${currentFY}`}
           value={formatCAD(fyExpensesTotalCents)}
           hint={
-            fyExpensesCount === 0
-              ? "None logged yet"
-              : (
-                <>
-                  {fyExpensesCount} expense{fyExpensesCount === 1 ? "" : "s"} ·{" "}
-                  <span className="text-amber-400">{formatCAD(fyExpensesHstCents)} ITC recoverable</span>
-                </>
-              )
+            fyExpensesCount === 0 ? (
+              "None logged yet"
+            ) : (
+              <>
+                {fyExpensesCount} expense{fyExpensesCount === 1 ? "" : "s"} ·{" "}
+                <span className="text-amber-400">
+                  {formatCAD(liveItcRecoverableCents)} ITC {hstMethod === "quick" ? "(capital only)" : "recoverable"}
+                </span>
+              </>
+            )
           }
           icon={Receipt}
           tone="rose"
           delayMs={500}
+        />
+        <StatCard
+          label={`Est. corp tax FY ${currentFY}`}
+          value={formatCAD(t2.totalTaxCents)}
+          hint={
+            t2.taxableIncomeCents === 0 ? (
+              "No taxable income yet"
+            ) : (
+              <>
+                On <span className="text-foreground">{formatCAD(t2.taxableIncomeCents)}</span> taxable ·
+                fed 9% + ON {onRatePct}%
+                {t2.sbdLimitWarning && (
+                  <span className="ml-1 text-rose-400">· SBD $500K limit exceeded</span>
+                )}
+              </>
+            )
+          }
+          icon={Landmark}
+          tone="indigo"
+          delayMs={580}
+        />
+        <StatCard
+          label={`Cash position FY ${currentFY}`}
+          value={formatCAD(Math.abs(cash.netCents))}
+          hint={
+            <>
+              <span className={cashPositive ? "text-emerald-400" : "text-rose-400"}>
+                {cashPositive ? "Retained" : "Shortfall"}
+              </span>{" "}
+              after payroll, dividends, HST, T2
+            </>
+          }
+          icon={Banknote}
+          tone={cashPositive ? "emerald" : "rose"}
+          delayMs={660}
         />
       </div>
 
@@ -379,4 +549,10 @@ export default async function DashboardPage() {
       </section>
     </div>
   );
+}
+
+function monthNameShort(isoMonth: string): string {
+  const [y, m] = isoMonth.split("-").map(Number) as [number, number];
+  const d = new Date(Date.UTC(y, m - 1, 1));
+  return d.toLocaleDateString("en-CA", { month: "short", timeZone: "UTC" }) + " " + String(y).slice(2);
 }

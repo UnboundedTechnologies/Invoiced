@@ -22,6 +22,10 @@
     "verify-math": "tsx scripts/verify-invoice-math.ts",
     "verify-loans": "tsx scripts/verify-loans.ts",
     "verify-hst": "tsx scripts/verify-hst.ts",
+    "verify-dashboard": "tsx scripts/verify-dashboard.ts",
+    "verify-coherence": "tsx scripts/verify-coherence.ts",
+    "verify-payroll": "tsx scripts/verify-payroll.ts",
+    "verify-all": "pnpm verify-math && pnpm verify-loans && pnpm verify-hst && pnpm verify-dashboard && pnpm verify-payroll && pnpm verify-coherence",
     "gen-tax-pdf": "tsx scripts/gen-tax-pdf.tsx"
   },
   "dependencies": {
