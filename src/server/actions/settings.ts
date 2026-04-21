@@ -166,6 +166,13 @@ export async function updateDirector(_prev: ActionResult | undefined, fd: FormDa
 const fiscalSchema = z.object({
   fiscalYearEndMonth: z.coerce.number().int().min(1).max(12),
   fiscalYearEndDay: z.coerce.number().int().min(1).max(31),
+  incorporationDate: z.preprocess(
+    (v) => (v === "" || v == null ? null : v),
+    z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Incorporation date must be YYYY-MM-DD")
+      .nullable(),
+  ),
   hstFilingFrequency: z.enum(["annual", "quarterly", "monthly"]),
   hstRateBps: z.coerce.number().int().min(0).max(10000),
 });
@@ -176,6 +183,7 @@ export async function updateFiscal(_prev: ActionResult | undefined, fd: FormData
     const parsed = fiscalSchema.safeParse({
       fiscalYearEndMonth: fd.get("fiscalYearEndMonth"),
       fiscalYearEndDay: fd.get("fiscalYearEndDay"),
+      incorporationDate: fd.get("incorporationDate") ?? undefined,
       hstFilingFrequency: fd.get("hstFilingFrequency"),
       hstRateBps: fd.get("hstRateBps"),
     });

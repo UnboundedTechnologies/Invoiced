@@ -223,12 +223,16 @@ export async function upsertDraftReturn(fiscalYear: number): Promise<ActionResul
         method: "regular",
         status: "draft",
       }),
-      db.insert(deadlines).values({
-        title: `HST return — FY ${fiscalYear}`,
-        description: `Annual HST return filing + payment due.`,
-        dueDate: dueIso,
-        category: "hst",
-      }),
+      db
+        .insert(deadlines)
+        .values({
+          title: `HST return — FY ${fiscalYear}`,
+          description: `Annual HST return filing + payment due.`,
+          dueDate: dueIso,
+          category: "hst",
+          sourceKey: `hst:${fiscalYear}`,
+        })
+        .onConflictDoNothing({ target: deadlines.sourceKey }),
       db.insert(auditLog).values({
         actorEmail: email,
         action: "create",
@@ -390,15 +394,9 @@ export async function fileReturn(
           updatedAt: new Date(),
         })
         .where(eq(hstReturns.fiscalYear, fiscalYear)),
-      // Remove the pending deadline now that it's filed
-      db
-        .delete(deadlines)
-        .where(
-          and(
-            eq(deadlines.category, "hst"),
-            eq(deadlines.title, `HST return — FY ${fiscalYear}`),
-          ),
-        ),
+      // Remove the pending deadline now that it's filed (match on sourceKey
+      // since the title could be edited by the user)
+      db.delete(deadlines).where(eq(deadlines.sourceKey, `hst:${fiscalYear}`)),
       db.insert(auditLog).values({
         actorEmail: email,
         action: "update",

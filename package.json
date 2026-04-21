@@ -25,7 +25,8 @@
     "verify-dashboard": "tsx scripts/verify-dashboard.ts",
     "verify-coherence": "tsx scripts/verify-coherence.ts",
     "verify-payroll": "tsx scripts/verify-payroll.ts",
-    "verify-all": "pnpm verify-math && pnpm verify-loans && pnpm verify-hst && pnpm verify-dashboard && pnpm verify-payroll && pnpm verify-coherence",
+    "verify-deadlines": "tsx scripts/verify-deadlines.ts",
+    "verify-all": "pnpm verify-math && pnpm verify-loans && pnpm verify-hst && pnpm verify-dashboard && pnpm verify-payroll && pnpm verify-deadlines && pnpm verify-coherence",
     "gen-tax-pdf": "tsx scripts/gen-tax-pdf.tsx"
   },
   "dependencies": {
