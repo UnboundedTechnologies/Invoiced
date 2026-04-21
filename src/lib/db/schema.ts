@@ -88,6 +88,10 @@ export const settings = pgTable("settings", {
   payrollAccount: text("payroll_account"), // e.g., 726742430RP0001 (null until registered)
   payrollAccountActive: boolean("payroll_account_active").default(false).notNull(), // gates salary tool
   corpIncomeTaxAccount: text("corp_income_tax_account"), // e.g., 726742430RC0001
+  // Vault PIN (second wall in front of /vault + /api/documents/[id]).
+  // Null = no PIN set yet (first-visit setup flow). Argon2id hash — never cleartext.
+  vaultPinHash: text("vault_pin_hash"),
+  vaultPinSetAt: timestamp("vault_pin_set_at", { withTimezone: true }),
   // Address
   addressLine1: text("address_line_1").notNull(),
   addressLine2: text("address_line_2"),
@@ -346,11 +350,16 @@ export const slips = pgTable(
   (t) => [uniqueIndex("slips_type_year_unique").on(t.type, t.taxYear)],
 );
 
-// Document vault (incorporation, contracts, NDAs) — versioned
+// Document vault (incorporation, contracts, NDAs, auto-generated invoice/paystub/receipt
+// PDFs) — versioned. Runtime category values, with the first four being
+// user-uploaded through /vault and the last four being auto-written by the
+// corresponding parent flows (contracts, invoices, paycheques, expenses):
+//   incorporation | nda | tax_return | other | contract | receipt | invoice | paystub
+// See `src/lib/vault-categories.ts` for the single source of truth used by /vault.
 export const documents = pgTable("documents", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
-  category: text("category").notNull(), // incorporation | contract | nda | tax_return | other
+  category: text("category").notNull(),
   blobUrl: text("blob_url").notNull(),
   sha256: text("sha256").notNull(),
   sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(),
@@ -462,6 +471,20 @@ export const auditLog = pgTable(
     occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("audit_log_occurred_idx").on(t.occurredAt)],
+);
+
+// Vault PIN attempts — rolling-window lockout ledger. One row per PIN verify
+// attempt against `/vault`. Lockout = ≥5 failed rows in the last 15 minutes.
+export const vaultPinAttempts = pgTable(
+  "vault_pin_attempts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    attemptedAt: timestamp("attempted_at", { withTimezone: true }).defaultNow().notNull(),
+    success: boolean("success").notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+  },
+  (t) => [index("vault_pin_attempts_attempted_idx").on(t.attemptedAt)],
 );
 
 // Inferred types for app code

@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Building2, User, FileSpreadsheet, Wallet, Palette, RotateCcw } from "lucide-react";
+import { Building2, User, FileSpreadsheet, Wallet, Palette, RotateCcw, ShieldCheck } from "lucide-react";
 import type { Settings as SettingsRow } from "@/lib/db/schema";
 import {
   updateDirector,
@@ -10,7 +10,9 @@ import {
   updateSelfPay,
   updateBranding,
 } from "@/server/actions/settings";
+import { changeVaultPin } from "@/server/actions/vault-pin";
 import { PayrollCard } from "@/components/settings/payroll-card";
+import { PinInput } from "@/components/vault/pin-input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -93,6 +95,9 @@ export function SettingsForm({ data }: { data: SettingsRow }) {
         <TabsTrigger value="branding">
           <Palette className="mr-1.5 size-3.5" /> Branding
         </TabsTrigger>
+        <TabsTrigger value="security">
+          <ShieldCheck className="mr-1.5 size-3.5" /> Security
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="corp">
@@ -110,7 +115,138 @@ export function SettingsForm({ data }: { data: SettingsRow }) {
       <TabsContent value="branding">
         <BrandingPanel data={data} />
       </TabsContent>
+      <TabsContent value="security">
+        <SecurityPanel data={data} />
+      </TabsContent>
     </Tabs>
+  );
+}
+
+// ─── Security (vault PIN change) ───
+function SecurityPanel({ data }: { data: SettingsRow }) {
+  const [state, formAction, pending] = useActionState(
+    changeVaultPin,
+    undefined as ({ ok?: string; error?: string; warning?: string } | undefined),
+  );
+  const [currentPin, setCurrentPin] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [localErr, setLocalErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (state?.ok) {
+      toast.success(state.ok);
+      if (state.warning) toast.warning(state.warning);
+      setCurrentPin("");
+      setNewPin("");
+      setConfirmPin("");
+      setLocalErr(null);
+    }
+    if (state?.error) toast.error(state.error);
+  }, [state]);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    if (currentPin.length !== 6 || newPin.length !== 6) {
+      e.preventDefault();
+      setLocalErr("PIN must be 6 digits.");
+      return;
+    }
+    if (newPin !== confirmPin) {
+      e.preventDefault();
+      setLocalErr("New PINs don't match.");
+      return;
+    }
+    if (currentPin === newPin) {
+      e.preventDefault();
+      setLocalErr("New PIN must differ from current.");
+      return;
+    }
+    setLocalErr(null);
+  }
+
+  const lastSet = data.vaultPinSetAt
+    ? new Date(data.vaultPinSetAt).toLocaleDateString("en-CA", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Vault PIN</CardTitle>
+        <CardDescription>
+          A 6-digit PIN gates the document vault + the generic document API. It&rsquo;s a second wall on
+          top of login — does not affect invoices, paycheques, or other parent flows.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {!data.vaultPinHash ? (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-300">
+            No vault PIN set yet. Visit <code className="rounded bg-muted px-1 py-0.5">/vault</code> once to
+            complete setup.
+          </div>
+        ) : (
+          <form action={formAction} onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Current PIN</Label>
+              <PinInput
+                name="currentPin"
+                value={currentPin}
+                onChange={setCurrentPin}
+                disabled={pending}
+                autoFocus={false}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">New PIN</Label>
+              <PinInput
+                name="newPin"
+                value={newPin}
+                onChange={setNewPin}
+                disabled={pending}
+                autoFocus={false}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                Confirm new PIN
+              </Label>
+              <PinInput
+                name="_confirm"
+                value={confirmPin}
+                onChange={setConfirmPin}
+                disabled={pending}
+                autoFocus={false}
+              />
+            </div>
+
+            {(localErr || state?.error) && (
+              <div className="rounded-md border border-rose-500/40 bg-rose-500/5 p-3 text-xs text-rose-300">
+                {localErr ?? state?.error}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <div className="text-[11px] text-muted-foreground">
+                {lastSet ? <>Last set {lastSet}</> : null}
+              </div>
+              <Button type="submit" variant="brand" disabled={pending}>
+                {pending ? "Saving…" : "Change PIN"}
+              </Button>
+            </div>
+          </form>
+        )}
+
+        <div className="rounded-md border border-border/50 bg-muted/10 p-3 text-xs text-muted-foreground">
+          <strong className="text-foreground">Forgot your PIN?</strong> Run{" "}
+          <code className="rounded bg-background px-1 py-0.5">pnpm reset-vault-pin</code> from the project
+          terminal. The script lets you clear the PIN (triggering setup on next visit) or set a new one
+          directly.
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
