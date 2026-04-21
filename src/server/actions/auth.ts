@@ -3,6 +3,8 @@
 import { signIn, signOut } from "../../../auth";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { VAULT_PIN_COOKIE } from "@/lib/vault-pin";
 
 export async function loginAction(_prev: { error?: string } | undefined, formData: FormData) {
   try {
@@ -21,5 +23,9 @@ export async function loginAction(_prev: { error?: string } | undefined, formDat
 }
 
 export async function logoutAction() {
+  // Clear the vault PIN cookie alongside the main session so nothing
+  // persists across a logout/login boundary.
+  const c = await cookies();
+  c.delete(VAULT_PIN_COOKIE);
   await signOut({ redirectTo: "/login" });
 }

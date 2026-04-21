@@ -1,0 +1,39 @@
+"use client";
+
+import { useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Lock } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { lockVaultSession } from "@/server/actions/vault-pin";
+
+export function LockVaultButton() {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  function handleLock() {
+    startTransition(async () => {
+      const r = await lockVaultSession();
+      if (r.ok) {
+        toast.success(r.ok);
+        router.refresh();
+      }
+      if (r.error) toast.error(r.error);
+    });
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={handleLock}
+      disabled={pending}
+      className="gap-1.5"
+      title="Clear the PIN session immediately"
+    >
+      <Lock className="size-3.5" />
+      {pending ? "Locking…" : "Lock now"}
+    </Button>
+  );
+}

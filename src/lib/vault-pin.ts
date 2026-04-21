@@ -16,7 +16,15 @@ import { db } from "@/lib/db/client";
 import { settings, vaultPinAttempts } from "@/lib/db/schema";
 
 export const VAULT_PIN_COOKIE = "__Host-vault-pin";
-export const VAULT_PIN_TTL_SECONDS = 15 * 60; // 15 min sliding
+/**
+ * Cookie lifetime: 60 seconds, NON-sliding. Kept intentionally tight so
+ * that each /vault visit requires a fresh PIN entry. The 60s window is
+ * just enough to let a PIN entry + a couple of downloads-in-the-same-tick
+ * succeed before the cookie expires. The vault UI also fires a
+ * `lockVaultSession` call when the user navigates away from /vault, so in
+ * practice the cookie rarely reaches the 60s cap on its own.
+ */
+export const VAULT_PIN_TTL_SECONDS = 60;
 export const VAULT_PIN_LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
 export const VAULT_PIN_LOCKOUT_THRESHOLD = 5;
 

@@ -20,6 +20,7 @@
     "optimize-logo": "tsx scripts/optimize-logo.ts",
     "optimize-banner": "tsx scripts/optimize-banner.ts",
     "cleanup-blobs": "tsx --env-file=.env.local scripts/cleanup-blobs.ts",
+    "cleanup-phantom-docs": "tsx --env-file=.env.local scripts/cleanup-phantom-docs.ts",
     "verify-math": "tsx scripts/verify-invoice-math.ts",
     "verify-loans": "tsx scripts/verify-loans.ts",
     "verify-hst": "tsx scripts/verify-hst.ts",

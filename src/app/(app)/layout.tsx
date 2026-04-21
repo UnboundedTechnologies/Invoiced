@@ -1,5 +1,6 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
+import { VaultAutoLock } from "@/components/vault/vault-auto-lock";
 import { getSettings } from "@/lib/db/queries";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -30,6 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <TopBar corpName={corpName} />
         <div className="mx-auto max-w-7xl px-6 py-8 animate-in fade-in duration-300">{children}</div>
       </main>
+      <VaultAutoLock />
     </div>
   );
 }
