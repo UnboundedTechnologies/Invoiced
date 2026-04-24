@@ -16,8 +16,10 @@ import type { T4SlipBoxes, T5SlipBoxes } from "@/lib/slip-boxes";
 import { T4SlipPDF } from "@/lib/t4-slip-pdf";
 import { T5SlipPDF } from "@/lib/t5-slip-pdf";
 import { getBannerDataUri } from "@/lib/pdf-banner";
+import { t4BoxesToCsv, t5BoxesToCsv, type SlipCsvPayer } from "@/lib/slip-csv";
 
 type PdfActionResult = { ok?: string; error?: string; pdfBase64?: string; filename?: string };
+type CsvActionResult = { ok?: string; error?: string; csvBase64?: string; filename?: string };
 
 async function requireSession() {
   const session = await auth();
@@ -261,6 +263,79 @@ export async function generateT5WorkingCopyPdf(taxYear: number): Promise<PdfActi
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "PDF generation failed" };
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Working-copy CSV generators — box-by-box export for re-keying into CRA
+// Web Forms. Uses the same aggregator façade as the PDF so the two stay
+// numerically identical (coherence guard in verify-coherence.ts).
+// ────────────────────────────────────────────────────────────────────────
+
+function csvPayer(s: {
+  corpLegalName: string;
+  businessNumber: string;
+  payrollAccount: string | null;
+  payerRzAccount: string | null;
+  directorLegalName: string;
+}): SlipCsvPayer {
+  return {
+    corpLegalName: s.corpLegalName,
+    businessNumber: s.businessNumber,
+    payrollAccount: s.payrollAccount,
+    payerRzAccount: s.payerRzAccount,
+    directorLegalName: s.directorLegalName,
+  };
+}
+
+export async function generateT4WorkingCopyCsv(taxYear: number): Promise<CsvActionResult> {
+  try {
+    const email = await requireSession();
+    const [boxes, s] = await Promise.all([buildT4SlipBoxes(taxYear), requireSettings()]);
+    if (boxes.paychequeCount === 0) {
+      return { error: `No issued paycheques in CY ${taxYear} — nothing to generate.` };
+    }
+    const csv = t4BoxesToCsv(boxes, csvPayer(s), taxYear);
+    const csvBase64 = Buffer.from(csv, "utf8").toString("base64");
+    await db.insert(auditLog).values({
+      actorEmail: email,
+      action: "download",
+      target: `slips:T4:${taxYear}:working-copy-csv`,
+      metadata: { paychequeCount: boxes.paychequeCount, bytes: csv.length },
+    });
+    return {
+      ok: "T4 CSV generated.",
+      csvBase64,
+      filename: `T4-WorkingCopy-CY${taxYear}.csv`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "CSV generation failed" };
+  }
+}
+
+export async function generateT5WorkingCopyCsv(taxYear: number): Promise<CsvActionResult> {
+  try {
+    const email = await requireSession();
+    const [boxes, s] = await Promise.all([buildT5SlipBoxes(taxYear), requireSettings()]);
+    const count = boxes.eligible.count + boxes.nonEligible.count;
+    if (count === 0) {
+      return { error: `No paid dividends in CY ${taxYear} — nothing to generate.` };
+    }
+    const csv = t5BoxesToCsv(boxes, csvPayer(s), taxYear);
+    const csvBase64 = Buffer.from(csv, "utf8").toString("base64");
+    await db.insert(auditLog).values({
+      actorEmail: email,
+      action: "download",
+      target: `slips:T5:${taxYear}:working-copy-csv`,
+      metadata: { paidDividendCount: count, bytes: csv.length },
+    });
+    return {
+      ok: "T5 CSV generated.",
+      csvBase64,
+      filename: `T5-WorkingCopy-CY${taxYear}.csv`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "CSV generation failed" };
   }
 }
 
