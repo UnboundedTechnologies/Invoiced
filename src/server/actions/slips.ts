@@ -1,18 +1,33 @@
 "use server";
 
 import { and, desc, eq } from "drizzle-orm";
+import { renderToBuffer } from "@react-pdf/renderer";
 import { db } from "@/lib/db/client";
-import { slips, type Slip } from "@/lib/db/schema";
+import { slips, settings, auditLog, type Slip } from "@/lib/db/schema";
 import { taxYearFor } from "@/lib/t1";
 import { auth } from "../../../auth";
 import { taxYearsWithActivity } from "@/lib/queries/personal-tax-slices";
 import { buildT4SlipBoxes, buildT5SlipBoxes } from "@/lib/queries/slip-aggregation";
 import type { T4SlipBoxes, T5SlipBoxes } from "@/lib/slip-boxes";
+import { T4SlipPDF } from "@/lib/t4-slip-pdf";
+import { T5SlipPDF } from "@/lib/t5-slip-pdf";
+import { getBannerDataUri } from "@/lib/pdf-banner";
+
+type PdfActionResult = { ok?: string; error?: string; pdfBase64?: string; filename?: string };
 
 async function requireSession() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
+}
+
+/** Feb 28 of CY+1, shifted to next weekday if it lands on a weekend. */
+function slipFilingDueDate(taxYear: number): string {
+  const due = new Date(Date.UTC(taxYear + 1, 1, 28));
+  const dow = due.getUTCDay();
+  if (dow === 6) due.setUTCDate(due.getUTCDate() + 2);
+  else if (dow === 0) due.setUTCDate(due.getUTCDate() + 1);
+  return due.toISOString().slice(0, 10);
 }
 
 // Shared slip-filing lock helpers. All three check whether a slip with
@@ -108,4 +123,137 @@ export async function loadSlipPreview(taxYear: number): Promise<SlipPreview> {
     t5,
     existing: { t4: pickByType("T4"), t5: pickByType("T5") },
   };
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Working-copy PDF generators — ephemeral base64 download (no Blob persist).
+// Filing + Blob persist lands in 4E-4.
+// ────────────────────────────────────────────────────────────────────────
+
+async function requireSettings() {
+  const [s] = await db.select().from(settings).where(eq(settings.id, 1));
+  if (!s) throw new Error("Settings not seeded.");
+  return s;
+}
+
+export async function generateT4WorkingCopyPdf(taxYear: number): Promise<PdfActionResult> {
+  try {
+    const email = await requireSession();
+    const [boxes, s, bannerDataUri] = await Promise.all([
+      buildT4SlipBoxes(taxYear),
+      requireSettings(),
+      getBannerDataUri(),
+    ]);
+
+    if (boxes.paychequeCount === 0) {
+      return { error: `No issued paycheques in CY ${taxYear} — nothing to generate.` };
+    }
+
+    const buffer = await renderToBuffer(
+      T4SlipPDF({
+        taxYear,
+        boxes,
+        payer: {
+          corpLegalName: s.corpLegalName,
+          businessNumber: s.businessNumber,
+          payrollAccount: s.payrollAccount,
+          addressLine1: s.addressLine1,
+          addressLine2: s.addressLine2,
+          city: s.city,
+          province: s.province,
+          postalCode: s.postalCode,
+          country: s.country,
+        },
+        recipient: {
+          legalName: s.directorLegalName,
+          addressLine1: s.addressLine1,
+          addressLine2: s.addressLine2,
+          city: s.city,
+          province: s.province,
+          postalCode: s.postalCode,
+          country: s.country,
+        },
+        bannerDataUri,
+        filingDueDate: slipFilingDueDate(taxYear),
+      }),
+    );
+    const pdfBase64 = Buffer.from(buffer).toString("base64");
+
+    await db.insert(auditLog).values({
+      actorEmail: email,
+      action: "download",
+      target: `slips:T4:${taxYear}:working-copy`,
+      metadata: { paychequeCount: boxes.paychequeCount },
+    });
+
+    return {
+      ok: "T4 working copy generated.",
+      pdfBase64,
+      filename: `T4-WorkingCopy-CY${taxYear}.pdf`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "PDF generation failed" };
+  }
+}
+
+export async function generateT5WorkingCopyPdf(taxYear: number): Promise<PdfActionResult> {
+  try {
+    const email = await requireSession();
+    const [boxes, s, bannerDataUri] = await Promise.all([
+      buildT5SlipBoxes(taxYear),
+      requireSettings(),
+      getBannerDataUri(),
+    ]);
+
+    const count = boxes.eligible.count + boxes.nonEligible.count;
+    if (count === 0) {
+      return { error: `No paid dividends in CY ${taxYear} — nothing to generate.` };
+    }
+
+    const buffer = await renderToBuffer(
+      T5SlipPDF({
+        taxYear,
+        boxes,
+        payer: {
+          corpLegalName: s.corpLegalName,
+          businessNumber: s.businessNumber,
+          payerRzAccount: s.payerRzAccount,
+          payerRzActive: s.payerRzActive,
+          addressLine1: s.addressLine1,
+          addressLine2: s.addressLine2,
+          city: s.city,
+          province: s.province,
+          postalCode: s.postalCode,
+          country: s.country,
+        },
+        recipient: {
+          legalName: s.directorLegalName,
+          addressLine1: s.addressLine1,
+          addressLine2: s.addressLine2,
+          city: s.city,
+          province: s.province,
+          postalCode: s.postalCode,
+          country: s.country,
+        },
+        bannerDataUri,
+        filingDueDate: slipFilingDueDate(taxYear),
+      }),
+    );
+    const pdfBase64 = Buffer.from(buffer).toString("base64");
+
+    await db.insert(auditLog).values({
+      actorEmail: email,
+      action: "download",
+      target: `slips:T5:${taxYear}:working-copy`,
+      metadata: { paidDividendCount: count, rzActive: s.payerRzActive },
+    });
+
+    return {
+      ok: "T5 working copy generated.",
+      pdfBase64,
+      filename: `T5-WorkingCopy-CY${taxYear}.pdf`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "PDF generation failed" };
+  }
 }

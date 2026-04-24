@@ -17,6 +17,7 @@ import { formatCAD, formatLongDate } from "@/lib/utils";
 import { CPP_YMPE_2026 } from "@/lib/payroll-2026";
 import type { T4SlipBoxes, T5SlipBoxes } from "@/lib/slip-boxes";
 import type { Slip } from "@/lib/db/schema";
+import { GenerateSlipPdfButton } from "@/components/slips/generate-slip-pdf-button";
 
 export const dynamic = "force-dynamic";
 
@@ -156,6 +157,29 @@ export default async function SlipPreviewPage({
             <p className="mt-1 text-xs text-muted-foreground">
               Working copy — re-key the values below into CRA Web Forms at canada.ca to file.
             </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <GenerateSlipPdfButton
+              kind="T4"
+              taxYear={taxYear}
+              disabled={t4.paychequeCount === 0}
+              disabledReason={
+                t4.paychequeCount === 0
+                  ? `No issued paycheques in CY ${taxYear} — nothing to generate.`
+                  : undefined
+              }
+            />
+            <GenerateSlipPdfButton
+              kind="T5"
+              taxYear={taxYear}
+              disabled={t5.eligible.count + t5.nonEligible.count === 0}
+              disabledReason={
+                t5.eligible.count + t5.nonEligible.count === 0
+                  ? `No paid dividends in CY ${taxYear} — nothing to generate.`
+                  : undefined
+              }
+            />
           </div>
         </div>
       </div>
