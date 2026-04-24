@@ -7,16 +7,30 @@ const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), interest-cohort=()" },
+  // Cross-origin isolation — COOP isolates the browsing context from cross-origin
+  // popups; CORP restricts resources to same-origin fetches. We don't add
+  // Cross-Origin-Embedder-Policy because it would block the in-app PDF iframe.
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+  // Opts the origin into per-origin agent clusters (tightens Spectre-style leaks
+  // across documents sharing a process).
+  { key: "Origin-Agent-Cluster", value: "?1" },
   {
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
+      // script-src / style-src still allow 'unsafe-inline' — Next's hydration
+      // bootstrap + Tailwind/Radix inline styles need it. Nonce-based tightening
+      // lands in Phase 5-3.
       "script-src 'self' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self' data:",
       "connect-src 'self'",
+      "frame-src 'self'",
       "frame-ancestors 'self'",
+      // Blocks legacy <object>/<embed>/<applet> — defense in depth vs. Flash-style XSS.
+      "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
     ].join("; "),
