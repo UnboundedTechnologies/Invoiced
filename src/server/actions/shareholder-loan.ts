@@ -8,7 +8,6 @@ import {
   shareholderLoanEntries,
   prescribedRatePeriods,
   settings,
-  slips,
   auditLog,
   dividends,
 } from "@/lib/db/schema";
@@ -17,6 +16,7 @@ import { fiscalYearFor, formatCAD } from "@/lib/utils";
 import { computeLoanTimeline, type LoanEntry, type RatePeriod } from "@/lib/shareholder-loan";
 import { t2PeriodLockError } from "./t2";
 import { t1PeriodLockError } from "./t1";
+import { t4aSlipLockError, t5SlipLockError } from "./slips";
 import { t1Returns } from "@/lib/db/schema";
 import { gte, lte } from "drizzle-orm";
 
@@ -35,30 +35,12 @@ function revalidate() {
   revalidatePath("/(app)", "layout");
 }
 
-async function t5SlipIssuedFor(fiscalYear: number) {
-  const [row] = await db
-    .select({ id: slips.id })
-    .from(slips)
-    .where(and(eq(slips.type, "T5"), eq(slips.taxYear, fiscalYear)))
-    .limit(1);
-  return !!row;
-}
-
 async function getFye() {
   const [s] = await db
     .select({ m: settings.fiscalYearEndMonth, d: settings.fiscalYearEndDay })
     .from(settings)
     .where(eq(settings.id, 1));
   return { fyeMonth: s?.m ?? 12, fyeDay: s?.d ?? 31 };
-}
-
-async function t4aSlipIssuedFor(fiscalYear: number) {
-  const [row] = await db
-    .select({ id: slips.id })
-    .from(slips)
-    .where(and(eq(slips.type, "T4A"), eq(slips.taxYear, fiscalYear)))
-    .limit(1);
-  return !!row;
 }
 
 //  Entries
@@ -99,9 +81,8 @@ export async function createLoanEntry(
     const fiscalYear = fiscalYearFor(entryDate, fyeMonth, fyeDay);
     const amountCents = Math.round(amountDollars * 100);
 
-    if (await t4aSlipIssuedFor(fiscalYear)) {
-      return { error: `A T4A slip was issued for FY ${fiscalYear}. Can't add a new entry in a closed year.` };
-    }
+    const t4aLock = await t4aSlipLockError(entryDate);
+    if (t4aLock) return { error: t4aLock };
     const t2Lock = await t2PeriodLockError(entryDate);
     if (t2Lock) return { error: t2Lock };
     const t1Lock = await t1PeriodLockError(entryDate);
@@ -167,11 +148,11 @@ export async function updateLoanEntry(
     const fiscalYear = fiscalYearFor(entryDate, fyeMonth, fyeDay);
     const amountCents = Math.round(amountDollars * 100);
 
-    if (await t4aSlipIssuedFor(existing.fiscalYear)) {
-      return { error: `A T4A slip was issued for FY ${existing.fiscalYear}. Edits are locked.` };
-    }
-    if (fiscalYear !== existing.fiscalYear && (await t4aSlipIssuedFor(fiscalYear))) {
-      return { error: `A T4A slip was issued for FY ${fiscalYear}. Can't move an entry into a closed year.` };
+    const oldT4aLock = await t4aSlipLockError(existing.entryDate);
+    if (oldT4aLock) return { error: oldT4aLock };
+    if (entryDate !== existing.entryDate) {
+      const newT4aLock = await t4aSlipLockError(entryDate);
+      if (newT4aLock) return { error: newT4aLock };
     }
     const oldT2Lock = await t2PeriodLockError(existing.entryDate);
     if (oldT2Lock) return { error: oldT2Lock };
@@ -212,9 +193,8 @@ export async function deleteLoanEntry(id: string): Promise<ActionResult> {
       .from(shareholderLoanEntries)
       .where(eq(shareholderLoanEntries.id, id));
     if (!existing) return { error: "Entry not found." };
-    if (await t4aSlipIssuedFor(existing.fiscalYear)) {
-      return { error: `A T4A slip was issued for FY ${existing.fiscalYear}. Delete blocked.` };
-    }
+    const t4aLock = await t4aSlipLockError(existing.entryDate);
+    if (t4aLock) return { error: t4aLock };
     const t2Lock = await t2PeriodLockError(existing.entryDate);
     if (t2Lock) return { error: t2Lock };
     const t1Lock = await t1PeriodLockError(existing.entryDate);
@@ -234,10 +214,13 @@ export async function deleteLoanEntry(id: string): Promise<ActionResult> {
         .from(dividends)
         .where(eq(dividends.id, existing.sourceRef));
       if (dividend) {
-        if (await t5SlipIssuedFor(dividend.fiscalYear)) {
-          return {
-            error: `A T5 slip was issued for FY ${dividend.fiscalYear}. Can't cascade-delete the linked dividend.`,
-          };
+        // T5 lock on the linked dividend's paidDate (if set). Unpaid dividends
+        // aren't on any T5 so they cascade-delete freely.
+        if (dividend.paidDate) {
+          const t5Lock = await t5SlipLockError(dividend.paidDate);
+          if (t5Lock) {
+            return { error: `${t5Lock} Cascade-delete of the linked dividend blocked.` };
+          }
         }
         linkedDividendId = dividend.id;
       }
@@ -477,14 +460,18 @@ export async function reclassifyDrawAsDividend(
 
     const dividendFY = fiscalYearFor(declaredDate, fyeMonth, fyeDay);
     const entryFY = fiscalYearFor(declaredDate, fyeMonth, fyeDay);
-    if (await t5SlipIssuedFor(dividendFY)) {
-      return { error: `A T5 slip was issued for FY ${dividendFY}. Can't create a dividend in a closed year.` };
-    }
-    if (await t4aSlipIssuedFor(entryFY)) {
-      return { error: `A T4A slip was issued for FY ${entryFY}. Can't add a loan-ledger entry in a closed year.` };
-    }
-    if (await t4aSlipIssuedFor(draw.fiscalYear)) {
-      return { error: `A T4A slip was issued for the draw's FY ${draw.fiscalYear}. Reclassifying would rewrite closed-year history.` };
+    // Slip locks — reclassify creates a paid dividend dated `declaredDate`
+    // AND a T4A-relevant ledger entry on the same date AND rewrites the
+    // original draw's CY history.
+    const declaredT5Lock = await t5SlipLockError(declaredDate);
+    if (declaredT5Lock) return { error: declaredT5Lock };
+    const declaredT4aLock = await t4aSlipLockError(declaredDate);
+    if (declaredT4aLock) return { error: declaredT4aLock };
+    if (draw.entryDate !== declaredDate) {
+      const drawT4aLock = await t4aSlipLockError(draw.entryDate);
+      if (drawT4aLock) {
+        return { error: `${drawT4aLock} Reclassifying would rewrite the draw's CY history.` };
+      }
     }
     // T2 filing-lock: both the declared-date FY (where the dividend lands)
     // and the draw's original FY (where history is being rewritten) must

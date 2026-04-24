@@ -58,10 +58,17 @@ import { computePsbRisk } from "../src/lib/psb";
 import {
   computeT1,
   dividendGrossUp,
+  dividendTaxCredit,
   marginalRateAt,
   marginalRateOnNextDollar,
   type T1Input,
 } from "../src/lib/t1";
+import {
+  t4SlipBoxesFromRaw,
+  t5SlipBoxesFromRaw,
+  type T4BoxesInput as SlipT4Input,
+  type T5BoxesInput as SlipT5Input,
+} from "../src/lib/slip-boxes";
 import {
   CPP_BASE_CREDIT_FRACTION,
   CPP_ENHANCED_DEDUCTION_FRACTION,
@@ -1360,6 +1367,125 @@ const t1Fixture: T1Input = {
     2,
   );
   record("Planner · cash-waterfall (corp net = revenue − opex − salary − ERcpp − cca)", failures);
+})();
+
+// ═════════════════════════════════════════════════════════════════════════
+// SLIP · T4 / T5 source identity — what lands on a filed slip MUST be what
+// the T1 / dashboard / planner / corp-tax paths read. Drift between these
+// is the exact class of bug the filing lock can't catch.
+// ═════════════════════════════════════════════════════════════════════════
+
+(() => {
+  const failures: string[] = [];
+  // Synthetic T4 raw sums — same shape the DB aggregator t4BoxesForYear produces.
+  const rawT4: SlipT4Input = {
+    box14EmploymentIncomeCents: 74_600_00,
+    box16CppBaseCents: 4_034_10,
+    box16aCpp2Cents: 396_00,
+    box18EiCents: 0,
+    box22FedTaxWithheldCents: 9_500_00,
+    box24EiInsurableCents: 0,
+    box26CppPensionableCents: 71_300_00,
+    box52PensionAdjustmentCents: 0,
+    ontarioTaxWithheldCents: 3_200_00,
+    employerCppBaseCents: 4_034_10,
+    employerCpp2Cents: 396_00,
+    count: 12,
+  };
+
+  // (1) Slip box14 === T1 input box14 — drift-guard.
+  const slipT4 = t4SlipBoxesFromRaw(rawT4, 2026);
+  expectEq(failures, "slip box14 ≡ raw box14", slipT4.box14EmploymentIncomeCents, rawT4.box14EmploymentIncomeCents);
+  expectEq(failures, "slip box16 ≡ raw box16", slipT4.box16CppBaseCents, rawT4.box16CppBaseCents);
+  expectEq(failures, "slip box16a ≡ raw box16a", slipT4.box16aCpp2Cents, rawT4.box16aCpp2Cents);
+  expectEq(failures, "slip box22 ≡ raw box22", slipT4.box22FedTaxWithheldCents, rawT4.box22FedTaxWithheldCents);
+  expectEq(failures, "slip box26 ≡ raw box26", slipT4.box26CppPensionableCents, rawT4.box26CppPensionableCents);
+  expectEq(failures, "slip ON withheld ≡ raw ON withheld", slipT4.ontarioTaxWithheldCents, rawT4.ontarioTaxWithheldCents);
+
+  // (2) Feeding the SAME raw into computeT1 must use the SAME values. Slip → T1 → slip round-trip.
+  const t1 = computeT1({
+    taxYear: 2026,
+    t4: rawT4,
+    t5: { eligibleActualCents: 0, nonEligibleActualCents: 0 },
+    t4aBox117Cents: 0,
+  });
+  // T1 line 10100/15000 employment-income floor MUST include the full box14 from the slip.
+  // totalIncomeCents >= box14 (the slip value). Use >= because T1 also adds dividends / box117.
+  if (t1.totalIncomeCents < slipT4.box14EmploymentIncomeCents) {
+    failures.push(`T1 totalIncome (${formatCAD(t1.totalIncomeCents)}) < slip box14 (${formatCAD(slipT4.box14EmploymentIncomeCents)}) — slip not fully flowing through`);
+  }
+  // With no dividends + no box117, totalIncome should equal box14 exactly (CPP enhanced deduction + CPP2 deduction come later).
+  expectEq(failures, "T1 totalIncome ≡ slip box14 (employment-only fixture)", t1.totalIncomeCents, slipT4.box14EmploymentIncomeCents);
+  record("Slip · T4 box values ≡ raw sums ≡ T1 source", failures);
+})();
+
+(() => {
+  const failures: string[] = [];
+  const rawT5: SlipT5Input = {
+    eligible: { actualCents: 12_000_00, count: 2 },
+    nonEligible: { actualCents: 8_000_00, count: 3 },
+  };
+
+  const slipT5 = t5SlipBoxesFromRaw(rawT5, 2026);
+  const t1 = computeT1({
+    taxYear: 2026,
+    t4: {
+      box14EmploymentIncomeCents: 0,
+      box16CppBaseCents: 0,
+      box16aCpp2Cents: 0,
+      box18EiCents: 0,
+      box22FedTaxWithheldCents: 0,
+      box24EiInsurableCents: 0,
+      box26CppPensionableCents: 0,
+      box52PensionAdjustmentCents: 0,
+      ontarioTaxWithheldCents: 0,
+    },
+    t5: {
+      eligibleActualCents: rawT5.eligible.actualCents,
+      nonEligibleActualCents: rawT5.nonEligible.actualCents,
+    },
+    t4aBox117Cents: 0,
+  });
+
+  // (3) Slip Box 24 (eligible actual) === raw (no loss).
+  expectEq(failures, "slip T5 box24 ≡ raw eligible actual", slipT5.eligible.actualCents, rawT5.eligible.actualCents);
+  expectEq(failures, "slip T5 box10 ≡ raw non-eligible actual", slipT5.nonEligible.actualCents, rawT5.nonEligible.actualCents);
+
+  // (4) Slip gross-up === T1 gross-up on the same actuals. No drift between slip and T1 math.
+  const elGuExpected = dividendGrossUp(rawT5.eligible.actualCents, ELIGIBLE_GROSS_UP_RATE);
+  const neGuExpected = dividendGrossUp(rawT5.nonEligible.actualCents, NON_ELIGIBLE_GROSS_UP_RATE);
+  expectEq(failures, "slip box25 ≡ dividendGrossUp(box24, 0.38)", slipT5.eligible.taxableCents, elGuExpected);
+  expectEq(failures, "slip box11 ≡ dividendGrossUp(box10, 0.15)", slipT5.nonEligible.taxableCents, neGuExpected);
+
+  // (5) Slip DTC === T1 DTC rate×taxable.
+  expectEq(
+    failures,
+    "slip box26 ≡ dividendTaxCredit(box25, 0.150198)",
+    slipT5.eligible.federalDtcCents,
+    dividendTaxCredit(slipT5.eligible.taxableCents, FEDERAL_DTC_ELIGIBLE_RATE),
+  );
+  expectEq(
+    failures,
+    "slip box12 ≡ dividendTaxCredit(box11, 0.090301)",
+    slipT5.nonEligible.federalDtcCents,
+    dividendTaxCredit(slipT5.nonEligible.taxableCents, FEDERAL_DTC_NON_ELIGIBLE_RATE),
+  );
+  expectEq(
+    failures,
+    "slip ON eligible DTC ≡ dividendTaxCredit(box25, 0.10)",
+    slipT5.eligible.ontarioDtcCents,
+    dividendTaxCredit(slipT5.eligible.taxableCents, ONTARIO_DTC_ELIGIBLE_RATE),
+  );
+  expectEq(
+    failures,
+    "slip ON non-eligible DTC ≡ dividendTaxCredit(box11, 0.029863)",
+    slipT5.nonEligible.ontarioDtcCents,
+    dividendTaxCredit(slipT5.nonEligible.taxableCents, ONTARIO_DTC_NON_ELIGIBLE_RATE_2026),
+  );
+
+  // (6) T1 totalIncome = box14(0) + eligibleGrossedUp + nonElGrossedUp + box117(0) → sanity the gross-up reaches T1.
+  expectEq(failures, "T1 totalIncome ≡ slip taxable total (no other sources)", t1.totalIncomeCents, slipT5.totals.taxableCents);
+  record("Slip · T5 box values ≡ raw actuals + shared gross-up / DTC math ≡ T1 source", failures);
 })();
 
 // ——— runner ———

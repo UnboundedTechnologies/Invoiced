@@ -21,6 +21,7 @@ import { PaystubPDF } from "@/lib/paystub-pdf";
 import { getBannerDataUri } from "@/lib/pdf-banner";
 import { t2PeriodLockError } from "./t2";
 import { t1PeriodLockError } from "./t1";
+import { t4SlipLockError } from "./slips";
 
 type ActionResult = { ok?: string; error?: string };
 
@@ -77,6 +78,8 @@ export async function createPaycheque(
     if (t2Lock) return { error: t2Lock };
     const t1Lock = await t1PeriodLockError(data.payDate);
     if (t1Lock) return { error: t1Lock };
+    const t4Lock = await t4SlipLockError(data.payDate);
+    if (t4Lock) return { error: t4Lock };
 
     const [s] = await db.select().from(settings).where(eq(settings.id, 1));
     if (!s) return { error: "Settings not seeded." };
@@ -248,6 +251,8 @@ export async function setPaychequeStatus(id: string, status: string): Promise<Ac
     if (t2Lock) return { error: t2Lock };
     const t1Lock = await t1PeriodLockError(pq.payDate);
     if (t1Lock) return { error: t1Lock };
+    const t4Lock = await t4SlipLockError(pq.payDate);
+    if (t4Lock) return { error: t4Lock };
 
     await db.update(paycheques).set({ status: parsed.data }).where(eq(paycheques.id, id));
 
@@ -316,6 +321,8 @@ export async function deleteDraftPaycheque(id: string): Promise<ActionResult> {
     if (t2Lock) return { error: t2Lock };
     const t1Lock = await t1PeriodLockError(pq.payDate);
     if (t1Lock) return { error: t1Lock };
+    const t4Lock = await t4SlipLockError(pq.payDate);
+    if (t4Lock) return { error: t4Lock };
 
     if (pq.pdfBlobUrl) {
       try {
