@@ -161,6 +161,22 @@
 }
 .animate-glow-pulse { animation: glow-pulse 4.5s ease-in-out infinite; }
 
+/* TopBar decoration: DQIII HD-2D-inspired multi-biome landscape scrolling behind
+   the walking characters. Tile is 2000×100 native; background-size scales height
+   to the pill, so displayed tile width = pill-height × 20. At h-10 (40px) that's
+   800px per tile; 40s linear scroll = 20px/s = one biome every ~10s. */
+.dq-scene {
+  background-image: url("/sprites/dq-landscape.svg");
+  background-repeat: repeat-x;
+  background-size: auto 100%;
+  background-position: 0 center;
+  animation: dq-scene-scroll 40s linear infinite reverse;
+}
+@keyframes dq-scene-scroll {
+  from { background-position: 0 center; }
+  to   { background-position: -800px center; }
+}
+
 /* Reduced-motion: kill all animations + transitions */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
