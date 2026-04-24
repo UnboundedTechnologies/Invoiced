@@ -12,7 +12,8 @@ import {
 } from "@/lib/db/schema";
 import { and, asc, eq } from "drizzle-orm";
 import { getSettings } from "@/lib/db/queries";
-import { hstReturns } from "@/lib/db/schema";
+import { hstReturns, deadlines } from "@/lib/db/schema";
+import { inArray } from "drizzle-orm";
 import {
   aggregateRegular,
   aggregateQuickMethod,
@@ -42,6 +43,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Sparkline } from "@/components/sparkline";
 import { PsbDashboardBanner } from "@/components/psb/dashboard-banner";
 import { LoanRiskBanner } from "@/components/shareholder-loan/risk-banner";
+import { SlipDeadlineBanner, type SlipDeadlineRow } from "@/components/slips/dashboard-banner";
 import { computePsbRisk } from "@/lib/psb";
 import { computeLoanTimeline, type LoanEntry, type RatePeriod } from "@/lib/shareholder-loan";
 import {
@@ -84,6 +86,32 @@ export default async function DashboardPage() {
     db.select().from(expenses),
     db.select().from(hstReturns),
   ]);
+
+  // Open slip deadlines (T4 / T5). Anything incomplete due in the next 60
+  // days or already overdue lights up the dashboard banner.
+  const openSlipRows = await db
+    .select({
+      category: deadlines.category,
+      dueDate: deadlines.dueDate,
+      sourceKey: deadlines.sourceKey,
+    })
+    .from(deadlines)
+    .where(
+      and(inArray(deadlines.category, ["t4", "t5"]), eq(deadlines.completed, false)),
+    );
+  const sixtyDaysOut = new Date();
+  sixtyDaysOut.setUTCDate(sixtyDaysOut.getUTCDate() + 60);
+  const horizonIso = sixtyDaysOut.toISOString().slice(0, 10);
+  const slipDeadlinesOpen: SlipDeadlineRow[] = openSlipRows
+    .filter((r) => r.dueDate <= horizonIso) // overdue (< today) or within 60 days
+    .map((r) => {
+      const [typePart, yearPart] = (r.sourceKey ?? "").split(":");
+      const type = typePart?.toUpperCase() as "T4" | "T5" | undefined;
+      const taxYear = Number(yearPart);
+      if (!type || !Number.isFinite(taxYear)) return null;
+      return { type, taxYear, dueDate: r.dueDate } satisfies SlipDeadlineRow;
+    })
+    .filter((r): r is SlipDeadlineRow => r !== null);
   const firstName = s?.directorLegalName?.split(" ")[0] ?? "there";
   const fyeMonth = s?.fiscalYearEndMonth ?? 12;
   const fyeDay = s?.fiscalYearEndDay ?? 31;
@@ -340,6 +368,8 @@ export default async function DashboardPage() {
           {s?.corpLegalName} · fiscal year ending {fyEnd}
         </p>
       </div>
+
+      <SlipDeadlineBanner openSlips={slipDeadlinesOpen} today={today} />
 
       <PsbDashboardBanner score={psb.score} risk={psb.risk} criticalMissing={psb.criticalMissing} />
 

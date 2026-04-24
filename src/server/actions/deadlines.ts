@@ -45,6 +45,7 @@ export async function syncAnnualDeadlines(): Promise<ActionResult> {
         fyeDay: s.fiscalYearEndDay,
         incorporationDate: s.incorporationDate,
         payrollActive: s.payrollAccountActive,
+        payerRzActive: s.payerRzActive,
         fiscalYear: fy,
       }),
     );
@@ -185,7 +186,7 @@ const manualSchema = z.object({
   title: z.string().min(1).max(120),
   description: z.string().max(500).nullable(),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  category: z.enum(["other", "t2", "t4", "t1", "hst", "annual_return", "payroll"]),
+  category: z.enum(["other", "t2", "t4", "t5", "t1", "hst", "annual_return", "payroll"]),
 });
 
 export async function createManualDeadline(

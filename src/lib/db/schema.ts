@@ -640,7 +640,7 @@ export const deadlines = pgTable(
     title: text("title").notNull(),
     description: text("description"),
     dueDate: date("due_date").notNull(),
-    category: text("category").notNull(), // hst | payroll | t2 | t4 | t1 | annual_return | other
+    category: text("category").notNull(), // hst | payroll | t2 | t4 | t5 | t1 | annual_return | other
     completed: boolean("completed").notNull().default(false),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     // Natural key for idempotent upsert by derivation lib. NULL for user-entered
