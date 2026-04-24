@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronRight, Sparkles } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { ChevronRight } from "lucide-react";
 
 type Meta = { section: string; sectionHref: string; page: string };
 
@@ -59,14 +58,19 @@ export function TopBar({ corpName }: { corpName: string }) {
           </span>
         </nav>
 
-        <span
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-medium text-indigo-300",
-          )}
+        <div
+          className="dq-scene relative h-10 w-[200px] overflow-hidden rounded-md border border-border/40 shadow-sm"
+          role="img"
+          aria-label="Heroes walking through the landscape"
         >
-          <Sparkles className="size-3" />
-          Phase 0
-        </span>
+          {/* eslint-disable-next-line @next/next/no-img-element -- next/image re-encodes animated GIFs into static frames, which kills the walk cycle */}
+          <img
+            src="/sprites/dq11nb.gif"
+            alt=""
+            className="relative h-full w-full select-none object-cover object-[center_80%]"
+            draggable={false}
+          />
+        </div>
       </div>
     </div>
   );
