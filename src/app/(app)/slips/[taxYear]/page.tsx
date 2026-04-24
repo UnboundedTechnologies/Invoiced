@@ -18,6 +18,7 @@ import { CPP_YMPE_2026 } from "@/lib/payroll-2026";
 import type { T4SlipBoxes, T5SlipBoxes } from "@/lib/slip-boxes";
 import type { Slip } from "@/lib/db/schema";
 import { GenerateSlipPdfButton } from "@/components/slips/generate-slip-pdf-button";
+import { GenerateSlipCsvButton } from "@/components/slips/generate-slip-csv-button";
 import { FileSlipButton } from "@/components/slips/file-slip-button";
 import { VoidSlipButton } from "@/components/slips/void-slip-button";
 
@@ -173,6 +174,16 @@ export default async function SlipPreviewPage({
                   <Lock className="size-4" />
                   Download filed T4 PDF
                 </a>
+                <GenerateSlipCsvButton
+                  kind="T4"
+                  taxYear={taxYear}
+                  disabled={t4.paychequeCount === 0}
+                  disabledReason={
+                    t4.paychequeCount === 0
+                      ? `No issued paycheques in CY ${taxYear}.`
+                      : undefined
+                  }
+                />
                 <VoidSlipButton slipId={preview.existing.t4.id} kind="T4" taxYear={taxYear} />
               </>
             ) : (
@@ -184,6 +195,16 @@ export default async function SlipPreviewPage({
                   disabledReason={
                     t4.paychequeCount === 0
                       ? `No issued paycheques in CY ${taxYear} — nothing to generate.`
+                      : undefined
+                  }
+                />
+                <GenerateSlipCsvButton
+                  kind="T4"
+                  taxYear={taxYear}
+                  disabled={t4.paychequeCount === 0}
+                  disabledReason={
+                    t4.paychequeCount === 0
+                      ? `No issued paycheques in CY ${taxYear}.`
                       : undefined
                   }
                 />
@@ -213,6 +234,16 @@ export default async function SlipPreviewPage({
                   <Lock className="size-4" />
                   Download filed T5 PDF
                 </a>
+                <GenerateSlipCsvButton
+                  kind="T5"
+                  taxYear={taxYear}
+                  disabled={t5.eligible.count + t5.nonEligible.count === 0}
+                  disabledReason={
+                    t5.eligible.count + t5.nonEligible.count === 0
+                      ? `No paid dividends in CY ${taxYear}.`
+                      : undefined
+                  }
+                />
                 <VoidSlipButton slipId={preview.existing.t5.id} kind="T5" taxYear={taxYear} />
               </>
             ) : (
@@ -224,6 +255,16 @@ export default async function SlipPreviewPage({
                   disabledReason={
                     t5.eligible.count + t5.nonEligible.count === 0
                       ? `No paid dividends in CY ${taxYear} — nothing to generate.`
+                      : undefined
+                  }
+                />
+                <GenerateSlipCsvButton
+                  kind="T5"
+                  taxYear={taxYear}
+                  disabled={t5.eligible.count + t5.nonEligible.count === 0}
+                  disabledReason={
+                    t5.eligible.count + t5.nonEligible.count === 0
+                      ? `No paid dividends in CY ${taxYear}.`
                       : undefined
                   }
                 />

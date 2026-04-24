@@ -14,6 +14,13 @@ import {
   type T5BoxesInput,
 } from "../src/lib/slip-boxes";
 import {
+  t4BoxesToCsv,
+  t5BoxesToCsv,
+  fmtAmount,
+  csvField,
+  type SlipCsvPayer,
+} from "../src/lib/slip-csv";
+import {
   ELIGIBLE_GROSS_UP_RATE,
   FEDERAL_DTC_ELIGIBLE_RATE,
   FEDERAL_DTC_NON_ELIGIBLE_RATE,
@@ -319,6 +326,220 @@ function blankT5(): T5BoxesInput {
     }
   }
   record("T5 eligible DTC ratio ≈ FEDERAL_DTC_ELIGIBLE_RATE at multiple scales", failures);
+})();
+
+// ─────────────────────────────────────────────────────────────────────────
+// CSV BUILDER TESTS (4E-6) — exercise slip-csv.ts without DATABASE_URL.
+// ─────────────────────────────────────────────────────────────────────────
+
+const samplePayer: SlipCsvPayer = {
+  corpLegalName: "Unbounded Technologies Inc.",
+  businessNumber: "726742430",
+  payrollAccount: "726742430RP0001",
+  payerRzAccount: "726742430RZ0001",
+  directorLegalName: "Saïd Aïssani",
+};
+
+// ——— Test CSV-1: fmtAmount produces CRA-friendly dollars.cents ———
+(() => {
+  const failures: string[] = [];
+  expectEq(failures, "$0.00", fmtAmount(0), "0.00");
+  expectEq(failures, "$0.05", fmtAmount(5), "0.05");
+  expectEq(failures, "$1.00", fmtAmount(100), "1.00");
+  expectEq(failures, "$1,234.56 → 1234.56 (no thousands sep)", fmtAmount(1_234_56), "1234.56");
+  expectEq(failures, "$71,300.00 → 71300.00", fmtAmount(71_300_00), "71300.00");
+  expectEq(failures, "negative cents", fmtAmount(-100), "-1.00");
+  record("fmtAmount: dollars.cents with period, no thousands separator, negatives with minus", failures);
+})();
+
+// ——— Test CSV-2: csvField — RFC 4180 quoting + injection guard ———
+(() => {
+  const failures: string[] = [];
+  // Plain values pass through
+  expectEq(failures, "plain", csvField("hello"), "hello");
+  expectEq(failures, "amount", csvField("71300.00"), "71300.00");
+  // Comma forces quoting
+  expectEq(failures, "comma → quoted", csvField("a,b"), '"a,b"');
+  // Double-quote inside → escaped by doubling + whole field quoted
+  expectEq(failures, "double-quote → escaped", csvField('say "hi"'), '"say ""hi"""');
+  // Newlines force quoting
+  expectEq(failures, "newline → quoted", csvField("line1\nline2"), '"line1\nline2"');
+  // Carriage return forces quoting
+  expectEq(failures, "CR → quoted", csvField("a\rb"), '"a\rb"');
+  // Injection guard: = → ' prefix + quoted (because ' isn't a special char, only if other specials)
+  expectEq(failures, "formula = prefixed with '", csvField("=SUM(A1)"), "'=SUM(A1)");
+  expectEq(failures, "formula + prefixed with '", csvField("+cmd"), "'+cmd");
+  expectEq(failures, "formula - prefixed with '", csvField("-cmd"), "'-cmd");
+  expectEq(failures, "formula @ prefixed with '", csvField("@cmd"), "'@cmd");
+  expectEq(failures, "formula | prefixed with '", csvField("|cmd"), "'|cmd");
+  expectEq(failures, "formula % prefixed with '", csvField("%cmd"), "'%cmd");
+  expectEq(failures, "formula TAB prefixed with '", csvField("\tcmd"), "'\tcmd");
+  // Leading digit is NOT a formula — pass through
+  expectEq(failures, "leading digit ignored", csvField("1-2"), "1-2");
+  record("csvField: RFC 4180 quoting + Excel/Sheets formula-injection guard", failures);
+})();
+
+// ——— Test CSV-3: T4 CSV contains the right rows in the right order ———
+(() => {
+  const failures: string[] = [];
+  const raw: T4BoxesInput = {
+    box14EmploymentIncomeCents: 71_300_00,
+    box16CppBaseCents: 4_034_10,
+    box16aCpp2Cents: 396_00,
+    box18EiCents: 0,
+    box22FedTaxWithheldCents: 9_500_00,
+    box24EiInsurableCents: 0,
+    box26CppPensionableCents: 71_300_00,
+    box52PensionAdjustmentCents: 0,
+    ontarioTaxWithheldCents: 3_200_00,
+    employerCppBaseCents: 4_034_10,
+    employerCpp2Cents: 396_00,
+    count: 12,
+  };
+  const t4 = t4SlipBoxesFromRaw(raw, 2026);
+  const csv = t4BoxesToCsv(t4, samplePayer, 2026);
+
+  // BOM + CRLF check
+  if (!csv.startsWith("﻿")) failures.push("CSV missing UTF-8 BOM");
+  if (!csv.includes("\r\n")) failures.push("CSV missing CRLF line endings");
+
+  // Header row
+  if (!csv.includes("Section,Box,Description,Amount,Notes")) {
+    failures.push("header row missing or wrong");
+  }
+  // Every CRA slip box shows up with its value
+  for (const [box, expected] of [
+    ["Box 14", fmtAmount(71_300_00)],
+    ["Box 16", fmtAmount(4_034_10)],
+    ["Box 16A", fmtAmount(396_00)],
+    ["Box 22", fmtAmount(9_500_00)],
+    ["Box 26", fmtAmount(71_300_00)],
+  ] as const) {
+    if (!csv.includes(`,${box},`)) failures.push(`${box} row missing`);
+    if (!csv.includes(`,${expected},`)) failures.push(`${box} amount ${expected} missing`);
+  }
+  // Box 28 emits "X" not a dollar amount
+  if (!csv.includes(",Box 28,") || !csv.includes(",X,")) {
+    failures.push("Box 28 exempt indicator row missing or missing X marker");
+  }
+  // SIN row must have empty amount + a never-stored note
+  if (!/META.*Recipient SIN.*NEVER STORED/.test(csv)) {
+    failures.push("SIN meta row missing never-stored note");
+  }
+  // Section order: META first, then SLIP, then SUMMARY
+  const metaIdx = csv.indexOf("META,");
+  const slipIdx = csv.indexOf("SLIP,");
+  const summaryIdx = csv.indexOf("SUMMARY,");
+  if (metaIdx < 0 || slipIdx < 0 || summaryIdx < 0) {
+    failures.push("one or more sections missing");
+  } else if (!(metaIdx < slipIdx && slipIdx < summaryIdx)) {
+    failures.push(`section order broken: META=${metaIdx} SLIP=${slipIdx} SUMMARY=${summaryIdx}`);
+  }
+  // Rates-edition tag is stamped
+  if (!csv.includes(t4.ratesEditionTag)) failures.push("ratesEditionTag missing");
+  record("T4 CSV: BOM + CRLF + header + all slip boxes + SIN never-stored + section order + rates tag", failures);
+})();
+
+// ——— Test CSV-4: T5 CSV contains eligible + non-eligible split + report code ———
+(() => {
+  const failures: string[] = [];
+  const raw: T5BoxesInput = {
+    eligible: { actualCents: 10_000_00, count: 2 },
+    nonEligible: { actualCents: 5_000_00, count: 1 },
+  };
+  const t5 = t5SlipBoxesFromRaw(raw, 2026);
+  const csv = t5BoxesToCsv(t5, samplePayer, 2026);
+
+  // Report code row (Box 21 = O) — literal string O, not an amount
+  if (!csv.includes(",Box 21,") || !/Box 21,[^,]+,O,/.test(csv)) {
+    failures.push("Box 21 report code row missing or missing O value");
+  }
+  // Recipient type (Box 22 = 1)
+  if (!csv.includes(",Box 22,") || !/Box 22,[^,]+,1,/.test(csv)) {
+    failures.push("Box 22 recipient type row missing or missing 1 value");
+  }
+  // Eligible boxes present with expected values
+  if (!csv.includes(`,Box 24,`) || !csv.includes(`,${fmtAmount(10_000_00)},`)) {
+    failures.push("Box 24 eligible actual missing");
+  }
+  if (!csv.includes(`,Box 25,`) || !csv.includes(`,${fmtAmount(13_800_00)},`)) {
+    failures.push("Box 25 eligible taxable missing or wrong gross-up");
+  }
+  // Non-eligible boxes
+  if (!csv.includes(`,Box 10,`) || !csv.includes(`,${fmtAmount(5_000_00)},`)) {
+    failures.push("Box 10 non-eligible actual missing");
+  }
+  if (!csv.includes(`,Box 11,`) || !csv.includes(`,${fmtAmount(5_750_00)},`)) {
+    failures.push("Box 11 non-eligible taxable missing or wrong gross-up");
+  }
+  // Summary grand-total row references totals
+  if (!csv.includes(`,${fmtAmount(15_000_00)},`)) {
+    failures.push("Grand total actual (15,000) missing");
+  }
+  if (!csv.includes(`,${fmtAmount(19_550_00)},`)) {
+    failures.push("Grand total taxable (13,800 + 5,750 = 19,550) missing");
+  }
+  // SIN reminder present
+  if (!/META.*Recipient SIN.*NEVER STORED/.test(csv)) {
+    failures.push("SIN meta row missing never-stored note");
+  }
+  record("T5 CSV: report code + recipient type + eligible/non-eligible split + grand totals + SIN guard", failures);
+})();
+
+// ——— Test CSV-5: formula-injection resistance on payer legal name ———
+(() => {
+  const failures: string[] = [];
+  const maliciousPayer: SlipCsvPayer = {
+    ...samplePayer,
+    corpLegalName: "=HYPERLINK(\"evil.com\")",
+  };
+  const raw: T4BoxesInput = {
+    box14EmploymentIncomeCents: 1_000_00,
+    box16CppBaseCents: 0,
+    box16aCpp2Cents: 0,
+    box18EiCents: 0,
+    box22FedTaxWithheldCents: 0,
+    box24EiInsurableCents: 0,
+    box26CppPensionableCents: 1_000_00,
+    box52PensionAdjustmentCents: 0,
+    ontarioTaxWithheldCents: 0,
+    employerCppBaseCents: 0,
+    employerCpp2Cents: 0,
+    count: 1,
+  };
+  const csv = t4BoxesToCsv(t4SlipBoxesFromRaw(raw, 2026), maliciousPayer, 2026);
+  // The raw "=" prefix must never appear as a field start — it should be quoted with a leading apostrophe.
+  // Since the value contains a double-quote ("), it'll be quoted; verify the leading apostrophe is before the =.
+  if (!csv.includes(`"'=HYPERLINK(""evil.com"")"`)) {
+    failures.push("formula-injection guard did not prefix malicious corp name");
+  }
+  record("CSV formula-injection guard survives adversarial payer field", failures);
+})();
+
+// ——— Test CSV-6: Amount arithmetic in summary totals is consistent with slip values ———
+(() => {
+  const failures: string[] = [];
+  const raw: T4BoxesInput = {
+    box14EmploymentIncomeCents: 50_000_00,
+    box16CppBaseCents: 2_750_00,
+    box16aCpp2Cents: 200_00,
+    box18EiCents: 0,
+    box22FedTaxWithheldCents: 6_000_00,
+    box24EiInsurableCents: 0,
+    box26CppPensionableCents: 50_000_00,
+    box52PensionAdjustmentCents: 0,
+    ontarioTaxWithheldCents: 1_500_00,
+    employerCppBaseCents: 2_750_00,
+    employerCpp2Cents: 200_00,
+    count: 12,
+  };
+  const csv = t4BoxesToCsv(t4SlipBoxesFromRaw(raw, 2026), samplePayer, 2026);
+  // Sum: 6000 + 1500 + 2750 + 2750 + 200 + 200 = 13400
+  const expectedRemittance = fmtAmount(13_400_00);
+  if (!csv.includes(`,${expectedRemittance},`)) {
+    failures.push(`Total remittance ${expectedRemittance} missing — summary math wrong`);
+  }
+  record("T4 CSV summary total remittance = fed + ON + CPP EE + CPP ER + CPP2 EE + CPP2 ER", failures);
 })();
 
 // ——— runner ———
