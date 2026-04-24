@@ -7,6 +7,8 @@
  * - T2 corporate income tax — due 6 months after FYE (ITA s.150(1))
  * - T4 slip filing + T4 summary — due Feb 28 of the calendar year after
  *   the pay year ended (ITA reg 210(2))
+ * - T5 slip filing + T5 summary — due Feb 28 of the calendar year after
+ *   the CY the dividend was paid (ITA reg 200(1))
  * - Ontario annual return — due on the incorporation-date anniversary
  *   each year (Ontario Business Corporations Act ss.3.1)
  * - HST annual return — due 3 months after FYE (ETA s.245) — but the
@@ -23,7 +25,7 @@ export type AnnualDeadline = {
   title: string;
   description: string;
   dueDate: string; // YYYY-MM-DD
-  category: "t2" | "t4" | "annual_return" | "hst" | "other";
+  category: "t2" | "t4" | "t5" | "annual_return" | "hst" | "other";
 };
 
 export type DeriveInput = {
@@ -35,12 +37,14 @@ export type DeriveInput = {
   incorporationDate: string | null;
   /** Whether RP0001 payroll is active — gates T4 deadline generation. */
   payrollActive: boolean;
+  /** Whether RZ0001 info-returns is active — gates T5 deadline generation. */
+  payerRzActive: boolean;
   /** The fiscal year to derive deadlines for (labelled by ending calendar year). */
   fiscalYear: number;
 };
 
 export function deriveAnnualDeadlines(input: DeriveInput): AnnualDeadline[] {
-  const { fyeMonth, fyeDay, incorporationDate, payrollActive, fiscalYear } = input;
+  const { fyeMonth, fyeDay, incorporationDate, payrollActive, payerRzActive, fiscalYear } = input;
   const out: AnnualDeadline[] = [];
 
   const fyeIso = isoDate(fiscalYear, fyeMonth, fyeDay);
@@ -77,6 +81,19 @@ export function deriveAnnualDeadlines(input: DeriveInput): AnnualDeadline[] {
       description: `T4 + T4 Summary for ${payYear} pay year (due Feb 28 per Reg 210(2)).`,
       dueDate: isoDate(payYear + 1, 2, 28),
       category: "t4",
+    });
+  }
+
+  // T5 slip filing — Feb 28 of the calendar year after the CY the dividend
+  // was paid. Same calendar-year convention as T4; gated on RZ0001 active.
+  if (payerRzActive) {
+    const payYear = fiscalYear;
+    out.push({
+      key: `t5:${payYear}`,
+      title: `T5 slips — ${payYear}`,
+      description: `T5 + T5 Summary for dividends paid in ${payYear} (due Feb 28 per Reg 200(1)).`,
+      dueDate: isoDate(payYear + 1, 2, 28),
+      category: "t5",
     });
   }
 

@@ -7,7 +7,7 @@ import { put } from "@vercel/blob";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
-import { slips, settings, documents, auditLog, type Slip } from "@/lib/db/schema";
+import { slips, settings, documents, deadlines, auditLog, type Slip } from "@/lib/db/schema";
 import { taxYearFor } from "@/lib/t1";
 import { auth } from "../../../auth";
 import { taxYearsWithActivity } from "@/lib/queries/personal-tax-slices";
@@ -444,6 +444,9 @@ export async function fileT4Slip(
       })
       .returning({ id: slips.id });
 
+    // Remove the upcoming t4:<cy> deadline (it's done).
+    await db.delete(deadlines).where(eq(deadlines.sourceKey, `t4:${taxYear}`));
+
     await db.insert(auditLog).values({
       actorEmail: email,
       action: "update",
@@ -611,6 +614,8 @@ export async function fileT5Slip(
       })
       .returning({ id: slips.id });
 
+    await db.delete(deadlines).where(eq(deadlines.sourceKey, `t5:${taxYear}`));
+
     await db.insert(auditLog).values({
       actorEmail: email,
       action: "update",
@@ -671,6 +676,33 @@ export async function voidSlip(
         updatedAt: new Date(),
       })
       .where(eq(slips.id, slipId));
+
+    // Re-upsert the deadline row (it was deleted on file). Only insert if no
+    // row already exists for this natural key — future sync runs will keep
+    // it fresh.
+    const sourceKey = `${row.type.toLowerCase()}:${row.taxYear}`;
+    const [existingDeadline] = await db
+      .select({ id: deadlines.id })
+      .from(deadlines)
+      .where(eq(deadlines.sourceKey, sourceKey))
+      .limit(1);
+    if (!existingDeadline) {
+      const dueDate = `${row.taxYear + 1}-02-28`;
+      const title = `${row.type} slips — ${row.taxYear}`;
+      const description =
+        row.type === "T4"
+          ? `T4 + T4 Summary for ${row.taxYear} pay year (due Feb 28 per Reg 210(2)).`
+          : row.type === "T5"
+            ? `T5 + T5 Summary for dividends paid in ${row.taxYear} (due Feb 28 per Reg 200(1)).`
+            : `${row.type} for ${row.taxYear}`;
+      await db.insert(deadlines).values({
+        title,
+        description,
+        dueDate,
+        category: row.type.toLowerCase(),
+        sourceKey,
+      });
+    }
 
     await db.insert(auditLog).values({
       actorEmail: email,

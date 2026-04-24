@@ -28,6 +28,7 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
     fyeDay: 31,
     incorporationDate: "2026-03-30",
     payrollActive: true,
+    payerRzActive: false,
     fiscalYear: 2026,
   });
   const byKey = Object.fromEntries(ds.map((d) => [d.key, d]));
@@ -56,6 +57,7 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
     fyeDay: 31,
     incorporationDate: "2025-05-15",
     payrollActive: true,
+    payerRzActive: false,
     fiscalYear: 2026,
   });
   const byKey = Object.fromEntries(ds.map((d) => [d.key, d]));
@@ -81,6 +83,7 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
     fyeDay: 31,
     incorporationDate: "2026-03-30",
     payrollActive: false,
+    payerRzActive: false,
     fiscalYear: 2026,
   });
   const hasT4 = ds.some((d) => d.key.startsWith("t4:"));
@@ -97,6 +100,7 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
     fyeDay: 31,
     incorporationDate: null,
     payrollActive: true,
+    payerRzActive: false,
     fiscalYear: 2026,
   });
   const hasAR = ds.some((d) => d.key.startsWith("annual_return:"));
@@ -115,6 +119,7 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
     fyeDay: 31,
     incorporationDate: "2024-02-29",
     payrollActive: false,
+    payerRzActive: false,
     fiscalYear: 2026,
   });
   const ar = ds.find((d) => d.key === "annual_return:2026");
@@ -131,6 +136,7 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
     fyeDay: 31,
     incorporationDate: "2024-02-29",
     payrollActive: false,
+    payerRzActive: false,
     fiscalYear: 2028, // leap year
   });
   const ar = ds.find((d) => d.key === "annual_return:2028");
@@ -147,6 +153,7 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
     fyeDay: 31,
     incorporationDate: "2026-03-30",
     payrollActive: true,
+    payerRzActive: false,
     fiscalYear: 2026,
   });
   const ds2 = deriveAnnualDeadlines({
@@ -154,6 +161,7 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
     fyeDay: 31,
     incorporationDate: "2026-03-30",
     payrollActive: true,
+    payerRzActive: false,
     fiscalYear: 2026,
   });
   const keys1 = ds1.map((d) => d.key).sort();
@@ -168,12 +176,13 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
 
 (() => {
   const failures: string[] = [];
-  const validCategories = new Set(["t2", "t4", "hst", "annual_return", "other"]);
+  const validCategories = new Set(["t2", "t4", "t5", "hst", "annual_return", "other"]);
   const ds = deriveAnnualDeadlines({
     fyeMonth: 12,
     fyeDay: 31,
     incorporationDate: "2026-03-30",
     payrollActive: true,
+    payerRzActive: false,
     fiscalYear: 2026,
   });
   for (const d of ds) {
@@ -193,6 +202,7 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
     fyeDay: 31,
     incorporationDate: "2026-03-30",
     payrollActive: true,
+    payerRzActive: false,
     fiscalYear: 2026,
   });
   const ds2027 = deriveAnnualDeadlines({
@@ -200,6 +210,7 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
     fyeDay: 31,
     incorporationDate: "2026-03-30",
     payrollActive: true,
+    payerRzActive: false,
     fiscalYear: 2027,
   });
   const t2_2026 = ds2026.find((d) => d.key === "t2:2026")!.dueDate;
@@ -213,7 +224,43 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
   record("FY progression: next-FY deadlines are after current-FY, keys don't collide", failures);
 })();
 
-// ——— Test 10: HST due exactly halves T2 due window (3mo vs 6mo) ———
+// ——— Test 10a: RZ inactive → no T5 deadline ———
+
+(() => {
+  const failures: string[] = [];
+  const ds = deriveAnnualDeadlines({
+    fyeMonth: 12,
+    fyeDay: 31,
+    incorporationDate: "2026-03-30",
+    payrollActive: true,
+    payerRzActive: false,
+    fiscalYear: 2026,
+  });
+  const hasT5 = ds.some((d) => d.key.startsWith("t5:"));
+  expectEq(failures, "no T5 when RZ inactive", hasT5, false);
+  record("RZ gate: T5 deadline only emitted when RZ0001 is active", failures);
+})();
+
+// ——— Test 10b: RZ active → T5 deadline at Feb 28 of CY+1 ———
+
+(() => {
+  const failures: string[] = [];
+  const ds = deriveAnnualDeadlines({
+    fyeMonth: 12,
+    fyeDay: 31,
+    incorporationDate: "2026-03-30",
+    payrollActive: false,
+    payerRzActive: true,
+    fiscalYear: 2026,
+  });
+  const t5 = ds.find((d) => d.key === "t5:2026");
+  expectEq(failures, "T5 key present when RZ active", !!t5, true);
+  expectEq(failures, "T5 due = Feb 28 of CY+1", t5?.dueDate, "2027-02-28");
+  expectEq(failures, "T5 category", t5?.category, "t5");
+  record("RZ active: T5 deadline due Feb 28 of CY+1", failures);
+})();
+
+// ——— Test 11: HST due exactly halves T2 due window (3mo vs 6mo) ———
 
 (() => {
   const failures: string[] = [];
@@ -222,6 +269,7 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
     fyeDay: 31,
     incorporationDate: null,
     payrollActive: false,
+    payerRzActive: false,
     fiscalYear: 2026,
   });
   const hst = ds.find((d) => d.key === "hst:2026")!;
