@@ -1,9 +1,19 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { slips } from "@/lib/db/schema";
+import { slips, type Slip } from "@/lib/db/schema";
 import { taxYearFor } from "@/lib/t1";
+import { auth } from "../../../auth";
+import { taxYearsWithActivity } from "@/lib/queries/personal-tax-slices";
+import { buildT4SlipBoxes, buildT5SlipBoxes } from "@/lib/queries/slip-aggregation";
+import type { T4SlipBoxes, T5SlipBoxes } from "@/lib/slip-boxes";
+
+async function requireSession() {
+  const session = await auth();
+  if (!session?.user?.email) throw new Error("Unauthorized");
+  return session.user.email;
+}
 
 // Shared slip-filing lock helpers. All three check whether a slip with
 // status='filed' exists for the calendar year derived from the given ISO
@@ -48,4 +58,54 @@ export async function t5SlipLockError(paidDate: string): Promise<string | null> 
 /** Block if a T4A slip is filed for the loan-entry's entry-date calendar year. */
 export async function t4aSlipLockError(entryDate: string): Promise<string | null> {
   return slipLockError(entryDate, "T4A", "Loan-ledger edit");
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// List + preview queries — drive /slips + /slips/[taxYear]
+// ────────────────────────────────────────────────────────────────────────
+
+/** All slip rows (any type, any status — including voided) ordered newest tax year first. */
+export async function listAllSlips(): Promise<Slip[]> {
+  await requireSession();
+  return db.select().from(slips).orderBy(desc(slips.taxYear), desc(slips.createdAt));
+}
+
+/** Candidate CY detection for slips. A CY is a slip candidate if it has activity
+ *  (paycheques/dividends/loan entries) AND no active (non-void) T4+T5 pair yet. */
+export async function listSlipCandidateYears(): Promise<number[]> {
+  await requireSession();
+  const years = await taxYearsWithActivity();
+  // Even years with filed T4 only (no T5) still show up — `/slips/[cy]` shows both cards.
+  return years.sort((a, b) => b - a);
+}
+
+export type SlipPreview = {
+  taxYear: number;
+  t4: T4SlipBoxes;
+  t5: T5SlipBoxes;
+  /** Existing DB rows for each slip type (active or voided). */
+  existing: { t4: Slip | null; t5: Slip | null };
+};
+
+/** Full preview for a tax year: live T4/T5 boxes from aggregators + any existing slip rows. */
+export async function loadSlipPreview(taxYear: number): Promise<SlipPreview> {
+  await requireSession();
+  const [t4, t5, rows] = await Promise.all([
+    buildT4SlipBoxes(taxYear),
+    buildT5SlipBoxes(taxYear),
+    db.select().from(slips).where(eq(slips.taxYear, taxYear)),
+  ]);
+  // Pick the active (non-void) slip per type, falling back to newest voided if no active exists.
+  const pickByType = (type: "T4" | "T5"): Slip | null => {
+    const typed = rows.filter((r) => r.type === type);
+    const active = typed.find((r) => r.status !== "void");
+    if (active) return active;
+    return typed.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0] ?? null;
+  };
+  return {
+    taxYear,
+    t4,
+    t5,
+    existing: { t4: pickByType("T4"), t5: pickByType("T5") },
+  };
 }
