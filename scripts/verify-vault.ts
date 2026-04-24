@@ -36,7 +36,7 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
 // ——— Test 1: category whitelist sanity ———
 (() => {
   const failures: string[] = [];
-  expectEq(failures, "VAULT_CATEGORIES count", VAULT_CATEGORIES.length, 8);
+  expectEq(failures, "VAULT_CATEGORIES count", VAULT_CATEGORIES.length, 9);
   const uniq = new Set(VAULT_CATEGORIES);
   expectEq(failures, "no duplicates", uniq.size, VAULT_CATEGORIES.length);
   // USER_UPLOADABLE ∩ PARENT_OWNED = ∅ AND union = VAULT_CATEGORIES
@@ -44,7 +44,7 @@ function expectEq<T>(failures: string[], label: string, a: T, b: T) {
   expectEq(failures, "user-uploadable ∩ parent-owned is empty", overlap.length, 0);
   const union = new Set<string>([...USER_UPLOADABLE, ...PARENT_OWNED]);
   expectEq(failures, "user-uploadable ∪ parent-owned covers all categories", union.size, VAULT_CATEGORIES.length);
-  record("Category whitelist: 8 unique values, user-uploadable and parent-owned partition cleanly", failures);
+  record("Category whitelist: 9 unique values, user-uploadable and parent-owned partition cleanly", failures);
 })();
 
 // ——— Test 2: label / tone / hint completeness ———

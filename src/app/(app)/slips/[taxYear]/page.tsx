@@ -18,6 +18,8 @@ import { CPP_YMPE_2026 } from "@/lib/payroll-2026";
 import type { T4SlipBoxes, T5SlipBoxes } from "@/lib/slip-boxes";
 import type { Slip } from "@/lib/db/schema";
 import { GenerateSlipPdfButton } from "@/components/slips/generate-slip-pdf-button";
+import { FileSlipButton } from "@/components/slips/file-slip-button";
+import { VoidSlipButton } from "@/components/slips/void-slip-button";
 
 export const dynamic = "force-dynamic";
 
@@ -160,26 +162,85 @@ export default async function SlipPreviewPage({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <GenerateSlipPdfButton
-              kind="T4"
-              taxYear={taxYear}
-              disabled={t4.paychequeCount === 0}
-              disabledReason={
-                t4.paychequeCount === 0
-                  ? `No issued paycheques in CY ${taxYear} — nothing to generate.`
-                  : undefined
-              }
-            />
-            <GenerateSlipPdfButton
-              kind="T5"
-              taxYear={taxYear}
-              disabled={t5.eligible.count + t5.nonEligible.count === 0}
-              disabledReason={
-                t5.eligible.count + t5.nonEligible.count === 0
-                  ? `No paid dividends in CY ${taxYear} — nothing to generate.`
-                  : undefined
-              }
-            />
+            {/* T4 actions */}
+            {t4Filed && preview.existing.t4 ? (
+              <>
+                <a
+                  href={`/api/slips/${preview.existing.t4.id}/pdf?download=1`}
+                  className="inline-flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-300 hover:bg-emerald-500/15"
+                  download
+                >
+                  <Lock className="size-4" />
+                  Download filed T4 PDF
+                </a>
+                <VoidSlipButton slipId={preview.existing.t4.id} kind="T4" taxYear={taxYear} />
+              </>
+            ) : (
+              <>
+                <GenerateSlipPdfButton
+                  kind="T4"
+                  taxYear={taxYear}
+                  disabled={t4.paychequeCount === 0}
+                  disabledReason={
+                    t4.paychequeCount === 0
+                      ? `No issued paycheques in CY ${taxYear} — nothing to generate.`
+                      : undefined
+                  }
+                />
+                <FileSlipButton
+                  kind="T4"
+                  taxYear={taxYear}
+                  disabled={t4.paychequeCount === 0 || !s.payrollAccountActive}
+                  disabledReason={
+                    t4.paychequeCount === 0
+                      ? `No issued paycheques in CY ${taxYear}.`
+                      : !s.payrollAccountActive
+                        ? "Activate the RP payroll account in Settings first."
+                        : undefined
+                  }
+                />
+              </>
+            )}
+
+            {/* T5 actions */}
+            {t5Filed && preview.existing.t5 ? (
+              <>
+                <a
+                  href={`/api/slips/${preview.existing.t5.id}/pdf?download=1`}
+                  className="inline-flex items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-300 hover:bg-emerald-500/15"
+                  download
+                >
+                  <Lock className="size-4" />
+                  Download filed T5 PDF
+                </a>
+                <VoidSlipButton slipId={preview.existing.t5.id} kind="T5" taxYear={taxYear} />
+              </>
+            ) : (
+              <>
+                <GenerateSlipPdfButton
+                  kind="T5"
+                  taxYear={taxYear}
+                  disabled={t5.eligible.count + t5.nonEligible.count === 0}
+                  disabledReason={
+                    t5.eligible.count + t5.nonEligible.count === 0
+                      ? `No paid dividends in CY ${taxYear} — nothing to generate.`
+                      : undefined
+                  }
+                />
+                <FileSlipButton
+                  kind="T5"
+                  taxYear={taxYear}
+                  disabled={t5.eligible.count + t5.nonEligible.count === 0 || !s.payerRzActive}
+                  disabledReason={
+                    t5.eligible.count + t5.nonEligible.count === 0
+                      ? `No paid dividends in CY ${taxYear}.`
+                      : !s.payerRzActive
+                        ? "Activate the RZ info-returns account in Settings first."
+                        : undefined
+                  }
+                />
+              </>
+            )}
           </div>
         </div>
       </div>

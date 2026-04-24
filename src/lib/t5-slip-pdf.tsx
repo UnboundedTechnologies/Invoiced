@@ -18,6 +18,11 @@ import type { T5SlipBoxes } from "@/lib/slip-boxes";
 export type T5SlipPDFProps = {
   taxYear: number;
   boxes: T5SlipBoxes;
+  status: "draft" | "filed";
+  filed?: {
+    craConfirmationNumber: string | null;
+    filedAt: string;
+  };
   payer: {
     corpLegalName: string;
     businessNumber: string;
@@ -110,6 +115,27 @@ const styles = StyleSheet.create({
   },
   ribbonWorkNote: {
     color: "#ede9fe",
+    fontSize: 8,
+    fontFamily: "Helvetica",
+    letterSpacing: 0.4,
+  },
+  ribbonFiled: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#047857",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  ribbonFiledLabel: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontFamily: "Helvetica-Bold",
+    letterSpacing: 2,
+  },
+  ribbonFiledNote: {
+    color: "#d1fae5",
     fontSize: 8,
     fontFamily: "Helvetica",
     letterSpacing: 0.4,
@@ -240,7 +266,20 @@ const styles = StyleSheet.create({
   },
 });
 
-function WorkingCopyRibbon() {
+function SlipRibbon({ props }: { props: T5SlipPDFProps }) {
+  if (props.status === "filed") {
+    const cra = props.filed?.craConfirmationNumber;
+    const filedAt = props.filed?.filedAt;
+    return (
+      <View style={styles.ribbonFiled}>
+        <Text style={styles.ribbonFiledLabel}>FILED</Text>
+        <Text style={styles.ribbonFiledNote}>
+          {cra ? `CRA #${cra}` : "Filed with CRA"}
+          {filedAt ? ` · ${formatLongDate(filedAt)}` : ""}
+        </Text>
+      </View>
+    );
+  }
   return (
     <View style={styles.ribbonWork}>
       <Text style={styles.ribbonWorkLabel}>WORKING COPY</Text>
@@ -251,7 +290,8 @@ function WorkingCopyRibbon() {
   );
 }
 
-function WorkingCopyWatermark() {
+function SlipWatermark({ status }: { status: "draft" | "filed" }) {
+  if (status === "filed") return null;
   return (
     <Text style={styles.watermark} fixed>
       WORKING COPY
@@ -354,12 +394,12 @@ function T5SlipPage({
   copyLabel: string;
   props: T5SlipPDFProps;
 }) {
-  const { taxYear, boxes, payer, recipient, filingDueDate } = props;
+  const { taxYear, boxes, payer, recipient, filingDueDate, status } = props;
   return (
     <Page size="LETTER" style={styles.page} wrap={false}>
-      <WorkingCopyWatermark />
+      <SlipWatermark status={status} />
       <Text style={styles.copyTag}>{copyLabel}</Text>
-      <WorkingCopyRibbon />
+      <SlipRibbon props={props} />
       <Text style={styles.title}>T5 · Statement of Investment Income</Text>
       <Text style={styles.subtitle}>
         Calendar year {taxYear} · Filing due {formatLongDate(filingDueDate)}
@@ -415,20 +455,21 @@ function T5SlipPage({
       </View>
 
       <Text style={styles.footer} fixed>
-        Working copy · Invoiced {boxes.ratesEditionTag} · {boxes.eligible.count} eligible +{" "}
-        {boxes.nonEligible.count} non-eligible paid in CY {taxYear} · Re-key into CRA Web Forms; store the CRA version.
+        {status === "filed" ? "Filed record" : "Working copy"} · Invoiced {boxes.ratesEditionTag} ·{" "}
+        {boxes.eligible.count} eligible + {boxes.nonEligible.count} non-eligible paid in CY {taxYear}
+        {status === "filed" ? " · Frozen snapshot" : " · Re-key into CRA Web Forms"}.
       </Text>
     </Page>
   );
 }
 
 function T5SummaryPage({ props }: { props: T5SlipPDFProps }) {
-  const { taxYear, boxes, payer, filingDueDate } = props;
+  const { taxYear, boxes, payer, filingDueDate, status } = props;
   return (
     <Page size="LETTER" style={styles.page} wrap={false}>
-      <WorkingCopyWatermark />
+      <SlipWatermark status={status} />
       <Text style={styles.copyTag}>SUMMARY</Text>
-      <WorkingCopyRibbon />
+      <SlipRibbon props={props} />
       <Text style={styles.title}>T5 Summary · Payer T5 totals</Text>
       <Text style={styles.subtitle}>
         Calendar year {taxYear} · Filing due {formatLongDate(filingDueDate)} ·{" "}
@@ -460,29 +501,39 @@ function T5SummaryPage({ props }: { props: T5SlipPDFProps }) {
       </View>
 
       <Text style={styles.footer} fixed>
-        Working copy · Invoiced {boxes.ratesEditionTag} · File the T5 Summary alongside the slip on the same CRA Web Forms submission.
+        {status === "filed" ? "Filed record" : "Working copy"} · Invoiced {boxes.ratesEditionTag}
+        {status === "filed"
+          ? " · T5 Summary frozen at file time"
+          : " · File the T5 Summary alongside the slip on the same CRA Web Forms submission"}.
       </Text>
     </Page>
   );
 }
 
 export function T5SlipPDF(props: T5SlipPDFProps) {
-  const { bannerDataUri } = props;
+  const { bannerDataUri, status } = props;
+  const titleLabel = status === "filed" ? "Filed Record" : "Working-Copy Bundle";
+  const subtitleLead =
+    status === "filed"
+      ? `This PDF is the frozen filed record of the T5 slip (3 copies) + T5 Summary for calendar year ${props.taxYear}.`
+      : `This PDF bundles the T5 slip (3 copies) + T5 Summary for calendar year ${props.taxYear}.`;
   return (
     <Document>
       {/* Page 1 — Overview */}
       <Page size="LETTER" style={styles.page} wrap={false}>
-        <WorkingCopyWatermark />
+        <SlipWatermark status={status} />
         {bannerDataUri ? (
           // eslint-disable-next-line jsx-a11y/alt-text
           <Image src={bannerDataUri} style={styles.banner} />
         ) : null}
         <Text style={styles.copyTag}>OVERVIEW</Text>
-        <WorkingCopyRibbon />
-        <Text style={styles.title}>T5 Working-Copy Bundle · CY {props.taxYear}</Text>
+        <SlipRibbon props={props} />
+        <Text style={styles.title}>T5 {titleLabel} · CY {props.taxYear}</Text>
         <Text style={styles.subtitle}>
-          This PDF bundles the T5 slip (3 copies) + T5 Summary for calendar year {props.taxYear}.
-          Use it as a data-entry reference when filing via CRA Web Forms.
+          {subtitleLead}
+          {status === "filed"
+            ? " Store alongside your other filed returns; no action required."
+            : " Use it as a data-entry reference when filing via CRA Web Forms."}
         </Text>
         <Text style={styles.h2}>Contents</Text>
         <View style={styles.boxTable}>
@@ -491,18 +542,43 @@ export function T5SlipPDF(props: T5SlipPDFProps) {
           <BoxRow label="Page 4 — T5 slip · Payer copy" value={undefined} blank />
           <BoxRow label="Page 5 — T5 slip · Recipient copy" value={undefined} blank last />
         </View>
-        <Text style={styles.h2}>Filing reminder</Text>
-        <View style={{ ...styles.boxTable, padding: 10 }}>
-          <Text style={{ fontSize: 9, lineHeight: 1.5 }}>
-            1. Open CRA Web Forms → canada.ca/en/revenue-agency/services/e-services/web-forms.html{"\n"}
-            2. Select the T5 program. Your info-returns account (RZ) identifies the payer.{"\n"}
-            3. Re-key each Box value from this PDF into the Web Forms fields.{"\n"}
-            4. Enter the recipient&rsquo;s SIN directly on the CRA form — this app never stores it.{"\n"}
-            5. Submit and save CRA&rsquo;s confirmation number. Store that version, not this working copy.
-          </Text>
-        </View>
+        {status === "filed" ? (
+          <>
+            <Text style={styles.h2}>Filing record</Text>
+            <View style={{ ...styles.boxTable, padding: 10 }}>
+              <Text style={{ fontSize: 9, lineHeight: 1.5 }}>
+                Filed with CRA on {props.filed?.filedAt ? formatLongDate(props.filed.filedAt) : "—"}.
+                {props.filed?.craConfirmationNumber ? (
+                  <>
+                    {"\n"}CRA confirmation number: {props.filed.craConfirmationNumber}.
+                  </>
+                ) : null}
+                {"\n"}
+                Box values below are the frozen snapshot taken at filing time. Amendments route
+                through CRA form T5-ADJ — cannot be reversed from within Invoiced.
+              </Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={styles.h2}>Filing reminder</Text>
+            <View style={{ ...styles.boxTable, padding: 10 }}>
+              <Text style={{ fontSize: 9, lineHeight: 1.5 }}>
+                1. Open CRA Web Forms → canada.ca/en/revenue-agency/services/e-services/web-forms.html{"\n"}
+                2. Select the T5 program. Your info-returns account (RZ) identifies the payer.{"\n"}
+                3. Re-key each Box value from this PDF into the Web Forms fields.{"\n"}
+                4. Enter the recipient&rsquo;s SIN directly on the CRA form — this app never stores it.{"\n"}
+                5. Submit and save CRA&rsquo;s confirmation number. Store that version, not this working copy.
+              </Text>
+            </View>
+          </>
+        )}
         <Text style={styles.footer} fixed>
-          Working copy · Invoiced {props.boxes.ratesEditionTag} · Not a CRA-filed slip — reference only.
+          {status === "filed" ? "Filed record" : "Working copy"} · Invoiced{" "}
+          {props.boxes.ratesEditionTag} ·{" "}
+          {status === "filed"
+            ? "Frozen snapshot from the filing action."
+            : "Not a CRA-filed slip — reference only."}
         </Text>
       </Page>
       {/* Page 2 — T5 Summary */}
