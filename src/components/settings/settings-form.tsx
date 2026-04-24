@@ -13,6 +13,7 @@ import {
 } from "@/server/actions/settings";
 import { changeVaultPin } from "@/server/actions/vault-pin";
 import { PayrollCard } from "@/components/settings/payroll-card";
+import { InfoReturnsCard } from "@/components/settings/info-returns-card";
 import { PinInput } from "@/components/vault/pin-input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -325,11 +326,22 @@ function CorpPanel({ data }: { data: SettingsRow }) {
               )
             }
           />
+          <DisplayField
+            label="Info-returns account (RZ0001)"
+            value={
+              data.payerRzAccount ? (
+                <span className="font-mono">{data.payerRzAccount}</span>
+              ) : (
+                <span className="text-muted-foreground italic">Not registered. Manage below ↓</span>
+              )
+            }
+          />
           <CanadianAddressBlock data={data} />
         </CardContent>
       </Card>
 
       <PayrollCard data={data} />
+      <InfoReturnsCard data={data} />
     </div>
   );
 }

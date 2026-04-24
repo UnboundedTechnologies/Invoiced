@@ -142,6 +142,47 @@ export async function deactivatePayroll(): Promise<ActionResult> {
   }
 }
 
+//  Payer RZ account (guided activation) — T5 info-returns payer number
+const payerRzActivateSchema = z.object({
+  payerRzAccount: z
+    .string()
+    .regex(/^\d{9}RZ\d{4}$/, "Format must be: 9 digits + RZ + 4 digits (e.g., 726742430RZ0001)"),
+});
+
+export async function activatePayerRz(_prev: ActionResult | undefined, fd: FormData): Promise<ActionResult> {
+  try {
+    const email = await requireSession();
+    const parsed = payerRzActivateSchema.safeParse({ payerRzAccount: fd.get("payerRzAccount") });
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+
+    const [s] = await db.select().from(settings).where(eq(settings.id, 1));
+    if (s && parsed.data.payerRzAccount.slice(0, 9) !== s.businessNumber) {
+      return { error: `First 9 digits must match your Business Number (${s.businessNumber}).` };
+    }
+
+    await commit(
+      email,
+      { payerRzAccount: parsed.data.payerRzAccount, payerRzActive: true },
+      "payer-rz-activate",
+    );
+    return { ok: "Info-returns (RZ) account activated. T5 slip generation unlocked." };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Activation failed" };
+  }
+}
+
+export async function deactivatePayerRz(): Promise<ActionResult> {
+  try {
+    const email = await requireSession();
+    // No draft-slip guard yet (file/void actions land in 4E-4). When they ship,
+    // mirror the payroll pattern: refuse deactivation while a draft T5 slip exists.
+    await commit(email, { payerRzActive: false }, "payer-rz-deactivate");
+    return { ok: "Info-returns (RZ) deactivated. T5 slip generation locked." };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Deactivation failed" };
+  }
+}
+
 //  Director 
 const directorSchema = z.object({
   directorLegalName: z.string().min(1, "Director name is required"),
