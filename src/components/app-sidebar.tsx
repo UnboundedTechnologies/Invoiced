@@ -20,6 +20,7 @@ import {
   Calculator,
   Target,
   LogOut,
+  FileCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,7 @@ const SECTIONS: { label: string; tone: Tone; items: NavItem[] }[] = [
       { href: "/hst", label: "HST return", icon: FileSpreadsheet, tone: "rose" },
       { href: "/corp-tax", label: "Corporate tax (T2)", icon: Landmark, tone: "indigo" },
       { href: "/personal-tax", label: "Personal tax (T1)", icon: Calculator, tone: "rose" },
+      { href: "/slips", label: "Year-end slips", icon: FileCheck, tone: "indigo" },
     ],
   },
   {

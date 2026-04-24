@@ -20,6 +20,7 @@ const TITLES: Record<string, Meta> = {
   "/hst": { section: "Expenses & taxes", sectionHref: "/expenses", page: "HST return" },
   "/corp-tax": { section: "Expenses & taxes", sectionHref: "/expenses", page: "Corporate tax (T2)" },
   "/personal-tax": { section: "Expenses & taxes", sectionHref: "/expenses", page: "Personal tax (T1)" },
+  "/slips": { section: "Expenses & taxes", sectionHref: "/expenses", page: "Year-end slips" },
   "/calendar": { section: "Admin", sectionHref: "/calendar", page: "Deadlines" },
   "/vault": { section: "Admin", sectionHref: "/calendar", page: "Document vault" },
   "/settings": { section: "Admin", sectionHref: "/calendar", page: "Settings" },
