@@ -4,11 +4,12 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
-import { dividends, settings, slips, auditLog, shareholderLoanEntries } from "@/lib/db/schema";
+import { dividends, settings, auditLog, shareholderLoanEntries } from "@/lib/db/schema";
 import { auth } from "../../../auth";
 import { fiscalYearFor } from "@/lib/utils";
 import { t2PeriodLockError } from "./t2";
 import { t1PeriodLockError } from "./t1";
+import { t4aSlipLockError, t5SlipLockError } from "./slips";
 
 type ActionResult = { ok?: string; error?: string };
 
@@ -25,30 +26,12 @@ function revalidate() {
   revalidatePath("/(app)", "layout");
 }
 
-async function t4aSlipIssuedFor(fiscalYear: number) {
-  const [row] = await db
-    .select({ id: slips.id })
-    .from(slips)
-    .where(and(eq(slips.type, "T4A"), eq(slips.taxYear, fiscalYear)))
-    .limit(1);
-  return !!row;
-}
-
 async function getFye() {
   const [s] = await db
     .select({ m: settings.fiscalYearEndMonth, d: settings.fiscalYearEndDay })
     .from(settings)
     .where(eq(settings.id, 1));
   return { fyeMonth: s?.m ?? 12, fyeDay: s?.d ?? 31 };
-}
-
-async function t5SlipIssuedFor(fiscalYear: number) {
-  const [row] = await db
-    .select({ id: slips.id })
-    .from(slips)
-    .where(and(eq(slips.type, "T5"), eq(slips.taxYear, fiscalYear)))
-    .limit(1);
-  return !!row;
 }
 
 const schema = z.object({
@@ -92,12 +75,14 @@ export async function createDividend(
     const fiscalYear = fiscalYearFor(declaredDate, fyeMonth, fyeDay);
     const amountCents = Math.round(amountDollars * 100);
 
-    if (await t5SlipIssuedFor(fiscalYear)) {
-      return { error: `A T5 slip was already issued for FY ${fiscalYear}. Declare in a later year.` };
+    // T5 lock on paid date — T5 reports by CY of payment. Unpaid dividends
+    // don't hit any T5 yet, so they bypass the lock.
+    if (paidDate) {
+      const t5Lock = await t5SlipLockError(paidDate);
+      if (t5Lock) return { error: t5Lock };
     }
     const t2Lock = await t2PeriodLockError(declaredDate);
     if (t2Lock) return { error: t2Lock };
-    // T1 lock on paid date — T1 cares about CY of payment, not declaration.
     if (paidDate) {
       const t1Lock = await t1PeriodLockError(paidDate);
       if (t1Lock) return { error: t1Lock };
@@ -141,11 +126,16 @@ export async function updateDividend(
     const fiscalYear = fiscalYearFor(declaredDate, fyeMonth, fyeDay);
     const amountCents = Math.round(amountDollars * 100);
 
-    if (await t5SlipIssuedFor(existing.fiscalYear)) {
-      return { error: `A T5 slip was issued for FY ${existing.fiscalYear}. Edits are locked.` };
+    // T5 locks on the paid-date CY. Check BOTH the old paidDate (if set —
+    // editing could remove this dividend from a filed CY's slip) and the
+    // new paidDate (if set — editing could add it to a filed CY's slip).
+    if (existing.paidDate) {
+      const oldT5Lock = await t5SlipLockError(existing.paidDate);
+      if (oldT5Lock) return { error: oldT5Lock };
     }
-    if (fiscalYear !== existing.fiscalYear && (await t5SlipIssuedFor(fiscalYear))) {
-      return { error: `A T5 slip was issued for FY ${fiscalYear}. Can't move a dividend into a closed year.` };
+    if (paidDate && paidDate !== existing.paidDate) {
+      const newT5Lock = await t5SlipLockError(paidDate);
+      if (newT5Lock) return { error: newT5Lock };
     }
     const oldT2Lock = await t2PeriodLockError(existing.declaredDate);
     if (oldT2Lock) return { error: oldT2Lock };
@@ -186,8 +176,11 @@ export async function deleteDividend(id: string): Promise<ActionResult> {
     const email = await requireSession();
     const [existing] = await db.select().from(dividends).where(eq(dividends.id, id));
     if (!existing) return { error: "Dividend not found." };
-    if (await t5SlipIssuedFor(existing.fiscalYear)) {
-      return { error: `A T5 slip was issued for FY ${existing.fiscalYear}. Delete blocked.` };
+    // T5 lock: only paid dividends are on any T5. Unpaid ones can be deleted
+    // freely.
+    if (existing.paidDate) {
+      const t5Lock = await t5SlipLockError(existing.paidDate);
+      if (t5Lock) return { error: t5Lock };
     }
     const t2Lock = await t2PeriodLockError(existing.declaredDate);
     if (t2Lock) return { error: t2Lock };
@@ -214,10 +207,9 @@ export async function deleteDividend(id: string): Promise<ActionResult> {
       .limit(1);
 
     if (linkedEntry) {
-      if (await t4aSlipIssuedFor(linkedEntry.fiscalYear)) {
-        return {
-          error: `A T4A slip was issued for FY ${linkedEntry.fiscalYear}. Can't cascade-delete the linked loan-ledger entry.`,
-        };
+      const t4aLock = await t4aSlipLockError(linkedEntry.entryDate);
+      if (t4aLock) {
+        return { error: `${t4aLock} Cascade-delete of the linked loan-ledger entry blocked.` };
       }
       await db.batch([
         db.delete(dividends).where(eq(dividends.id, id)),
@@ -275,6 +267,9 @@ export async function markDividendPaid(id: string, paidDate: string): Promise<Ac
     if (paidDate < existing.declaredDate) {
       return { error: "Paid date can't be before the declared date." };
     }
+    // T5 lock on the new paid date — marking paid adds to that CY's T5.
+    const t5Lock = await t5SlipLockError(paidDate);
+    if (t5Lock) return { error: t5Lock };
     const t2Lock = await t2PeriodLockError(existing.declaredDate);
     if (t2Lock) return { error: t2Lock };
     // T1 lock on the new paid date — it puts a dividend into that CY's T1.
@@ -299,6 +294,12 @@ export async function markDividendUnpaid(id: string): Promise<ActionResult> {
     const email = await requireSession();
     const [existing] = await db.select().from(dividends).where(eq(dividends.id, id));
     if (!existing) return { error: "Dividend not found." };
+    // T5 lock on the existing paid date — unpaying it removes the dividend
+    // from that CY's T5 (history rewrite if the T5 is filed).
+    if (existing.paidDate) {
+      const t5Lock = await t5SlipLockError(existing.paidDate);
+      if (t5Lock) return { error: t5Lock };
+    }
     const t2Lock = await t2PeriodLockError(existing.declaredDate);
     if (t2Lock) return { error: t2Lock };
     // T1 lock on the existing paid date — unpaying it removes a dividend

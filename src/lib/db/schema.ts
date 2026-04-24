@@ -38,6 +38,7 @@ export const expenseCategoryEnum = pgEnum("expense_category", [
   "other",
 ]);
 export const slipTypeEnum = pgEnum("slip_type", ["T4", "T5", "T4A"]);
+export const slipStatusEnum = pgEnum("slip_status", ["draft", "filed", "void"]);
 export const payStrategyEnum = pgEnum("pay_strategy", ["salary_only", "dividends_only", "blend"]);
 export const loanEntryTypeEnum = pgEnum("loan_entry_type", [
   "draw",               // shareholder takes money from corp
@@ -92,6 +93,8 @@ export const settings = pgTable("settings", {
   payrollAccount: text("payroll_account"), // e.g., 726742430RP0001 (null until registered)
   payrollAccountActive: boolean("payroll_account_active").default(false).notNull(), // gates salary tool
   corpIncomeTaxAccount: text("corp_income_tax_account"), // e.g., 726742430RC0001
+  payerRzAccount: text("payer_rz_account"),            // e.g., 726742430RZ0001 (info-returns, for T5)
+  payerRzActive: boolean("payer_rz_active").default(false).notNull(), // gates T5 slip generation
   // Vault PIN (second wall in front of /vault + /api/documents/[id]).
   // Null = no PIN set yet (first-visit setup flow). Argon2id hash — never cleartext.
   vaultPinHash: text("vault_pin_hash"),
@@ -544,21 +547,68 @@ export const t1Returns = pgTable(
   (t) => [uniqueIndex("t1_returns_tax_year_unique").on(t.taxYear)],
 );
 
-// Year-end slips (T4 / T5 / T4A)
+// Year-end slips (T4 / T5 / T4A). One "active" (non-void) row per (type, taxYear);
+// void rows stay for audit trail. Status flow: draft → filed → void. Filing
+// snapshots the box values into the first-class columns AND JSONB `totals` so
+// downstream edits can't silently rewrite a filed slip. `status='filed'` plus
+// matching CY in taxYear locks mutations on paycheques/dividends/loan-ledger
+// rows whose (pay|paid|entry)-date falls in that calendar year.
 export const slips = pgTable(
   "slips",
   {
     id: uuid("id").defaultRandom().primaryKey(),
     type: slipTypeEnum("type").notNull(),
-    taxYear: integer("tax_year").notNull(),
-    totals: jsonb("totals").notNull(), // box-by-box amounts
+    taxYear: integer("tax_year").notNull(),                          // CALENDAR year (not fiscal)
+    status: slipStatusEnum("status").notNull().default("draft"),
+    reportTypeCode: text("report_type_code").notNull().default("O"), // CRA: O=original, A=amended, C=cancelled
+    // JSONB denormalized copy of all box values — forward-compat for T4A, RL-1, T5008, etc.
+    totals: jsonb("totals").notNull(),
+    // Filing metadata (null while draft)
+    filedAt: timestamp("filed_at", { withTimezone: true }),
+    filedBy: text("filed_by"),
+    craConfirmationNumber: text("cra_confirmation_number"),
+    voidReason: text("void_reason"),                                  // null unless status='void'
+    // PDF & vault link
     pdfBlobUrl: text("pdf_blob_url"),
     pdfSha256: text("pdf_sha256"),
+    documentId: uuid("document_id"),                                  // vault FK (wired on file)
+    supersedesSlipId: uuid("supersedes_slip_id"),                     // for amended/cancelled chains
+    // T4 first-class box snapshot (cents; null for non-T4 rows OR while draft).
+    t4Box14Cents: bigint("t4_box_14_cents", { mode: "number" }),      // employment income
+    t4Box16Cents: bigint("t4_box_16_cents", { mode: "number" }),      // CPP base
+    t4Box16aCents: bigint("t4_box_16a_cents", { mode: "number" }),    // CPP2
+    t4Box18Cents: bigint("t4_box_18_cents", { mode: "number" }),      // EI — always 0 for owner-mgr
+    t4Box22Cents: bigint("t4_box_22_cents", { mode: "number" }),      // income tax withheld (fed + prov combined)
+    t4Box24Cents: bigint("t4_box_24_cents", { mode: "number" }),      // EI insurable — 0
+    t4Box26Cents: bigint("t4_box_26_cents", { mode: "number" }),      // CPP pensionable
+    t4Box52Cents: bigint("t4_box_52_cents", { mode: "number" }),      // pension adjustment — 0 in v1
+    t4OntarioTaxWithheldCents: bigint("t4_ontario_tax_withheld_cents", { mode: "number" }), // on top of box 22 split
+    t4EmployerCppCents: bigint("t4_employer_cpp_cents", { mode: "number" }),
+    t4EmployerCpp2Cents: bigint("t4_employer_cpp2_cents", { mode: "number" }),
+    // T5 first-class box snapshot (cents; null for non-T5 rows OR while draft).
+    t5EligibleActualCents: bigint("t5_eligible_actual_cents", { mode: "number" }),          // box 24
+    t5EligibleTaxableCents: bigint("t5_eligible_taxable_cents", { mode: "number" }),        // box 25 (×1.38)
+    t5EligibleDtcFederalCents: bigint("t5_eligible_dtc_federal_cents", { mode: "number" }), // box 26
+    t5EligibleDtcOntarioCents: bigint("t5_eligible_dtc_ontario_cents", { mode: "number" }), // ON428 line
+    t5NonEligibleActualCents: bigint("t5_non_eligible_actual_cents", { mode: "number" }),   // box 10
+    t5NonEligibleTaxableCents: bigint("t5_non_eligible_taxable_cents", { mode: "number" }), // box 11 (×1.15)
+    t5NonEligibleDtcFederalCents: bigint("t5_non_eligible_dtc_federal_cents", { mode: "number" }), // box 12
+    t5NonEligibleDtcOntarioCents: bigint("t5_non_eligible_dtc_ontario_cents", { mode: "number" }), // ON428 line
+    // Rate-file reproducibility
+    ratesEditionTag: text("rates_edition_tag"),
+    // Timestamps
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  // Every mutation in dividends/paycheques/shareholder-loan checks whether a
-  // slip exists for a (type, taxYear). Composite index backs that lookup.
-  (t) => [uniqueIndex("slips_type_year_unique").on(t.type, t.taxYear)],
+  // Partial unique: one active slip per (type, taxYear). Voided rows don't
+  // block a fresh original, so the void + reissue workflow stays clean.
+  (t) => [
+    uniqueIndex("slips_type_year_active_unique")
+      .on(t.type, t.taxYear)
+      .where(sql`status <> 'void'`),
+    index("slips_tax_year_idx").on(t.taxYear),
+    index("slips_status_idx").on(t.status),
+  ],
 );
 
 // Document vault (incorporation, contracts, NDAs, auto-generated invoice/paystub/receipt
