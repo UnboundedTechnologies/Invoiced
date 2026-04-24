@@ -6,6 +6,7 @@ import { authConfig } from "./auth.config";
 import { db } from "@/lib/db/client";
 import { users, auditLog } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
+import { checkLoginRateLimit } from "@/lib/rate-limit";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -32,6 +33,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(rawCreds) {
+        // IP-level rate limit FIRST — runs before DB lookup, before Argon2,
+        // before audit-log inserts on bad creds. Distributed brute-force
+        // bouncers off here without burning server CPU.
+        const rl = await checkLoginRateLimit();
+        if (!rl.success) {
+          await db.insert(auditLog).values({
+            actorEmail: `rate-limited:${rl.identifier}`,
+            action: "login",
+            metadata: { success: false, reason: "ip-rate-limit" },
+            ipAddress: rl.identifier,
+          });
+          return null;
+        }
+
         const parsed = loginSchema.safeParse(rawCreds);
         if (!parsed.success) return null;
 
