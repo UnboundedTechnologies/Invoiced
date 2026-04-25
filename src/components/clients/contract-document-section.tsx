@@ -68,7 +68,7 @@ export function ContractDocumentSection({
     const fd = new FormData();
     fd.append("document", file);
     startTransition(async () => {
-      const r = await uploadContractDocument(contract.id, fd);
+      const r = await uploadContractDocument(contract.id, contract.version, fd);
       if (r.ok) {
         toast.success(r.ok);
         router.refresh();
@@ -83,7 +83,7 @@ export function ContractDocumentSection({
     const fd = new FormData();
     fd.append("document", file);
     startTransition(async () => {
-      const r = await replaceContractDocument(contract.id, fd);
+      const r = await replaceContractDocument(contract.id, contract.version, fd);
       if (r.ok) {
         toast.success(r.ok);
         router.refresh();
@@ -95,7 +95,7 @@ export function ContractDocumentSection({
   async function doDelete() {
     setDeleteOpen(false);
     startTransition(async () => {
-      const r = await unlinkContractDocument(contract.id);
+      const r = await unlinkContractDocument(contract.id, contract.version);
       if (r.ok) {
         toast.success(r.ok);
         router.refresh();
@@ -299,6 +299,7 @@ export function ContractDocumentSection({
 
       <VaultPicker
         contractId={contract.id}
+        contractVersion={contract.version}
         open={vaultOpen}
         onOpenChange={setVaultOpen}
       />
