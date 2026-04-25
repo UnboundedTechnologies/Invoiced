@@ -1,9 +1,27 @@
+import { redirect } from "next/navigation";
+import { eq } from "drizzle-orm";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
 import { VaultAutoLock } from "@/components/vault/vault-auto-lock";
 import { getSettings } from "@/lib/db/queries";
+import { db } from "@/lib/db/client";
+import { users } from "@/lib/db/schema";
+import { auth } from "../../../auth";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  // 2FA enrollment is mandatory. Anyone signed in without totpEnabledAt is
+  // bounced to /onboard/2fa until they complete the wizard. Middleware can't
+  // do this check (edge runtime, no DB), so the gate lives here.
+  const session = await auth();
+  const sessionEmail = session?.user?.email?.toLowerCase() ?? null;
+  if (sessionEmail) {
+    const [me] = await db
+      .select({ totpEnabledAt: users.totpEnabledAt })
+      .from(users)
+      .where(eq(users.email, sessionEmail));
+    if (!me?.totpEnabledAt) redirect("/onboard/2fa");
+  }
+
   const s = await getSettings();
   const corpName = s?.corpLegalName ?? "Unbounded Technologies Inc.";
   const brandPrimary = s?.brandPrimaryHex ?? "#6366F1";

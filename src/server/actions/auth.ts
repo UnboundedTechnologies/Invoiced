@@ -4,11 +4,15 @@ import { signIn, signOut } from "../../../auth";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { users } from "@/lib/db/schema";
 import { VAULT_PIN_COOKIE } from "@/lib/vault-pin";
 import { readPendingUserId, clearPendingCookie } from "@/lib/totp-pending";
 import { clearVault2faCookie } from "@/lib/vault-2fa-session";
 
 export async function loginAction(_prev: { error?: string } | undefined, formData: FormData) {
+  const emailRaw = String(formData.get("email") ?? "").toLowerCase();
   try {
     await signIn("credentials", {
       email: formData.get("email"),
@@ -25,6 +29,17 @@ export async function loginAction(_prev: { error?: string } | undefined, formDat
       return { error: "Invalid email or password." };
     }
     return { error: "Something went wrong. Please try again." };
+  }
+
+  // Successful sign-in. If the user hasn't enrolled 2FA yet, skip the
+  // dashboard hop and go straight to the forced-enrolment page (the
+  // (app)/layout would redirect there anyway, this just avoids the bounce).
+  if (emailRaw) {
+    const [me] = await db
+      .select({ totpEnabledAt: users.totpEnabledAt })
+      .from(users)
+      .where(eq(users.email, emailRaw));
+    if (!me?.totpEnabledAt) redirect("/onboard/2fa");
   }
   redirect("/dashboard");
 }
