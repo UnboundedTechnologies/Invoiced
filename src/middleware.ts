@@ -9,5 +9,10 @@ const { auth } = NextAuth(authConfig);
 export default auth;
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|logo.*|banner.*).*)"],
+  matcher: [
+    // Skip middleware on Next.js internals + public assets + crawler files.
+    // Without robots.txt + sitemap.xml in the exclusion list, the auth
+    // matcher 307-redirects them to /login → SEO + Lighthouse audits fail.
+    "/((?!_next/static|_next/image|favicon\\.ico|robots\\.txt|sitemap\\.xml|\\.well-known|logo.*|banner.*|sprites/.*).*)",
+  ],
 };
