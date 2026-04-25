@@ -20,6 +20,7 @@ import {
 import { db } from "@/lib/db/client";
 import { auth } from "../../../auth";
 import { fiscalYearFor } from "@/lib/utils";
+import { bumpVersion, parseExpectedVersion, versionConflictError } from "@/lib/optimistic-lock";
 import { hstPeriodFor } from "@/lib/hst";
 import { TAXABLE_SUPPLY_STATUSES } from "@/lib/queries/invoice-slices";
 import { operatingExpensesForT2 } from "@/lib/dashboard-metrics";
@@ -580,11 +581,15 @@ export async function fileT2Return(
     if (!parsed.success)
       return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
+    const expectedVersion = parseExpectedVersion(fd);
     const [existing] = await db
       .select()
       .from(t2Returns)
       .where(eq(t2Returns.fiscalYear, fiscalYear));
     if (!existing) return { error: "T2 return not found." };
+    if (expectedVersion !== null && existing.version !== expectedVersion) {
+      return { error: versionConflictError("T2 return", expectedVersion, existing.version) };
+    }
     if (existing.status === "filed") return { error: "T2 return is already filed." };
 
     // Recompute from authoritative source.
@@ -592,15 +597,17 @@ export async function fileT2Return(
 
     const filedAtTs = new Date(parsed.data.filedAt + "T00:00:00Z");
 
-    // Assemble the single atomic batch: update t2_returns, upsert all pool
-    // rows, upsert cca_pools, drop the t2 deadline. Typed as an array of
-    // batch-op handles so heterogeneous ops don't narrow the element type.
-    type BatchOp = Parameters<typeof db.batch>[0][number];
-    const ops: BatchOp[] = [
-      db
-        .update(t2Returns)
-        .set({
-          status: "filed",
+    // Atomic UPDATE on t2_returns first (with version check) — if it races,
+    // we skip the batch entirely. Pool / deadline / audit ops follow in a
+    // separate batch.
+    const updateWhere = expectedVersion !== null
+      ? and(eq(t2Returns.fiscalYear, fiscalYear), eq(t2Returns.version, expectedVersion))
+      : eq(t2Returns.fiscalYear, fiscalYear);
+    const [updatedT2] = await db
+      .update(t2Returns)
+      .set({
+        status: "filed",
+        version: bumpVersion(),
           // P&L snapshot
           revenueCents: live.inputs.revenueCents,
           operatingExpensesCents: live.inputs.operatingExpensesCents,
@@ -646,7 +653,20 @@ export async function fileT2Return(
           filedBy: email,
           updatedAt: new Date(),
         })
-        .where(eq(t2Returns.fiscalYear, fiscalYear)),
+      .where(updateWhere)
+      .returning({ version: t2Returns.version });
+    if (!updatedT2) {
+      const [current] = await db
+        .select({ version: t2Returns.version })
+        .from(t2Returns)
+        .where(eq(t2Returns.fiscalYear, fiscalYear));
+      if (!current) return { error: "T2 return was deleted in another tab." };
+      return { error: versionConflictError("T2 return", expectedVersion ?? existing.version, current.version) };
+    }
+
+    // Pool / deadline / audit ops — heterogeneous batch.
+    type BatchOp = Parameters<typeof db.batch>[0][number];
+    const ops: BatchOp[] = [
       // Delete the open deadline (deadlines-derivation re-emits on next
       // /calendar visit, but only for non-completed rows — we drop this one.)
       db.delete(deadlines).where(eq(deadlines.sourceKey, `t2:${fiscalYear}`)),
@@ -660,6 +680,8 @@ export async function fileT2Return(
           totalTaxCents: live.result.totalTaxCents,
           taxableIncomeCents: live.result.taxableIncomeCents,
           isCcpc: live.isCcpc,
+          fromVersion: existing.version,
+          toVersion: updatedT2.version,
         },
       }),
     ];
@@ -783,7 +805,7 @@ export async function fileT2Return(
 // onConflictDoUpdate when the user refiles.
 // ————————————————————————————————————————————————————————————————
 
-export async function unfileT2Return(fiscalYear: number): Promise<ActionResult> {
+export async function unfileT2Return(fiscalYear: number, expectedVersion: number): Promise<ActionResult> {
   try {
     const email = await requireSession();
     const [existing] = await db
@@ -791,6 +813,9 @@ export async function unfileT2Return(fiscalYear: number): Promise<ActionResult> 
       .from(t2Returns)
       .where(eq(t2Returns.fiscalYear, fiscalYear));
     if (!existing) return { error: "T2 return not found." };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("T2 return", expectedVersion, existing.version) };
+    }
     if (existing.status !== "filed") return { error: "T2 return is not filed; nothing to unfile." };
 
     // Later-FY guard. If FY+1 (or any later FY) T2 exists in any state, refuse:
@@ -808,11 +833,21 @@ export async function unfileT2Return(fiscalYear: number): Promise<ActionResult> 
       };
     }
 
+    const [updated] = await db
+      .update(t2Returns)
+      .set({ status: "draft", version: bumpVersion(), updatedAt: new Date() })
+      .where(and(eq(t2Returns.fiscalYear, fiscalYear), eq(t2Returns.version, expectedVersion)))
+      .returning({ version: t2Returns.version });
+    if (!updated) {
+      const [current] = await db
+        .select({ version: t2Returns.version })
+        .from(t2Returns)
+        .where(eq(t2Returns.fiscalYear, fiscalYear));
+      if (!current) return { error: "T2 return was deleted in another tab." };
+      return { error: versionConflictError("T2 return", expectedVersion, current.version) };
+    }
+
     await db.batch([
-      db
-        .update(t2Returns)
-        .set({ status: "draft", updatedAt: new Date() })
-        .where(eq(t2Returns.fiscalYear, fiscalYear)),
       db
         .insert(deadlines)
         .values({
@@ -833,6 +868,8 @@ export async function unfileT2Return(fiscalYear: number): Promise<ActionResult> 
           previousFiledAt: existing.filedAt,
           previousTotalTaxCents: existing.totalTaxCents,
           previousTaxableIncomeCents: existing.taxableIncomeCents,
+          fromVersion: existing.version,
+          toVersion: updated.version,
         },
       }),
     ]);

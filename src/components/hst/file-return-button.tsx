@@ -24,10 +24,12 @@ export function FileReturnButton({
   fiscalYear,
   netCents,
   method,
+  version,
 }: {
   fiscalYear: number;
   netCents: number;
   method: "regular" | "quick";
+  version: number;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -62,6 +64,7 @@ export function FileReturnButton({
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent>
           <form action={action}>
+            <input type="hidden" name="expectedVersion" value={version} />
             <AlertDialogHeader>
               <AlertDialogTitle>File HST return — FY {fiscalYear}</AlertDialogTitle>
               <AlertDialogDescription asChild>

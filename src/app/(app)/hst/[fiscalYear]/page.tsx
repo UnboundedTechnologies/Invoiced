@@ -152,9 +152,10 @@ export default async function HstDetailPage({
                 fiscalYear={fiscalYear}
                 netCents={shown.line109}
                 method={activeMethod}
+                version={row.version}
               />
             ) : (
-              <UnfileHstButton fiscalYear={fiscalYear} />
+              <UnfileHstButton fiscalYear={fiscalYear} version={row.version} />
             )}
           </div>
         </div>

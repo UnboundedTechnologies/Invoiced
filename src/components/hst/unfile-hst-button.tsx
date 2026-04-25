@@ -17,14 +17,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { unfileHstReturn } from "@/server/actions/hst";
 
-export function UnfileHstButton({ fiscalYear }: { fiscalYear: number }) {
+export function UnfileHstButton({ fiscalYear, version }: { fiscalYear: number; version: number }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function onConfirm() {
     startTransition(async () => {
-      const r = await unfileHstReturn(fiscalYear);
+      const r = await unfileHstReturn(fiscalYear, version);
       if (r.ok) {
         toast.success(r.ok);
         setOpen(false);

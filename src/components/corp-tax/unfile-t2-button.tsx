@@ -17,14 +17,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { unfileT2Return } from "@/server/actions/t2";
 
-export function UnfileT2Button({ fiscalYear }: { fiscalYear: number }) {
+export function UnfileT2Button({ fiscalYear, version }: { fiscalYear: number; version: number }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function onConfirm() {
     startTransition(async () => {
-      const r = await unfileT2Return(fiscalYear);
+      const r = await unfileT2Return(fiscalYear, version);
       if (r.ok) {
         toast.success(r.ok);
         setOpen(false);

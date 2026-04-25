@@ -100,9 +100,10 @@ export default async function CorpTaxDetailPage({
                 fiscalYear={fiscalYear}
                 totalTaxCents={totalTax}
                 dividendRefundCents={dividendRefund}
+                version={row.version}
               />
             ) : (
-              <UnfileT2Button fiscalYear={fiscalYear} />
+              <UnfileT2Button fiscalYear={fiscalYear} version={row.version} />
             )}
           </div>
         </div>
