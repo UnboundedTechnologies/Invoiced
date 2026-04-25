@@ -6,24 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuroraBackground } from "@/components/login/aurora-background";
 import { loginAction } from "@/server/actions/auth";
 
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(loginAction, undefined);
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-6">
-      {/* Animated brand gradient backdrop */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 opacity-25 blur-3xl bg-brand-gradient"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-40 left-1/2 -z-10 size-[40rem] -translate-x-1/2 rounded-full bg-brand-gradient opacity-20 blur-3xl"
-      />
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden p-6">
+      <AuroraBackground />
 
-      <Card className="w-full max-w-sm border-border/60 bg-card/70 backdrop-blur-xl shadow-2xl ring-brand-glow animate-in fade-in zoom-in-95 duration-500">
+      <Card className="w-full max-w-sm border-border/60 bg-card/60 backdrop-blur-xl shadow-2xl ring-brand-glow animate-in fade-in zoom-in-95 duration-500">
         <CardHeader className="items-center text-center">
           <div className="rounded-full p-1 animate-glow-pulse">
             <Image src="/logo.png" alt="Unbounded Technologies" width={120} height={120} priority />
