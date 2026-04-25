@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { put, del } from "@vercel/blob";
+import { put, del } from "@/lib/blob";
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db/client";
 import {
@@ -87,7 +87,7 @@ export async function uploadMiscDocument(
     const blob = await put(
       `vault/${parsed.data.category}/${Date.now()}-${filename}`,
       buffer,
-      { access: "public", contentType: entry.type, addRandomSuffix: true },
+      { access: "private", contentType: entry.type, addRandomSuffix: true },
     );
     uploadedBlobUrl = blob.url;
 

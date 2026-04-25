@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "../../../../../../auth";
 import { db } from "@/lib/db/client";
 import { invoices, auditLog } from "@/lib/db/schema";
+import { streamBlob } from "@/lib/blob";
 
 export const runtime = "nodejs";
 
@@ -28,8 +29,8 @@ export async function GET(
 
   if (!row?.url) return new NextResponse("Not found", { status: 404 });
 
-  const upstream = await fetch(row.url);
-  if (!upstream.ok) return new NextResponse("Upstream error", { status: 502 });
+  const upstream = await streamBlob(row.url);
+  if (!upstream) return new NextResponse("Upstream error", { status: 502 });
 
   await db.insert(auditLog).values({
     actorEmail: session.user.email,
@@ -38,7 +39,7 @@ export async function GET(
     metadata: { invoiceNumber: row.number, download },
   });
 
-  return new NextResponse(upstream.body, {
+  return new NextResponse(upstream.stream, {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",

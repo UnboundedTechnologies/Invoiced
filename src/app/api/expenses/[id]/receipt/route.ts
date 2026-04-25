@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "../../../../../../auth";
 import { db } from "@/lib/db/client";
 import { expenses, documents, auditLog } from "@/lib/db/schema";
+import { streamBlob } from "@/lib/blob";
 
 export const runtime = "nodejs";
 
@@ -36,11 +37,10 @@ export async function GET(
 
   if (!row?.blobUrl) return new NextResponse("Not found", { status: 404 });
 
-  const upstream = await fetch(row.blobUrl);
-  if (!upstream.ok) return new NextResponse("Upstream error", { status: 502 });
+  const upstream = await streamBlob(row.blobUrl);
+  if (!upstream) return new NextResponse("Upstream error", { status: 502 });
 
-  const contentType =
-    row.contentType ?? upstream.headers.get("content-type") ?? "application/octet-stream";
+  const contentType = row.contentType ?? upstream.contentType;
   const filename = row.name ?? `receipt-${id}`;
 
   await db.insert(auditLog).values({
@@ -50,7 +50,7 @@ export async function GET(
     metadata: { vendor: row.vendor, download, contentType },
   });
 
-  return new NextResponse(upstream.body, {
+  return new NextResponse(upstream.stream, {
     status: 200,
     headers: {
       "Content-Type": contentType,

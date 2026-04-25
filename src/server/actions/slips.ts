@@ -3,7 +3,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { revalidatePath } from "next/cache";
-import { put } from "@vercel/blob";
+import { put } from "@/lib/blob";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
@@ -543,7 +543,7 @@ export async function fileT4Slip(
     // Upload to Blob + insert vault row + upsert slip row + audit — one batch.
     const filename = `T4-Filed-CY${taxYear}${craConfirmationNumber ? `-${craConfirmationNumber}` : ""}.pdf`;
     const blob = await put(`slips/T4/${taxYear}/${filename}`, pdfBuffer, {
-      access: "public",
+      access: "private",
       contentType: "application/pdf",
       addRandomSuffix: true,
     });
@@ -715,7 +715,7 @@ export async function fileT5Slip(
 
     const filename = `T5-Filed-CY${taxYear}${craConfirmationNumber ? `-${craConfirmationNumber}` : ""}.pdf`;
     const blob = await put(`slips/T5/${taxYear}/${filename}`, pdfBuffer, {
-      access: "public",
+      access: "private",
       contentType: "application/pdf",
       addRandomSuffix: true,
     });
@@ -885,7 +885,7 @@ export async function fileT4aSlip(
 
     const filename = `T4A-Filed-CY${taxYear}${craConfirmationNumber ? `-${craConfirmationNumber}` : ""}.pdf`;
     const blob = await put(`slips/T4A/${taxYear}/${filename}`, pdfBuffer, {
-      access: "public",
+      access: "private",
       contentType: "application/pdf",
       addRandomSuffix: true,
     });

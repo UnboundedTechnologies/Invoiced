@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { put, del } from "@vercel/blob";
+import { put, del } from "@/lib/blob";
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db/client";
 import { expenses, documents, settings, auditLog } from "@/lib/db/schema";
@@ -220,7 +220,7 @@ export async function createExpense(
       const blob = await put(
         `expenses/${expenseId}/${Date.now()}-${sanitizeFilename(file.name)}`,
         fileCheck.buffer,
-        { access: "public", contentType: file.type, addRandomSuffix: true },
+        { access: "private", contentType: file.type, addRandomSuffix: true },
       );
       uploadedBlobUrl = blob.url;
       const documentId = crypto.randomUUID();
@@ -472,7 +472,7 @@ export async function uploadReceipt(
     const blob = await put(
       `expenses/${expenseId}/${Date.now()}-${sanitizeFilename(file.name)}`,
       fileCheck.buffer,
-      { access: "public", contentType: file.type, addRandomSuffix: true },
+      { access: "private", contentType: file.type, addRandomSuffix: true },
     );
     uploadedBlobUrl = blob.url;
 
@@ -544,7 +544,7 @@ export async function replaceReceipt(
     const blob = await put(
       `expenses/${expenseId}/${Date.now()}-${sanitizeFilename(file.name)}`,
       fileCheck.buffer,
-      { access: "public", contentType: file.type, addRandomSuffix: true },
+      { access: "private", contentType: file.type, addRandomSuffix: true },
     );
     newBlobUrl = blob.url;
 
