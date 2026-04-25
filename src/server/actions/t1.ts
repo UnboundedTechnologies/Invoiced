@@ -26,6 +26,7 @@ import { t4BoxesForYear } from "@/lib/queries/t4-slices";
 import { t5BoxesForYear } from "@/lib/queries/t5-slices";
 import { t4aBox117ForYear } from "@/lib/queries/t4a-slices";
 import { donationsForYear } from "@/lib/queries/donations-slices";
+import { contributionsForYear } from "@/lib/queries/contributions-slices";
 import { getBannerDataUri } from "@/lib/pdf-banner";
 import { T1PrepPDF } from "@/lib/t1-pdf";
 
@@ -84,6 +85,7 @@ export type LiveT1Aggregate = {
   t5: Awaited<ReturnType<typeof t5BoxesForYear>>;
   t4a: Awaited<ReturnType<typeof t4aBox117ForYear>>;
   donations: Awaited<ReturnType<typeof donationsForYear>>;
+  contributions: Awaited<ReturnType<typeof contributionsForYear>>;
   result: T1Result;
   // Grossed-up dividend slices — surfaced for PDF + coherence checks
   grossedUp: {
@@ -97,11 +99,12 @@ export async function loadLiveT1Aggregate(taxYear: number): Promise<LiveT1Aggreg
   const start = `${taxYear}-01-01`;
   const end = `${taxYear}-12-31`;
 
-  const [t4, t5, t4a, don] = await Promise.all([
+  const [t4, t5, t4a, don, contrib] = await Promise.all([
     t4BoxesForYear(taxYear),
     t5BoxesForYear(taxYear),
     t4aBox117ForYear(taxYear),
     donationsForYear(taxYear),
+    contributionsForYear(taxYear),
   ]);
 
   const input = await buildT1Inputs(taxYear);
@@ -118,6 +121,7 @@ export async function loadLiveT1Aggregate(taxYear: number): Promise<LiveT1Aggreg
     t5,
     t4a,
     donations: don,
+    contributions: contrib,
     result,
     grossedUp: {
       eligibleCents: grossedUpEligible,
@@ -284,6 +288,11 @@ export async function fileT1Return(
           donationsTotalCents: live.donations.totalCents,
           federalDonationsCreditCents: r.federal.donationsCreditCents,
           ontarioDonationsCreditCents: r.ontario.donationsCreditCents,
+          // RRSP / FHSA snapshot (line 20800 / 20805)
+          rrspContributionsCents: live.contributions.rrspCents,
+          rrspDeductionCents: r.rrspDeductionCents,
+          fhsaContributionsCents: live.contributions.fhsaCents,
+          fhsaDeductionCents: r.fhsaDeductionCents,
           // Meta
           ratesEditionTag: r.ratesEditionTag,
           craConfirmationNumber: parsed.data.craConfirmationNumber,

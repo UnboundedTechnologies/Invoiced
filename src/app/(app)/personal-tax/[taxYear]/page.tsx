@@ -11,7 +11,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { db } from "@/lib/db/client";
-import { t1Returns } from "@/lib/db/schema";
+import { settings, t1Returns } from "@/lib/db/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   loadLiveT1Aggregate,
@@ -22,6 +22,7 @@ import { formatCAD, formatLongDate } from "@/lib/utils";
 import { FileT1Button } from "@/components/personal-tax/file-t1-button";
 import { GenerateT1PdfButton } from "@/components/personal-tax/generate-t1-pdf-button";
 import { DonationsCard } from "@/components/personal-tax/donations-card";
+import { ContributionsCard } from "@/components/personal-tax/contributions-card";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +86,7 @@ export default async function PersonalTaxDetailPage({
   if (!row) notFound();
 
   const live = await loadLiveT1Aggregate(taxYear);
+  const [s] = await db.select().from(settings).where(eq(settings.id, 1));
   const due = t1FilingDueDate(taxYear);
   const isFiled = row.status === "filed";
   const today = new Date().toISOString().slice(0, 10);
@@ -303,6 +305,8 @@ export default async function PersonalTaxDetailPage({
           <LineRow line="15000" label="Total income" amount={r.totalIncomeCents} />
           <LineRow line="22215" label="CPP enhanced deduction (s.60(e))" amount={r.cppEnhancedDeductionCents} negative />
           <LineRow line="22200" label="CPP2 deduction (s.60(e.1))" amount={r.cpp2DeductionCents} negative />
+          <LineRow line="20800" label="RRSP deduction" amount={r.rrspDeductionCents} negative />
+          <LineRow line="20805" label="FHSA deduction" amount={r.fhsaDeductionCents} negative />
           <LineRow line="23600" label="Net income" amount={r.netIncomeCents} strong />
           <LineRow line="26000" label="Taxable income" amount={r.taxableIncomeCents} strong />
         </CardContent>
@@ -315,6 +319,19 @@ export default async function PersonalTaxDetailPage({
         totalCents={live.donations.totalCents}
         federalCreditCents={r.federal.donationsCreditCents}
         ontarioCreditCents={r.ontario.donationsCreditCents}
+        isFiled={isFiled}
+      />
+
+      {/* RRSP / FHSA contributions */}
+      <ContributionsCard
+        taxYear={taxYear}
+        rows={live.contributions.rows}
+        rrspContributionsCents={live.contributions.rrspCents}
+        fhsaContributionsCents={live.contributions.fhsaCents}
+        rrspDeductionCents={r.rrspDeductionCents}
+        fhsaDeductionCents={r.fhsaDeductionCents}
+        rrspRoomCents={s?.rrspRoomCents ?? null}
+        fhsaRoomCents={s?.fhsaRoomCents ?? null}
         isFiled={isFiled}
       />
 

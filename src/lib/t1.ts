@@ -73,6 +73,18 @@ export type T1Input = {
   donations: {
     totalCents: number;
   };
+  /** RRSP — line 20800 deduction = min(contributions, deductionLimit). */
+  rrsp: {
+    contributionsCents: number;
+    /** Available deduction limit (typically from CRA NOA). null = limit unknown → behave as 0. */
+    deductionLimitCents: number;
+  };
+  /** FHSA — line 20805 deduction = min(contributions, room). */
+  fhsa: {
+    contributionsCents: number;
+    /** Available room. null = no FHSA opened → behave as 0. */
+    roomCents: number;
+  };
 };
 
 export type T1Result = {
@@ -80,6 +92,8 @@ export type T1Result = {
   totalIncomeCents: number;          // 15000
   cppEnhancedDeductionCents: number; // 22215 — s.60(e)
   cpp2DeductionCents: number;        // 22200 — s.60(e.1)
+  rrspDeductionCents: number;        // 20800
+  fhsaDeductionCents: number;        // 20805
   netIncomeCents: number;            // 23600
   taxableIncomeCents: number;        // 26000 (== net in v1 — no Sch 3)
   // Federal side
@@ -219,7 +233,30 @@ export function computeT1(input: T1Input): T1Result {
   // CPP2 contributions → line 22200 deduction (s.60(e.1)) — 100% deductible, no credit component
   const cpp2DeductionCents = box16a;
 
-  const netIncomeCents = totalIncomeCents - cppEnhancedDeductionCents - cpp2DeductionCents;
+  // RRSP — line 20800 = min(contributions, deductionLimit). Excess is carried
+  // forward forever but we don't model carryforward in v1.
+  const rrspDeductionCents = Math.min(input.rrsp.contributionsCents, input.rrsp.deductionLimitCents);
+  if (input.rrsp.contributionsCents > input.rrsp.deductionLimitCents) {
+    warnings.push(
+      `RRSP contributions ($${(input.rrsp.contributionsCents / 100).toFixed(2)}) exceed available deduction limit ($${(input.rrsp.deductionLimitCents / 100).toFixed(2)}). Excess carries forward; only the limit is deducted on this return.`,
+    );
+  }
+
+  // FHSA — line 20805 = min(contributions, room). CRA caps room at $8K/yr
+  // and $40K lifetime; we trust the input and warn if contributions exceed room.
+  const fhsaDeductionCents = Math.min(input.fhsa.contributionsCents, input.fhsa.roomCents);
+  if (input.fhsa.contributionsCents > input.fhsa.roomCents) {
+    warnings.push(
+      `FHSA contributions ($${(input.fhsa.contributionsCents / 100).toFixed(2)}) exceed available room ($${(input.fhsa.roomCents / 100).toFixed(2)}). Excess is subject to a 1% per month over-contribution tax.`,
+    );
+  }
+
+  const netIncomeCents =
+    totalIncomeCents -
+    cppEnhancedDeductionCents -
+    cpp2DeductionCents -
+    rrspDeductionCents -
+    fhsaDeductionCents;
   // v1: no Schedule 3 losses, no other reductions → taxable = net
   const taxableIncomeCents = netIncomeCents;
 
@@ -314,6 +351,8 @@ export function computeT1(input: T1Input): T1Result {
     totalIncomeCents,
     cppEnhancedDeductionCents,
     cpp2DeductionCents,
+    rrspDeductionCents,
+    fhsaDeductionCents,
     netIncomeCents,
     taxableIncomeCents,
     federal: {

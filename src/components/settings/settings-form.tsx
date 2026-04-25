@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Building2, User, FileSpreadsheet, Wallet, Palette, RotateCcw, ShieldCheck } from "lucide-react";
+import { Building2, User, FileSpreadsheet, Wallet, Palette, RotateCcw, ShieldCheck, PiggyBank } from "lucide-react";
 import type { Settings as SettingsRow } from "@/lib/db/schema";
 import {
   updateDirector,
@@ -10,6 +10,7 @@ import {
   updateSelfPay,
   updateBranding,
   updateCorpTax,
+  updatePersonalTax,
 } from "@/server/actions/settings";
 import { changeVaultPin } from "@/server/actions/vault-pin";
 import { PayrollCard } from "@/components/settings/payroll-card";
@@ -101,6 +102,9 @@ export function SettingsForm({
         <TabsTrigger value="selfpay">
           <Wallet className="mr-1.5 size-3.5" /> Self-pay
         </TabsTrigger>
+        <TabsTrigger value="personal-tax">
+          <PiggyBank className="mr-1.5 size-3.5" /> Personal tax
+        </TabsTrigger>
         <TabsTrigger value="branding">
           <Palette className="mr-1.5 size-3.5" /> Branding
         </TabsTrigger>
@@ -121,6 +125,9 @@ export function SettingsForm({
       </TabsContent>
       <TabsContent value="selfpay">
         <SelfPayPanel data={data} />
+      </TabsContent>
+      <TabsContent value="personal-tax">
+        <PersonalTaxPanel data={data} />
       </TabsContent>
       <TabsContent value="branding">
         <BrandingPanel data={data} />
@@ -732,7 +739,62 @@ function SelfPayPanel({ data }: { data: SettingsRow }) {
   );
 }
 
-//  Branding & Invoicing 
+//  Personal tax (RRSP / FHSA room from your CRA NOA)
+function PersonalTaxPanel({ data }: { data: SettingsRow }) {
+  const [state, formAction, pending] = useActionState(updatePersonalTax, undefined as Result | undefined);
+  const [dirty, setDirty] = useState(false);
+  useFormResult(state, setDirty);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Personal-tax room</CardTitle>
+        <CardDescription>
+          Source: your most recent CRA Notice of Assessment. Drives line 20800 (RRSP) and
+          line 20805 (FHSA) deductions in /personal-tax.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form action={formAction} className="space-y-5" onChange={() => setDirty(true)}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="RRSP deduction limit (CAD)"
+              htmlFor="rrspRoomDollars"
+              hint="From the 'RRSP/PRPP deduction limit' line on your latest NOA. Leave blank if unknown."
+            >
+              <Input
+                id="rrspRoomDollars"
+                name="rrspRoomDollars"
+                type="number"
+                min={0}
+                step="0.01"
+                defaultValue={data.rrspRoomCents == null ? "" : data.rrspRoomCents / 100}
+                placeholder="—"
+              />
+            </Field>
+            <Field
+              label="FHSA contribution room (CAD)"
+              htmlFor="fhsaRoomDollars"
+              hint="$8K/yr from the year you opened an FHSA, $40K lifetime. Leave blank if no FHSA."
+            >
+              <Input
+                id="fhsaRoomDollars"
+                name="fhsaRoomDollars"
+                type="number"
+                min={0}
+                step="0.01"
+                defaultValue={data.fhsaRoomCents == null ? "" : data.fhsaRoomCents / 100}
+                placeholder="—"
+              />
+            </Field>
+          </div>
+          <SaveBar pending={pending} dirty={dirty} />
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+//  Branding & Invoicing
 function BrandingPanel({ data }: { data: SettingsRow }) {
   const [state, formAction, pending] = useActionState(updateBranding, undefined as Result | undefined);
   const [dirty, setDirty] = useState(false);

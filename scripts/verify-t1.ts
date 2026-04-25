@@ -74,6 +74,8 @@ function input(overrides: Partial<T1Input> = {}): T1Input {
     t5: { eligibleActualCents: 0, nonEligibleActualCents: 0 },
     t4aBox117Cents: 0,
     donations: { totalCents: 0 },
+    rrsp: { contributionsCents: 0, deductionLimitCents: 0 },
+    fhsa: { contributionsCents: 0, roomCents: 0 },
     ...overrides,
   };
 }
@@ -595,6 +597,91 @@ function input(overrides: Partial<T1Input> = {}): T1Input {
   // Ontario: 5.05% × 200 + 11.16% × 800 = 10.10 + 89.28 = 99.38
   expectEq(failures, "on donations credit ($1000 total)", r.ontario.donationsCreditCents, 99_38);
   record("Donations $1000 at $258,582 taxable → partial 33% / 29% split", failures);
+})();
+
+// ——— Test 31: RRSP $5K with $30K deduction limit → fully deductible ———
+
+(() => {
+  const failures: string[] = [];
+  const r = computeT1(
+    input({
+      t4: { ...blankT4(), box14EmploymentIncomeCents: 80_000_00 },
+      rrsp: { contributionsCents: 5_000_00, deductionLimitCents: 30_000_00 },
+    }),
+  );
+  expectEq(failures, "rrsp deduction = contribution (within limit)", r.rrspDeductionCents, 5_000_00);
+  // Net income drops by $5K from baseline.
+  const baseline = computeT1(input({ t4: { ...blankT4(), box14EmploymentIncomeCents: 80_000_00 } }));
+  expectEq(failures, "net income drops by RRSP deduction", baseline.netIncomeCents - r.netIncomeCents, 5_000_00);
+  record("RRSP $5K within $30K limit → fully deductible, net income drops $5K", failures);
+})();
+
+// ——— Test 32: RRSP $40K with $30K limit → capped + warning ———
+
+(() => {
+  const failures: string[] = [];
+  const r = computeT1(
+    input({
+      t4: { ...blankT4(), box14EmploymentIncomeCents: 80_000_00 },
+      rrsp: { contributionsCents: 40_000_00, deductionLimitCents: 30_000_00 },
+    }),
+  );
+  expectEq(failures, "rrsp deduction = limit (over-contributed)", r.rrspDeductionCents, 30_000_00);
+  if (!r.warnings.some((w) => w.includes("RRSP contributions") && w.includes("exceed"))) {
+    failures.push(`expected over-contribution warning; got: ${JSON.stringify(r.warnings)}`);
+  }
+  record("RRSP $40K with $30K limit → deduction capped at $30K + warning emitted", failures);
+})();
+
+// ——— Test 33: FHSA $8K with $8K room ———
+
+(() => {
+  const failures: string[] = [];
+  const r = computeT1(
+    input({
+      t4: { ...blankT4(), box14EmploymentIncomeCents: 80_000_00 },
+      fhsa: { contributionsCents: 8_000_00, roomCents: 8_000_00 },
+    }),
+  );
+  expectEq(failures, "fhsa deduction = $8K (at room)", r.fhsaDeductionCents, 8_000_00);
+  record("FHSA $8K with $8K room → fully deductible", failures);
+})();
+
+// ——— Test 34: First-60-days RRSP — input handles via appliedToTaxYear ———
+
+(() => {
+  const failures: string[] = [];
+  // The compute layer doesn't look at `dateContributed` — that's a slice/UI
+  // concern. Once aggregated, a first-60-days contribution looks identical to
+  // a CY-internal one. So a $3K RRSP for taxYear=2026 (regardless of date)
+  // produces a $3K deduction.
+  const r = computeT1(
+    input({
+      t4: { ...blankT4(), box14EmploymentIncomeCents: 80_000_00 },
+      rrsp: { contributionsCents: 3_000_00, deductionLimitCents: 10_000_00 },
+    }),
+  );
+  expectEq(failures, "first-60-days RRSP flows like normal contribution", r.rrspDeductionCents, 3_000_00);
+  record("First-60-days: appliedToTaxYear handled at slice level; compute treats uniformly", failures);
+})();
+
+// ——— Test 35: Combined — salary + RRSP $10K → noticeable tax savings ———
+
+(() => {
+  const failures: string[] = [];
+  const baseline = computeT1(input({ t4: { ...blankT4(), box14EmploymentIncomeCents: 80_000_00 } }));
+  const withRrsp = computeT1(
+    input({
+      t4: { ...blankT4(), box14EmploymentIncomeCents: 80_000_00 },
+      rrsp: { contributionsCents: 10_000_00, deductionLimitCents: 30_000_00 },
+    }),
+  );
+  const taxSaved = baseline.totalTaxPayableCents - withRrsp.totalTaxPayableCents;
+  // At $80K marginal ~30% (fed 20.5 + ON 9.15 ≈ 29.65), $10K RRSP saves ≈ $3,000.
+  if (taxSaved < 2_500_00 || taxSaved > 3_500_00) {
+    failures.push(`expected ~$3K tax saved on $10K RRSP at $80K; got ${formatCAD(taxSaved)}`);
+  }
+  record("Combined: $80K + $10K RRSP → tax savings in ~$3K range (29.65% combined marginal)", failures);
 })();
 
 // ——— runner ———
