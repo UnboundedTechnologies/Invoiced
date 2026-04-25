@@ -697,6 +697,13 @@ export const slips = pgTable(
     t5NonEligibleTaxableCents: bigint("t5_non_eligible_taxable_cents", { mode: "number" }), // box 11 (×1.15)
     t5NonEligibleDtcFederalCents: bigint("t5_non_eligible_dtc_federal_cents", { mode: "number" }), // box 12
     t5NonEligibleDtcOntarioCents: bigint("t5_non_eligible_dtc_ontario_cents", { mode: "number" }), // ON428 line
+    // T4A first-class box snapshot (cents; null for non-T4A rows OR while draft).
+    // Box 117 = "Loan Benefits" = Σ(80.4(2) deemed-interest benefits − interest-paid offset)
+    //                          + Σ(15(2) inclusions for loans past 15(2.6) deadline).
+    // Breakdown columns kept for audit clarity even though box 117 is the filed value.
+    t4aBox117Cents: bigint("t4a_box_117_cents", { mode: "number" }),
+    t4aBenefit80_4Cents: bigint("t4a_benefit_80_4_cents", { mode: "number" }),
+    t4aInclusion15_2Cents: bigint("t4a_inclusion_15_2_cents", { mode: "number" }),
     // Rate-file reproducibility
     ratesEditionTag: text("rates_edition_tag"),
     // Timestamps

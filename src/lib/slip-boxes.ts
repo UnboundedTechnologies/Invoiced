@@ -45,6 +45,13 @@ export type T5BoxesInput = {
   nonEligible: { actualCents: number; count: number };
 };
 
+export type T4ABoxesInput = {
+  /** Box 117 total = benefit80_4Cents + inclusion15_2Cents (composite, after interest offset). */
+  box117Cents: number;
+  benefit80_4Cents: number;
+  inclusion15_2Cents: number;
+};
+
 // ─────── output shapes ───────
 
 export type T4SlipBoxes = {
@@ -89,6 +96,20 @@ export type T5SlipBoxes = {
   ratesEditionTag: string;
 };
 
+export type T4ASlipBoxes = {
+  taxYear: number;
+  /** Box 117 = Loan Benefits (filed). */
+  box117Cents: number;
+  /** Box 022 = Income tax deducted. Always 0 — corp doesn't withhold on loan benefits. */
+  box022TaxWithheldCents: number;
+  /** Audit breakdown (not filed boxes — reference only). */
+  breakdown: {
+    benefit80_4Cents: number;
+    inclusion15_2Cents: number;
+  };
+  ratesEditionTag: string;
+};
+
 // ─────── pure transforms ───────
 
 export function t4SlipBoxesFromRaw(raw: T4BoxesInput, taxYear: number): T4SlipBoxes {
@@ -106,6 +127,19 @@ export function t4SlipBoxesFromRaw(raw: T4BoxesInput, taxYear: number): T4SlipBo
     employerCppBaseCents: raw.employerCppBaseCents,
     employerCpp2Cents: raw.employerCpp2Cents,
     paychequeCount: raw.count,
+    ratesEditionTag: RATES_EDITION_TAG_2026,
+  };
+}
+
+export function t4aSlipBoxesFromRaw(raw: T4ABoxesInput, taxYear: number): T4ASlipBoxes {
+  return {
+    taxYear,
+    box117Cents: raw.box117Cents,
+    box022TaxWithheldCents: 0,
+    breakdown: {
+      benefit80_4Cents: raw.benefit80_4Cents,
+      inclusion15_2Cents: raw.inclusion15_2Cents,
+    },
     ratesEditionTag: RATES_EDITION_TAG_2026,
   };
 }
