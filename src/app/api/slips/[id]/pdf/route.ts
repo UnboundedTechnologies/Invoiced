@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "../../../../../../auth";
 import { db } from "@/lib/db/client";
 import { slips, auditLog } from "@/lib/db/schema";
+import { streamBlob } from "@/lib/blob";
 
 export const runtime = "nodejs";
 
@@ -35,8 +36,8 @@ export async function GET(
 
   if (!row?.blobUrl) return new NextResponse("Not found", { status: 404 });
 
-  const upstream = await fetch(row.blobUrl);
-  if (!upstream.ok) return new NextResponse("Upstream error", { status: 502 });
+  const upstream = await streamBlob(row.blobUrl);
+  if (!upstream) return new NextResponse("Upstream error", { status: 502 });
 
   await db.insert(auditLog).values({
     actorEmail: session.user.email,
@@ -47,7 +48,7 @@ export async function GET(
 
   const filename = `${row.type}-CY${row.taxYear}${row.craConfirmationNumber ? `-${row.craConfirmationNumber}` : ""}${row.status === "void" ? "-VOIDED" : ""}.pdf`;
 
-  return new NextResponse(upstream.body, {
+  return new NextResponse(upstream.stream, {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",

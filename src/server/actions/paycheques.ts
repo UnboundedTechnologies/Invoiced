@@ -4,7 +4,7 @@ import { z } from "zod";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { put, del } from "@vercel/blob";
+import { put, del } from "@/lib/blob";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db/client";
@@ -194,7 +194,7 @@ export async function createPaycheque(
     const blob = await put(
       `paycheques/${id}/paystub-${data.payDate}.pdf`,
       pdfBuffer,
-      { access: "public", contentType: "application/pdf", addRandomSuffix: true },
+      { access: "private", contentType: "application/pdf", addRandomSuffix: true },
     );
 
     const [vaultDoc] = await db

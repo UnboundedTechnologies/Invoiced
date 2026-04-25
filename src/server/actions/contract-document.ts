@@ -1,6 +1,6 @@
 "use server";
 
-import { put, del } from "@vercel/blob";
+import { put, del } from "@/lib/blob";
 import { and, eq, ne, notInArray, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -65,7 +65,7 @@ export async function uploadContractDocument(
     const sha256 = createHash("sha256").update(buffer).digest("hex");
 
     const blob = await put(`contracts/${contractId}/v1/${file.name}`, buffer, {
-      access: "public",
+      access: "private",
       contentType: ALLOWED_MIME,
       addRandomSuffix: true,
     });
@@ -153,7 +153,7 @@ export async function replaceContractDocument(
     const sha256 = createHash("sha256").update(buffer).digest("hex");
 
     const blob = await put(`contracts/${contractId}/v${newVersion}/${file.name}`, buffer, {
-      access: "public",
+      access: "private",
       contentType: ALLOWED_MIME,
       addRandomSuffix: true,
     });

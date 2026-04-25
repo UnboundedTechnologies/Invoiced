@@ -4,7 +4,7 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { put, del } from "@vercel/blob";
+import { put, del } from "@/lib/blob";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db/client";
@@ -183,7 +183,7 @@ export async function createInvoice(_prev: ActionResult | undefined, fd: FormDat
     const blob = await put(
       `invoices/${createdInvoiceId}/${invoiceNumber}.pdf`,
       pdfBuffer,
-      { access: "public", contentType: "application/pdf", addRandomSuffix: true },
+      { access: "private", contentType: "application/pdf", addRandomSuffix: true },
     );
 
     // Save vault entry + link the invoice
