@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { db } from "@/lib/db/client";
 import { documents, settings, users } from "@/lib/db/schema";
 import { getPinHash } from "@/lib/vault-pin";
-import { hasVaultPinSession } from "@/lib/vault-pin-session";
+import { hasVaultPinSession, getVaultSessionLockAt } from "@/lib/vault-pin-session";
 import { hasVault2faSession } from "@/lib/vault-2fa-session";
 import {
   VAULT_CATEGORIES,
@@ -20,6 +20,7 @@ import { VaultFilters } from "@/components/vault/vault-filters";
 import { VaultTable } from "@/components/vault/vault-table";
 import { UploadVaultDialog } from "@/components/vault/upload-vault-dialog";
 import { LockVaultButton } from "@/components/vault/lock-vault-button";
+import { VaultSessionExpiry } from "@/components/vault/vault-session-expiry";
 import { auth } from "../../../../auth";
 
 export const dynamic = "force-dynamic";
@@ -119,8 +120,14 @@ export default async function VaultPage({ searchParams }: { searchParams: Search
   // a second round-trip.
   const contractOptions = await listContractsForPicker({ includeEnded: true });
 
+  // Read the earliest cookie expiresAt so the client-side timer can
+  // auto-lock the vault when the TTL runs out instead of leaving the user
+  // on a stale view that errors out on next action.
+  const lockAt = await getVaultSessionLockAt();
+
   return (
     <div className="space-y-6">
+      {lockAt != null && <VaultSessionExpiry lockAt={lockAt} />}
       <VaultHeader
         right={
           <div className="flex items-center gap-2">
