@@ -19,7 +19,7 @@
  *    stored per the project SIN rule.
  */
 
-import type { T4SlipBoxes, T5SlipBoxes } from "./slip-boxes";
+import type { T4ASlipBoxes, T4SlipBoxes, T5SlipBoxes } from "./slip-boxes";
 
 export type SlipCsvPayer = {
   corpLegalName: string;
@@ -107,6 +107,39 @@ export function t4BoxesToCsv(
     boxes.box16aCpp2Cents +
     boxes.employerCpp2Cents,
   ), "What should have been remitted on PD7A during the CY"));
+
+  return BOM + lines.join(CRLF) + CRLF;
+}
+
+export function t4aBoxesToCsv(
+  boxes: T4ASlipBoxes,
+  payer: SlipCsvPayer,
+  taxYear: number,
+): string {
+  const lines: string[] = [];
+  lines.push(row("Section", "Box", "Description", "Amount", "Notes"));
+
+  // META — payer / recipient / context
+  lines.push(row("META", "", "Tax year (CY)", String(taxYear), "Calendar year — entryDate in [Jan 1, Dec 31]"));
+  lines.push(row("META", "", "Payer legal name", payer.corpLegalName, "Payer on T4A slip"));
+  lines.push(row("META", "Box 061", "Payer BN/RP/RZ account", payer.payrollAccount ?? payer.payerRzAccount ?? "", "T4A uses RP (payroll) when withholding; RZ otherwise"));
+  lines.push(row("META", "", "Recipient legal name", payer.directorLegalName, "Shareholder receiving the loan benefit"));
+  lines.push(row("META", "Box 012", "Recipient SIN", "", "NEVER STORED by Invoiced — enter on CRA Web Forms directly"));
+  lines.push(row("META", "", "Rates edition", boxes.ratesEditionTag, "Reproducibility tag"));
+
+  // SLIP — recipient metadata
+  lines.push(row("SLIP", "Box 014", "Recipient number", "", "Optional internal reference"));
+  lines.push(row("SLIP", "Box 016", "Pension or superannuation", "0.00", "N/A for shareholder loan benefits"));
+  lines.push(row("SLIP", "Box 022", "Income tax deducted", fmtAmount(boxes.box022TaxWithheldCents), "Corp doesn't withhold on s.80.4 / s.15(2) inclusions"));
+  lines.push(row("SLIP", "Box 117", "Loan benefits — s.80.4(2) + s.15(2) inclusions", fmtAmount(boxes.box117Cents), "Composite: 80.4 deemed-interest benefit + 15(2.6)-deadline inclusions"));
+
+  // Audit breakdown (informational — not on the CRA T4A slip itself)
+  lines.push(row("BREAKDOWN", "", "s.80.4(2) deemed-interest benefit (after interest-paid offset)", fmtAmount(boxes.breakdown.benefit80_4Cents), "Quarterly accrual rolled up to CY"));
+  lines.push(row("BREAKDOWN", "", "s.15(2) inclusion (loan past 15(2.6) deadline)", fmtAmount(boxes.breakdown.inclusion15_2Cents), "Triggered on the deadline date, not the original draw date"));
+
+  // SUMMARY (T4A Summary form)
+  lines.push(row("SUMMARY", "", "Total Box 117 across all T4A slips", fmtAmount(boxes.box117Cents), "Σ over all recipients — 1 recipient (Saïd) for this corp"));
+  lines.push(row("SUMMARY", "", "Total Box 022 income tax withheld", fmtAmount(boxes.box022TaxWithheldCents), "Σ across slips — 0 for shareholder benefits"));
 
   return BOM + lines.join(CRLF) + CRLF;
 }

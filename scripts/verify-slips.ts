@@ -9,12 +9,15 @@
 
 import {
   t4SlipBoxesFromRaw,
+  t4aSlipBoxesFromRaw,
   t5SlipBoxesFromRaw,
+  type T4ABoxesInput,
   type T4BoxesInput,
   type T5BoxesInput,
 } from "../src/lib/slip-boxes";
 import {
   t4BoxesToCsv,
+  t4aBoxesToCsv,
   t5BoxesToCsv,
   fmtAmount,
   csvField,
@@ -72,6 +75,14 @@ function blankT5(): T5BoxesInput {
     nonEligible: { actualCents: 0, count: 0 },
   };
 }
+
+const samplePayer: SlipCsvPayer = {
+  corpLegalName: "Unbounded Technologies Inc.",
+  businessNumber: "726742430",
+  payrollAccount: "726742430RP0001",
+  payerRzAccount: "726742430RZ0001",
+  directorLegalName: "Saïd Aïssani",
+};
 
 // ——— Test 1: Blank slate — T4 zeros map to zeros, right tax year + rate tag ———
 (() => {
@@ -329,16 +340,97 @@ function blankT5(): T5BoxesInput {
 })();
 
 // ─────────────────────────────────────────────────────────────────────────
-// CSV BUILDER TESTS (4E-6) — exercise slip-csv.ts without DATABASE_URL.
+// T4A box 117 (Loan Benefits) verification
 // ─────────────────────────────────────────────────────────────────────────
 
-const samplePayer: SlipCsvPayer = {
-  corpLegalName: "Unbounded Technologies Inc.",
-  businessNumber: "726742430",
-  payrollAccount: "726742430RP0001",
-  payerRzAccount: "726742430RZ0001",
-  directorLegalName: "Saïd Aïssani",
-};
+(() => {
+  const failures: string[] = [];
+  const raw: T4ABoxesInput = { box117Cents: 0, benefit80_4Cents: 0, inclusion15_2Cents: 0 };
+  const t4a = t4aSlipBoxesFromRaw(raw, 2026);
+  expectEq(failures, "taxYear", t4a.taxYear, 2026);
+  expectEq(failures, "box117", t4a.box117Cents, 0);
+  expectEq(failures, "box022 always 0", t4a.box022TaxWithheldCents, 0);
+  expectEq(failures, "breakdown.benefit80_4", t4a.breakdown.benefit80_4Cents, 0);
+  expectEq(failures, "breakdown.inclusion15_2", t4a.breakdown.inclusion15_2Cents, 0);
+  expectEq(failures, "ratesEditionTag", t4a.ratesEditionTag, RATES_EDITION_TAG_2026);
+  record("T4A blank → zeros + correct meta", failures);
+})();
+
+(() => {
+  const failures: string[] = [];
+  // 80.4(2) deemed-interest only (loan still within 15(2.6) deadline).
+  const raw: T4ABoxesInput = {
+    box117Cents: 750_00,
+    benefit80_4Cents: 750_00,
+    inclusion15_2Cents: 0,
+  };
+  const t4a = t4aSlipBoxesFromRaw(raw, 2026);
+  expectEq(failures, "box117 = sum", t4a.box117Cents, 750_00);
+  expectEq(failures, "benefit80_4 passthrough", t4a.breakdown.benefit80_4Cents, 750_00);
+  expectEq(failures, "no 15(2) inclusion", t4a.breakdown.inclusion15_2Cents, 0);
+  expectEq(failures, "withheld stays 0", t4a.box022TaxWithheldCents, 0);
+  record("T4A pass-through: 80.4(2) deemed-interest only (s.15(2.6) not crossed)", failures);
+})();
+
+(() => {
+  const failures: string[] = [];
+  // Loan past 15(2.6) deadline — full principal becomes inclusion, plus prior 80.4 already accrued.
+  const raw: T4ABoxesInput = {
+    box117Cents: 50_300_00,
+    benefit80_4Cents: 300_00,
+    inclusion15_2Cents: 50_000_00,
+  };
+  const t4a = t4aSlipBoxesFromRaw(raw, 2026);
+  expectEq(failures, "box117 captures combined exposure", t4a.box117Cents, 50_300_00);
+  expectEq(failures, "inclusion15_2 surfaces principal at deadline", t4a.breakdown.inclusion15_2Cents, 50_000_00);
+  expectEq(failures, "benefit80_4 still appears alongside inclusion", t4a.breakdown.benefit80_4Cents, 300_00);
+  record("T4A pass-through: 15(2) inclusion + 80.4 benefit composite", failures);
+})();
+
+(() => {
+  const failures: string[] = [];
+  const raw: T4ABoxesInput = {
+    box117Cents: 1_234_56,
+    benefit80_4Cents: 234_56,
+    inclusion15_2Cents: 1_000_00,
+  };
+  const t4a = t4aSlipBoxesFromRaw(raw, 2026);
+  const csv = t4aBoxesToCsv(t4a, samplePayer, 2026);
+
+  if (!csv.startsWith("﻿")) failures.push("CSV missing UTF-8 BOM");
+  if (!csv.includes("\r\n")) failures.push("CSV missing CRLF line endings");
+  if (!csv.includes("Section,Box,Description,Amount,Notes")) {
+    failures.push("header row missing");
+  }
+  if (!csv.includes(",Box 117,") || !csv.includes(`,${fmtAmount(1_234_56)},`)) {
+    failures.push("Box 117 row missing or wrong amount");
+  }
+  if (!csv.includes(",Box 022,") || !csv.includes(",0.00,")) {
+    failures.push("Box 022 (tax withheld) row missing or non-zero");
+  }
+  if (!/META.*Recipient SIN.*NEVER STORED/.test(csv)) {
+    failures.push("SIN meta row missing never-stored note");
+  }
+  if (!csv.includes("BREAKDOWN,")) {
+    failures.push("BREAKDOWN audit section missing");
+  }
+  if (!csv.includes(`,${fmtAmount(234_56)},`) || !csv.includes(`,${fmtAmount(1_000_00)},`)) {
+    failures.push("breakdown amounts missing in CSV");
+  }
+  // Section order: META → SLIP → BREAKDOWN → SUMMARY
+  const metaIdx = csv.indexOf("META,");
+  const slipIdx = csv.indexOf("SLIP,");
+  const breakdownIdx = csv.indexOf("BREAKDOWN,");
+  const summaryIdx = csv.indexOf("SUMMARY,");
+  if (!(metaIdx < slipIdx && slipIdx < breakdownIdx && breakdownIdx < summaryIdx)) {
+    failures.push(`section order broken: META=${metaIdx} SLIP=${slipIdx} BREAKDOWN=${breakdownIdx} SUMMARY=${summaryIdx}`);
+  }
+  record("T4A CSV: BOM + CRLF + header + Box 117 + Box 022=0 + SIN guard + breakdown + section order", failures);
+})();
+
+// ─────────────────────────────────────────────────────────────────────────
+// CSV BUILDER TESTS (4E-6) — exercise slip-csv.ts without DATABASE_URL.
+// ─────────────────────────────────────────────────────────────────────────
 
 // ——— Test CSV-1: fmtAmount produces CRA-friendly dollars.cents ———
 (() => {
