@@ -20,6 +20,7 @@
     "reset-2fa": "tsx --env-file=.env.local scripts/reset-2fa.ts",
     "optimize-logo": "tsx scripts/optimize-logo.ts",
     "optimize-banner": "tsx scripts/optimize-banner.ts",
+    "gen-pwa-assets": "tsx scripts/generate-pwa-assets.ts",
     "cleanup-blobs": "tsx --env-file=.env.local scripts/cleanup-blobs.ts",
     "cleanup-phantom-docs": "tsx --env-file=.env.local scripts/cleanup-phantom-docs.ts",
     "backfill-paycheques-2026": "tsx --env-file=.env.local scripts/backfill-paycheques-2026.ts",
