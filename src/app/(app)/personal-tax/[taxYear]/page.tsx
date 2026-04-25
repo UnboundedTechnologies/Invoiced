@@ -20,6 +20,7 @@ import {
 import { t1FilingDueDate } from "@/lib/t1";
 import { formatCAD, formatLongDate } from "@/lib/utils";
 import { FileT1Button } from "@/components/personal-tax/file-t1-button";
+import { UnfileT1Button } from "@/components/personal-tax/unfile-t1-button";
 import { GenerateT1PdfButton } from "@/components/personal-tax/generate-t1-pdf-button";
 import { DonationsCard } from "@/components/personal-tax/donations-card";
 import { ContributionsCard } from "@/components/personal-tax/contributions-card";
@@ -158,12 +159,14 @@ export default async function PersonalTaxDetailPage({
 
           <div className="flex flex-wrap gap-2">
             <GenerateT1PdfButton taxYear={taxYear} />
-            {!isFiled && (
+            {!isFiled ? (
               <FileT1Button
                 taxYear={taxYear}
                 totalTaxCents={totalTax}
                 refundOrOwingCents={refundOrOwing}
               />
+            ) : (
+              <UnfileT1Button taxYear={taxYear} />
             )}
           </div>
         </div>
