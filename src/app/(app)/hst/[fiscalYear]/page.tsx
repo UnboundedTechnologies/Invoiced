@@ -21,6 +21,7 @@ import { formatCAD, formatLongDate } from "@/lib/utils";
 import { MethodToggle } from "@/components/hst/method-toggle";
 import { FirstQmToggle } from "@/components/hst/first-qm-toggle";
 import { FileReturnButton } from "@/components/hst/file-return-button";
+import { UnfileHstButton } from "@/components/hst/unfile-hst-button";
 import { GeneratePdfButton } from "@/components/hst/generate-pdf-button";
 
 export const dynamic = "force-dynamic";
@@ -146,12 +147,14 @@ export default async function HstDetailPage({
           </div>
           <div className="flex items-center gap-2">
             <GeneratePdfButton fiscalYear={fiscalYear} />
-            {!isFiled && (
+            {!isFiled ? (
               <FileReturnButton
                 fiscalYear={fiscalYear}
                 netCents={shown.line109}
                 method={activeMethod}
               />
+            ) : (
+              <UnfileHstButton fiscalYear={fiscalYear} />
             )}
           </div>
         </div>
