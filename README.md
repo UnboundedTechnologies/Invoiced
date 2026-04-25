@@ -64,10 +64,11 @@
 
 - 🔑 **Argon2id** hashing with 64 MB memory cost (`@node-rs/argon2`)
 - 🚪 **Single-user lockdown** — every login checked against `ALLOWED_LOGIN_EMAILS` server-side; only the first (admin) entry can bootstrap from env
+- 🔐 **TOTP 2FA** on login + on every vault unlock (defense-in-depth above PIN). AES-256-GCM at rest under `TOTP_ENCRYPTION_KEY`, ±30 s drift, 10 single-use argon2id-hashed backup codes per enrolment, 5/15-min lockout
 - ⏱️ **Failed-login lockout** — 5 attempts / 15 min, enforced via Upstash rate limiter
 - 🛡️ **Strict CSP**, HSTS, `X-Frame-Options: DENY`
-- 📦 **Private file storage** — Vercel Blob with signed, expiring URLs
-- 📜 **Audit log** on every login and every write
+- 📦 **Private file storage** — Vercel Blob private store, streamed through auth-gated proxy routes (`get()` SDK call, no direct URL exposure)
+- 📜 **Audit log** on every login + 2FA verify + write + download
 - 🆔 **SIN never persisted** — director's SIN is rendered as a blank marker on T-slips for CRA Web Forms re-keying
 
 ## 🌍 Production deploy (Vercel)
