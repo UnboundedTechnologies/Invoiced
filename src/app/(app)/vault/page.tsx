@@ -3,9 +3,10 @@ import { and, desc, eq } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/lib/db/client";
-import { documents, settings } from "@/lib/db/schema";
+import { documents, settings, users } from "@/lib/db/schema";
 import { getPinHash } from "@/lib/vault-pin";
 import { hasVaultPinSession } from "@/lib/vault-pin-session";
+import { hasVault2faSession } from "@/lib/vault-2fa-session";
 import {
   VAULT_CATEGORIES,
   isVaultCategory,
@@ -13,10 +14,12 @@ import {
 } from "@/lib/vault-categories";
 import { resolveParentLinks } from "@/lib/vault-parent-links";
 import { PinGate } from "@/components/vault/pin-gate";
+import { TwoFAGate } from "@/components/vault/twofa-gate";
 import { VaultFilters } from "@/components/vault/vault-filters";
 import { VaultTable } from "@/components/vault/vault-table";
 import { UploadVaultDialog } from "@/components/vault/upload-vault-dialog";
 import { LockVaultButton } from "@/components/vault/lock-vault-button";
+import { auth } from "../../../../auth";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +43,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Search
     );
   }
 
-  // Gate 2 — is this browser session unlocked?
+  // Gate 2 — is this browser session PIN-unlocked?
   const unlocked = await hasVaultPinSession();
   if (!unlocked) {
     return (
@@ -49,6 +52,28 @@ export default async function VaultPage({ searchParams }: { searchParams: Search
         <PinGate mode="verify" />
       </div>
     );
+  }
+
+  // Gate 3 — does the user have 2FA enrolled? If yes, require a 2FA cookie too.
+  // Users without 2FA fall through (graceful pre-enrolment state).
+  const session = await auth();
+  const sessionEmail = session?.user?.email?.toLowerCase() ?? null;
+  if (sessionEmail) {
+    const [me] = await db
+      .select({ totpEnabledAt: users.totpEnabledAt })
+      .from(users)
+      .where(eq(users.email, sessionEmail));
+    if (me?.totpEnabledAt) {
+      const twofaUnlocked = await hasVault2faSession();
+      if (!twofaUnlocked) {
+        return (
+          <div className="space-y-6">
+            <VaultHeader />
+            <TwoFAGate />
+          </div>
+        );
+      }
+    }
   }
 
   const showArchived = sp.archived === "1";

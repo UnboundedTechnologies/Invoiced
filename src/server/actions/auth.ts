@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { VAULT_PIN_COOKIE } from "@/lib/vault-pin";
 import { readPendingUserId, clearPendingCookie } from "@/lib/totp-pending";
+import { clearVault2faCookie } from "@/lib/vault-2fa-session";
 
 export async function loginAction(_prev: { error?: string } | undefined, formData: FormData) {
   try {
@@ -66,7 +67,8 @@ export async function logoutAction() {
     path: "/",
     maxAge: 0,
   });
-  // Clear any half-completed 2FA pending cookie too.
+  // Clear any half-completed 2FA pending cookie too, and the vault 2FA cookie.
   await clearPendingCookie();
+  await clearVault2faCookie();
   await signOut({ redirectTo: "/login" });
 }
