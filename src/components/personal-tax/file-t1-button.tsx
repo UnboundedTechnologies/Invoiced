@@ -24,10 +24,12 @@ export function FileT1Button({
   taxYear,
   totalTaxCents,
   refundOrOwingCents,
+  version,
 }: {
   taxYear: number;
   totalTaxCents: number;
   refundOrOwingCents: number;
+  version: number;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -59,6 +61,7 @@ export function FileT1Button({
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent>
           <form action={action}>
+            <input type="hidden" name="expectedVersion" value={version} />
             <AlertDialogHeader>
               <AlertDialogTitle>File T1 return — CY {taxYear}</AlertDialogTitle>
               <AlertDialogDescription asChild>

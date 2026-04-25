@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { renderToBuffer } from "@react-pdf/renderer";
 import {
@@ -28,6 +28,7 @@ import { t4aBox117ForYear } from "@/lib/queries/t4a-slices";
 import { donationsForYear } from "@/lib/queries/donations-slices";
 import { contributionsForYear } from "@/lib/queries/contributions-slices";
 import { capitalTransactionsForYear } from "@/lib/queries/capital-transactions-slices";
+import { bumpVersion, parseExpectedVersion, versionConflictError } from "@/lib/optimistic-lock";
 import { getBannerDataUri } from "@/lib/pdf-banner";
 import { T1PrepPDF } from "@/lib/t1-pdf";
 
@@ -221,11 +222,15 @@ export async function fileT1Return(
     if (!parsed.success)
       return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
+    const expectedVersion = parseExpectedVersion(fd);
     const [existing] = await db
       .select()
       .from(t1Returns)
       .where(eq(t1Returns.taxYear, taxYear));
     if (!existing) return { error: "T1 return not found." };
+    if (expectedVersion !== null && existing.version !== expectedVersion) {
+      return { error: versionConflictError("T1 return", expectedVersion, existing.version) };
+    }
     if (existing.status === "filed") return { error: "T1 return is already filed." };
 
     // Recompute from authoritative source.
@@ -234,11 +239,14 @@ export async function fileT1Return(
 
     const filedAtTs = new Date(parsed.data.filedAt + "T00:00:00Z");
 
-    await db.batch([
-      db
-        .update(t1Returns)
-        .set({
-          status: "filed",
+    const updateWhere = expectedVersion !== null
+      ? and(eq(t1Returns.taxYear, taxYear), eq(t1Returns.version, expectedVersion))
+      : eq(t1Returns.taxYear, taxYear);
+    const [updated] = await db
+      .update(t1Returns)
+      .set({
+        status: "filed",
+        version: bumpVersion(),
           // T4 snapshot
           t4Box14Cents: live.t4.box14EmploymentIncomeCents,
           t4Box16Cents: live.t4.box16CppBaseCents,
@@ -307,7 +315,17 @@ export async function fileT1Return(
           filedBy: email,
           updatedAt: new Date(),
         })
-        .where(eq(t1Returns.taxYear, taxYear)),
+      .where(updateWhere)
+      .returning({ version: t1Returns.version });
+    if (!updated) {
+      const [current] = await db
+        .select({ version: t1Returns.version })
+        .from(t1Returns)
+        .where(eq(t1Returns.taxYear, taxYear));
+      if (!current) return { error: "T1 return was deleted in another tab." };
+      return { error: versionConflictError("T1 return", expectedVersion ?? existing.version, current.version) };
+    }
+    await db.batch([
       db.delete(deadlines).where(eq(deadlines.sourceKey, `t1:${taxYear}`)),
       db.insert(auditLog).values({
         actorEmail: email,
@@ -319,6 +337,8 @@ export async function fileT1Return(
           totalTaxCents: r.totalTaxPayableCents,
           refundOrOwingCents: r.refundOrOwingCents,
           ratesEditionTag: r.ratesEditionTag,
+          fromVersion: existing.version,
+          toVersion: updated.version,
         },
       }),
     ]);
@@ -341,7 +361,7 @@ export async function fileT1Return(
 // should mirror this design.
 // ————————————————————————————————————————————————————————————————
 
-export async function unfileT1Return(taxYear: number): Promise<ActionResult> {
+export async function unfileT1Return(taxYear: number, expectedVersion: number): Promise<ActionResult> {
   try {
     const email = await requireSession();
     const [existing] = await db
@@ -349,13 +369,26 @@ export async function unfileT1Return(taxYear: number): Promise<ActionResult> {
       .from(t1Returns)
       .where(eq(t1Returns.taxYear, taxYear));
     if (!existing) return { error: "T1 return not found." };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("T1 return", expectedVersion, existing.version) };
+    }
     if (existing.status !== "filed") return { error: "T1 return is not filed; nothing to unfile." };
 
+    const [updated] = await db
+      .update(t1Returns)
+      .set({ status: "draft", version: bumpVersion(), updatedAt: new Date() })
+      .where(and(eq(t1Returns.taxYear, taxYear), eq(t1Returns.version, expectedVersion)))
+      .returning({ version: t1Returns.version });
+    if (!updated) {
+      const [current] = await db
+        .select({ version: t1Returns.version })
+        .from(t1Returns)
+        .where(eq(t1Returns.taxYear, taxYear));
+      if (!current) return { error: "T1 return was deleted in another tab." };
+      return { error: versionConflictError("T1 return", expectedVersion, current.version) };
+    }
+
     await db.batch([
-      db
-        .update(t1Returns)
-        .set({ status: "draft", updatedAt: new Date() })
-        .where(eq(t1Returns.taxYear, taxYear)),
       db
         .insert(deadlines)
         .values({
@@ -376,6 +409,8 @@ export async function unfileT1Return(taxYear: number): Promise<ActionResult> {
           previousFiledAt: existing.filedAt,
           previousTotalTaxCents: existing.totalTaxPayableCents,
           previousRefundOrOwingCents: existing.refundOrOwingCents,
+          fromVersion: existing.version,
+          toVersion: updated.version,
         },
       }),
     ]);

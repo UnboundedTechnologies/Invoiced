@@ -28,6 +28,7 @@ import { fiscalYearFor } from "@/lib/utils";
 import { TAXABLE_SUPPLY_STATUSES } from "@/lib/queries/invoice-slices";
 import { HstReturnPDF } from "@/lib/hst-pdf";
 import { getBannerDataUri } from "@/lib/pdf-banner";
+import { bumpVersion, parseExpectedVersion, versionConflictError } from "@/lib/optimistic-lock";
 
 type ActionResult = { ok?: string; error?: string; pdfBase64?: string };
 
@@ -321,11 +322,15 @@ export async function fileReturn(
     });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
+    const expectedVersion = parseExpectedVersion(fd);
     const [existing] = await db
       .select()
       .from(hstReturns)
       .where(eq(hstReturns.fiscalYear, fiscalYear));
     if (!existing) return { error: "Return not found." };
+    if (expectedVersion !== null && existing.version !== expectedVersion) {
+      return { error: versionConflictError("HST return", expectedVersion, existing.version) };
+    }
     if (existing.status === "filed") return { error: "Return is already filed." };
 
     // Recompute at filing time from the authoritative live data.
@@ -361,18 +366,32 @@ export async function fileReturn(
 
     const filedAtTs = new Date(parsed.data.filedAt + "T00:00:00Z");
 
+    const updateWhere = expectedVersion !== null
+      ? and(eq(hstReturns.fiscalYear, fiscalYear), eq(hstReturns.version, expectedVersion))
+      : eq(hstReturns.fiscalYear, fiscalYear);
+    const [updated] = await db
+      .update(hstReturns)
+      .set({
+        status: "filed",
+        ...snap,
+        version: bumpVersion(),
+        craConfirmationNumber: parsed.data.craConfirmationNumber,
+        filedAt: filedAtTs,
+        filedBy: email,
+        updatedAt: new Date(),
+      })
+      .where(updateWhere)
+      .returning({ version: hstReturns.version });
+    if (!updated) {
+      const [current] = await db
+        .select({ version: hstReturns.version })
+        .from(hstReturns)
+        .where(eq(hstReturns.fiscalYear, fiscalYear));
+      if (!current) return { error: "Return was deleted in another tab." };
+      return { error: versionConflictError("HST return", expectedVersion ?? existing.version, current.version) };
+    }
+
     await db.batch([
-      db
-        .update(hstReturns)
-        .set({
-          status: "filed",
-          ...snap,
-          craConfirmationNumber: parsed.data.craConfirmationNumber,
-          filedAt: filedAtTs,
-          filedBy: email,
-          updatedAt: new Date(),
-        })
-        .where(eq(hstReturns.fiscalYear, fiscalYear)),
       // Remove the pending deadline now that it's filed (match on sourceKey
       // since the title could be edited by the user)
       db.delete(deadlines).where(eq(deadlines.sourceKey, `hst:${fiscalYear}`)),
@@ -386,6 +405,8 @@ export async function fileReturn(
           craConfirmationNumber: parsed.data.craConfirmationNumber,
           filedAt: parsed.data.filedAt,
           snapshot: snap,
+          fromVersion: existing.version,
+          toVersion: updated.version,
         },
       }),
     ]);
@@ -407,7 +428,7 @@ export async function fileReturn(
 // independent FY-to-FY (no chain), so no later-FY guard is needed.
 // ——————————————————————————————————————————————————————————————
 
-export async function unfileHstReturn(fiscalYear: number): Promise<ActionResult> {
+export async function unfileHstReturn(fiscalYear: number, expectedVersion: number): Promise<ActionResult> {
   try {
     const email = await requireSession();
     const [existing] = await db
@@ -415,15 +436,28 @@ export async function unfileHstReturn(fiscalYear: number): Promise<ActionResult>
       .from(hstReturns)
       .where(eq(hstReturns.fiscalYear, fiscalYear));
     if (!existing) return { error: "Return not found." };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("HST return", expectedVersion, existing.version) };
+    }
     if (existing.status !== "filed") return { error: "Return is not filed; nothing to unfile." };
 
     const dueIso = hstFilingDueDate(existing.periodEnd);
 
+    const [updated] = await db
+      .update(hstReturns)
+      .set({ status: "draft", version: bumpVersion(), updatedAt: new Date() })
+      .where(and(eq(hstReturns.fiscalYear, fiscalYear), eq(hstReturns.version, expectedVersion)))
+      .returning({ version: hstReturns.version });
+    if (!updated) {
+      const [current] = await db
+        .select({ version: hstReturns.version })
+        .from(hstReturns)
+        .where(eq(hstReturns.fiscalYear, fiscalYear));
+      if (!current) return { error: "Return was deleted in another tab." };
+      return { error: versionConflictError("HST return", expectedVersion, current.version) };
+    }
+
     await db.batch([
-      db
-        .update(hstReturns)
-        .set({ status: "draft", updatedAt: new Date() })
-        .where(eq(hstReturns.fiscalYear, fiscalYear)),
       db
         .insert(deadlines)
         .values({
@@ -443,6 +477,8 @@ export async function unfileHstReturn(fiscalYear: number): Promise<ActionResult>
           previousCraConfirmationNumber: existing.craConfirmationNumber,
           previousFiledAt: existing.filedAt,
           previousLine109Cents: existing.line109Cents,
+          fromVersion: existing.version,
+          toVersion: updated.version,
         },
       }),
     ]);

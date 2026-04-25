@@ -164,9 +164,10 @@ export default async function PersonalTaxDetailPage({
                 taxYear={taxYear}
                 totalTaxCents={totalTax}
                 refundOrOwingCents={refundOrOwing}
+                version={row.version}
               />
             ) : (
-              <UnfileT1Button taxYear={taxYear} />
+              <UnfileT1Button taxYear={taxYear} version={row.version} />
             )}
           </div>
         </div>
