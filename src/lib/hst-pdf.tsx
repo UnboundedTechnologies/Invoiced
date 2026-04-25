@@ -6,6 +6,7 @@
  */
 import { Document, Page, Text, View, Image, StyleSheet } from "@react-pdf/renderer";
 import { formatLongDate } from "@/lib/utils";
+import { DraftWatermark } from "@/lib/pdf-watermark";
 
 export type HstReturnPDFProps = {
   fiscalYear: number;
@@ -60,7 +61,6 @@ const COLORS = {
   borderStrong: "#0a0a14",
   rowBg: "#f7f7fb",
   cardBg: "#fafafd",
-  watermark: "#f2d5d5",
 };
 
 const styles = StyleSheet.create({
@@ -72,19 +72,6 @@ const styles = StyleSheet.create({
     fontFamily: "Helvetica",
     color: COLORS.ink,
     lineHeight: 1.4,
-  },
-  watermark: {
-    position: "absolute",
-    top: 380,
-    left: 50,
-    right: 50,
-    fontSize: 88,
-    fontFamily: "Helvetica-Bold",
-    letterSpacing: 12,
-    color: COLORS.watermark,
-    textAlign: "center",
-    transform: "rotate(-45deg)",
-    transformOrigin: "center",
   },
   header: {
     flexDirection: "row",
@@ -221,8 +208,7 @@ export function HstReturnPDF(props: HstReturnPDFProps) {
       creator="Invoiced"
     >
       <Page size="LETTER" style={styles.page}>
-        {/* Watermark first so all subsequent content paints on top. */}
-        {status === "draft" && <Text style={styles.watermark}>DRAFT</Text>}
+        {status === "draft" && <DraftWatermark top={380} />}
 
         <View style={styles.header}>
           <View>
