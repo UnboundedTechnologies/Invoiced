@@ -17,7 +17,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { deleteDraftInvoice } from "@/server/actions/invoices";
 
-export function DeleteInvoiceButton({ id, invoiceNumber }: { id: string; invoiceNumber: string }) {
+export function DeleteInvoiceButton({
+  id,
+  invoiceNumber,
+  version,
+}: {
+  id: string;
+  invoiceNumber: string;
+  version: number;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -25,7 +33,7 @@ export function DeleteInvoiceButton({ id, invoiceNumber }: { id: string; invoice
   function doDelete() {
     setOpen(false);
     startTransition(async () => {
-      const r = await deleteDraftInvoice(id);
+      const r = await deleteDraftInvoice(id, version);
       if (r.ok) {
         toast.success(r.ok);
         router.refresh();

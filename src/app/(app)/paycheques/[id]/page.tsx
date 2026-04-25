@@ -71,7 +71,7 @@ export default async function PaychequeDetailPage({ params }: { params: Promise<
             {s?.directorLegalName ?? "Employee"} · Period {formatLongDate(paycheque.periodStart)} → {formatLongDate(paycheque.periodEnd)}
           </p>
         </div>
-        <PaychequeActions id={paycheque.id} status={paycheque.status} />
+        <PaychequeActions id={paycheque.id} status={paycheque.status} version={paycheque.version} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">

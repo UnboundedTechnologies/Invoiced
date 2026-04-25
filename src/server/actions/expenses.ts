@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { put, del } from "@vercel/blob";
 import { createHash } from "node:crypto";
@@ -11,6 +11,7 @@ import { auth } from "../../../auth";
 import { fiscalYearFor } from "@/lib/utils";
 import { hstPeriodLockError } from "./hst";
 import { t2PeriodLockError } from "./t2";
+import { bumpVersion, parseExpectedVersion, versionConflictError } from "@/lib/optimistic-lock";
 
 /** Checks BOTH HST and T2 filing locks for a given ISO date. Returns the
  * first non-null error, or null if the period is fully open. Keeps the
@@ -305,8 +306,12 @@ export async function updateExpense(
 ): Promise<ActionResult> {
   try {
     const email = await requireSession();
+    const expectedVersion = parseExpectedVersion(fd);
     const [existing] = await db.select().from(expenses).where(eq(expenses.id, id));
     if (!existing) return { error: "Expense not found." };
+    if (expectedVersion !== null && existing.version !== expectedVersion) {
+      return { error: versionConflictError("expense", expectedVersion, existing.version) };
+    }
 
     const parsed = parseForm(fd);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -326,36 +331,50 @@ export async function updateExpense(
     const hstPaidCents = Math.round(data.hstPaidDollars * 100);
     const totalCents = Math.round(data.totalDollars * 100);
 
-    await db.batch([
-      db
-        .update(expenses)
-        .set({
-          expenseDate: data.expenseDate,
-          vendor: data.vendor,
-          description: data.description,
-          category: data.category,
-          subtotalCents,
-          hstPaidCents,
-          totalCents,
-          paymentMethod: data.paymentMethod,
-          cca: ccaJson(data.cca),
-          fiscalYear,
-        })
-        .where(eq(expenses.id, id)),
-      db.insert(auditLog).values({
-        actorEmail: email,
-        action: "update",
-        target: `expenses:${id}`,
-        metadata: {
-          vendor: data.vendor,
-          category: data.category,
-          subtotalCents,
-          hstPaidCents,
-          totalCents,
-          fiscalYear,
-        },
-      }),
-    ]);
+    const whereClause = expectedVersion !== null
+      ? and(eq(expenses.id, id), eq(expenses.version, expectedVersion))
+      : eq(expenses.id, id);
+    const [updated] = await db
+      .update(expenses)
+      .set({
+        expenseDate: data.expenseDate,
+        vendor: data.vendor,
+        description: data.description,
+        category: data.category,
+        subtotalCents,
+        hstPaidCents,
+        totalCents,
+        paymentMethod: data.paymentMethod,
+        cca: ccaJson(data.cca),
+        fiscalYear,
+        version: bumpVersion(),
+      })
+      .where(whereClause)
+      .returning({ version: expenses.version });
+    if (!updated) {
+      const [current] = await db
+        .select({ version: expenses.version })
+        .from(expenses)
+        .where(eq(expenses.id, id));
+      if (!current) return { error: "Expense was deleted in another tab." };
+      return { error: versionConflictError("expense", expectedVersion ?? existing.version, current.version) };
+    }
+
+    await db.insert(auditLog).values({
+      actorEmail: email,
+      action: "update",
+      target: `expenses:${id}`,
+      metadata: {
+        vendor: data.vendor,
+        category: data.category,
+        subtotalCents,
+        hstPaidCents,
+        totalCents,
+        fiscalYear,
+        fromVersion: existing.version,
+        toVersion: updated.version,
+      },
+    });
 
     revalidate();
     return { ok: "Expense saved." };
@@ -364,14 +383,30 @@ export async function updateExpense(
   }
 }
 
-export async function deleteExpense(id: string): Promise<ActionResult> {
+export async function deleteExpense(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
     const email = await requireSession();
     const [existing] = await db.select().from(expenses).where(eq(expenses.id, id));
     if (!existing) return { error: "Expense not found." };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("expense", expectedVersion, existing.version) };
+    }
 
     const lockErr = await periodLockError(existing.expenseDate);
     if (lockErr) return { error: lockErr };
+
+    const deleted = await db
+      .delete(expenses)
+      .where(and(eq(expenses.id, id), eq(expenses.version, expectedVersion)))
+      .returning({ id: expenses.id });
+    if (!deleted.length) {
+      const [current] = await db
+        .select({ version: expenses.version })
+        .from(expenses)
+        .where(eq(expenses.id, id));
+      if (!current) return { error: "Expense was already deleted." };
+      return { error: versionConflictError("expense", expectedVersion, current.version) };
+    }
 
     const auditEntry = db.insert(auditLog).values({
       actorEmail: email,
@@ -385,13 +420,13 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
         totalCents: existing.totalCents,
         fiscalYear: existing.fiscalYear,
         receiptDeleted: !!existing.receiptBlobUrl,
+        version: existing.version,
       },
     });
 
     if (existing.receiptBlobUrl) {
       await db.batch([
         db.delete(documents).where(eq(documents.blobUrl, existing.receiptBlobUrl)),
-        db.delete(expenses).where(eq(expenses.id, id)),
         auditEntry,
       ]);
       try {
@@ -400,7 +435,7 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
         // best-effort
       }
     } else {
-      await db.batch([db.delete(expenses).where(eq(expenses.id, id)), auditEntry]);
+      await auditEntry;
     }
 
     revalidate();
@@ -410,12 +445,19 @@ export async function deleteExpense(id: string): Promise<ActionResult> {
   }
 }
 
-export async function uploadReceipt(expenseId: string, fd: FormData): Promise<ActionResult> {
+export async function uploadReceipt(
+  expenseId: string,
+  expectedVersion: number,
+  fd: FormData,
+): Promise<ActionResult> {
   let uploadedBlobUrl: string | null = null;
   try {
     const email = await requireSession();
     const [existing] = await db.select().from(expenses).where(eq(expenses.id, expenseId));
     if (!existing) return { error: "Expense not found." };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("expense", expectedVersion, existing.version) };
+    }
     if (existing.receiptBlobUrl) {
       return { error: "A receipt is already attached. Use Replace to upload a new file." };
     }
@@ -439,8 +481,8 @@ export async function uploadReceipt(expenseId: string, fd: FormData): Promise<Ac
     await db.batch([
       db
         .update(expenses)
-        .set({ receiptBlobUrl: blob.url, receiptSha256: fileCheck.sha256 })
-        .where(eq(expenses.id, expenseId)),
+        .set({ receiptBlobUrl: blob.url, receiptSha256: fileCheck.sha256, version: bumpVersion() })
+        .where(and(eq(expenses.id, expenseId), eq(expenses.version, expectedVersion))),
       db.insert(documents).values({
         id: documentId,
         name: file.name,
@@ -474,12 +516,19 @@ export async function uploadReceipt(expenseId: string, fd: FormData): Promise<Ac
   }
 }
 
-export async function replaceReceipt(expenseId: string, fd: FormData): Promise<ActionResult> {
+export async function replaceReceipt(
+  expenseId: string,
+  expectedVersion: number,
+  fd: FormData,
+): Promise<ActionResult> {
   let newBlobUrl: string | null = null;
   try {
     const email = await requireSession();
     const [existing] = await db.select().from(expenses).where(eq(expenses.id, expenseId));
     if (!existing) return { error: "Expense not found." };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("expense", expectedVersion, existing.version) };
+    }
     if (!existing.receiptBlobUrl) {
       return { error: "Nothing to replace. Attach a receipt first." };
     }
@@ -504,8 +553,8 @@ export async function replaceReceipt(expenseId: string, fd: FormData): Promise<A
     await db.batch([
       db
         .update(expenses)
-        .set({ receiptBlobUrl: blob.url, receiptSha256: fileCheck.sha256 })
-        .where(eq(expenses.id, expenseId)),
+        .set({ receiptBlobUrl: blob.url, receiptSha256: fileCheck.sha256, version: bumpVersion() })
+        .where(and(eq(expenses.id, expenseId), eq(expenses.version, expectedVersion))),
       db.delete(documents).where(eq(documents.blobUrl, oldBlobUrl)),
       db.insert(documents).values({
         id: documentId,
@@ -551,11 +600,17 @@ export async function replaceReceipt(expenseId: string, fd: FormData): Promise<A
   }
 }
 
-export async function deleteReceipt(expenseId: string): Promise<ActionResult> {
+export async function deleteReceipt(
+  expenseId: string,
+  expectedVersion: number,
+): Promise<ActionResult> {
   try {
     const email = await requireSession();
     const [existing] = await db.select().from(expenses).where(eq(expenses.id, expenseId));
     if (!existing) return { error: "Expense not found." };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("expense", expectedVersion, existing.version) };
+    }
     if (!existing.receiptBlobUrl) return { error: "No receipt to remove." };
     const lockErr = await periodLockError(existing.expenseDate);
     if (lockErr) return { error: lockErr };
@@ -565,8 +620,8 @@ export async function deleteReceipt(expenseId: string): Promise<ActionResult> {
     await db.batch([
       db
         .update(expenses)
-        .set({ receiptBlobUrl: null, receiptSha256: null })
-        .where(eq(expenses.id, expenseId)),
+        .set({ receiptBlobUrl: null, receiptSha256: null, version: bumpVersion() })
+        .where(and(eq(expenses.id, expenseId), eq(expenses.version, expectedVersion))),
       db.delete(documents).where(eq(documents.blobUrl, oldBlobUrl)),
       db.insert(auditLog).values({
         actorEmail: email,

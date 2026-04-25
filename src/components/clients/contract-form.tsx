@@ -43,6 +43,7 @@ export function ContractForm({
   return (
     <div className="space-y-5">
       <form action={formAction} className="space-y-4">
+        {contract && <input type="hidden" name="expectedVersion" value={contract.version} />}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="label">Contract label</Label>

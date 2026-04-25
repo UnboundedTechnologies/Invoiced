@@ -47,7 +47,7 @@ export function ExpenseRow({
   function doDelete() {
     setDeleteOpen(false);
     startTransition(async () => {
-      const r = await deleteExpense(expense.id);
+      const r = await deleteExpense(expense.id, expense.version);
       if (r.ok) {
         toast.success(r.ok);
         router.refresh();

@@ -250,7 +250,7 @@ function CapitalRow({
   function onDelete() {
     if (!confirm(`Delete "${row.description}"?`)) return;
     startTransition(async () => {
-      const r = await deleteCapitalTransaction(row.id);
+      const r = await deleteCapitalTransaction(row.id, row.version);
       if (r.ok) {
         toast.success(r.ok);
         onDeleted();

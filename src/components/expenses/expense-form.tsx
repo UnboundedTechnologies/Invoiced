@@ -148,6 +148,7 @@ export function ExpenseForm({
 
   return (
     <form action={formAction} className="space-y-4">
+      {expense && <input type="hidden" name="expectedVersion" value={expense.version} />}
       {/* Vendor + date */}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
@@ -319,7 +320,7 @@ export function ExpenseForm({
 
       {/* Receipt */}
       {expense ? (
-        <ReceiptManager expenseId={expense.id} hasReceipt={!!expense.receiptBlobUrl} />
+        <ReceiptManager expenseId={expense.id} expenseVersion={expense.version} hasReceipt={!!expense.receiptBlobUrl} />
       ) : (
         <ReceiptUploadField />
       )}

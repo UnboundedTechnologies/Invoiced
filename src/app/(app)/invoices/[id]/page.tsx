@@ -51,7 +51,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             {client.legalName} · Issued {formatLongDate(invoice.issueDate)} · Due {formatLongDate(invoice.dueDate)}
           </p>
         </div>
-        <InvoiceActions id={invoice.id} status={invoice.status} />
+        <InvoiceActions id={invoice.id} status={invoice.status} version={invoice.version} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">

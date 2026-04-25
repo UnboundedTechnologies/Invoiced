@@ -191,7 +191,7 @@ function DonationRow({
       return;
     }
     startTransition(async () => {
-      const r = await deleteDonation(donation.id);
+      const r = await deleteDonation(donation.id, donation.version);
       if (r.ok) {
         toast.success(r.ok);
         onDeleted();

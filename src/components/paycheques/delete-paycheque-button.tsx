@@ -17,7 +17,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { deleteDraftPaycheque } from "@/server/actions/paycheques";
 
-export function DeletePaychequeButton({ id, payDate }: { id: string; payDate: string }) {
+export function DeletePaychequeButton({
+  id,
+  payDate,
+  version,
+}: {
+  id: string;
+  payDate: string;
+  version: number;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -25,7 +33,7 @@ export function DeletePaychequeButton({ id, payDate }: { id: string; payDate: st
   function doDelete() {
     setOpen(false);
     startTransition(async () => {
-      const r = await deleteDraftPaycheque(id);
+      const r = await deleteDraftPaycheque(id, version);
       if (r.ok) {
         toast.success(r.ok);
         router.refresh();

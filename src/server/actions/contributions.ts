@@ -1,12 +1,13 @@
 "use server";
 
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auditLog, rrspContributions } from "@/lib/db/schema";
 import { db } from "@/lib/db/client";
 import { auth } from "../../../auth";
 import { t1PeriodLockError } from "./t1";
+import { versionConflictError } from "@/lib/optimistic-lock";
 
 type ActionResult = { ok?: string; error?: string };
 
@@ -113,7 +114,7 @@ export async function createContribution(
   }
 }
 
-export async function deleteContribution(id: string): Promise<ActionResult> {
+export async function deleteContribution(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
     const email = await requireSession();
     const [existing] = await db
@@ -121,24 +122,38 @@ export async function deleteContribution(id: string): Promise<ActionResult> {
       .from(rrspContributions)
       .where(eq(rrspContributions.id, id));
     if (!existing) return { error: "Contribution not found." };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("contribution", expectedVersion, existing.version) };
+    }
 
     const lockErr = await t1PeriodLockError(`${existing.appliedToTaxYear}-01-01`);
     if (lockErr) return { error: lockErr };
 
-    await db.batch([
-      db.delete(rrspContributions).where(eq(rrspContributions.id, id)),
-      db.insert(auditLog).values({
-        actorEmail: email,
-        action: "delete",
-        target: `rrsp_contributions:${existing.appliedToTaxYear}`,
-        metadata: {
-          appliedToTaxYear: existing.appliedToTaxYear,
-          kind: existing.kind,
-          amountCents: existing.amountCents,
-          dateContributed: existing.dateContributed,
-        },
-      }),
-    ]);
+    const deleted = await db
+      .delete(rrspContributions)
+      .where(and(eq(rrspContributions.id, id), eq(rrspContributions.version, expectedVersion)))
+      .returning({ id: rrspContributions.id });
+    if (!deleted.length) {
+      const [current] = await db
+        .select({ version: rrspContributions.version })
+        .from(rrspContributions)
+        .where(eq(rrspContributions.id, id));
+      if (!current) return { error: "Contribution was already deleted." };
+      return { error: versionConflictError("contribution", expectedVersion, current.version) };
+    }
+
+    await db.insert(auditLog).values({
+      actorEmail: email,
+      action: "delete",
+      target: `rrsp_contributions:${existing.appliedToTaxYear}`,
+      metadata: {
+        appliedToTaxYear: existing.appliedToTaxYear,
+        kind: existing.kind,
+        amountCents: existing.amountCents,
+        dateContributed: existing.dateContributed,
+        version: existing.version,
+      },
+    });
 
     revalidate(existing.appliedToTaxYear);
     return { ok: "Contribution removed." };

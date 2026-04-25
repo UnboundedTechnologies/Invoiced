@@ -1,13 +1,14 @@
 "use server";
 
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auditLog, capitalTransactions } from "@/lib/db/schema";
 import { db } from "@/lib/db/client";
 import { auth } from "../../../auth";
 import { taxYearFor } from "@/lib/t1";
 import { t1PeriodLockError } from "./t1";
+import { versionConflictError } from "@/lib/optimistic-lock";
 
 type ActionResult = { ok?: string; error?: string };
 
@@ -114,7 +115,10 @@ export async function createCapitalTransaction(
   }
 }
 
-export async function deleteCapitalTransaction(id: string): Promise<ActionResult> {
+export async function deleteCapitalTransaction(
+  id: string,
+  expectedVersion: number,
+): Promise<ActionResult> {
   try {
     const email = await requireSession();
     const [existing] = await db
@@ -122,27 +126,41 @@ export async function deleteCapitalTransaction(id: string): Promise<ActionResult
       .from(capitalTransactions)
       .where(eq(capitalTransactions.id, id));
     if (!existing) return { error: "Capital transaction not found." };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("capital transaction", expectedVersion, existing.version) };
+    }
 
     const lockErr = await t1PeriodLockError(existing.dispositionDate);
     if (lockErr) return { error: lockErr };
 
-    await db.batch([
-      db.delete(capitalTransactions).where(eq(capitalTransactions.id, id)),
-      db.insert(auditLog).values({
-        actorEmail: email,
-        action: "delete",
-        target: `capital_transactions:${existing.taxYear}`,
-        metadata: {
-          taxYear: existing.taxYear,
-          kind: existing.kind,
-          description: existing.description,
-          dispositionDate: existing.dispositionDate,
-          proceedsCents: existing.proceedsCents,
-          acbCents: existing.acbCents,
-          outlaysCents: existing.outlaysCents,
-        },
-      }),
-    ]);
+    const deleted = await db
+      .delete(capitalTransactions)
+      .where(and(eq(capitalTransactions.id, id), eq(capitalTransactions.version, expectedVersion)))
+      .returning({ id: capitalTransactions.id });
+    if (!deleted.length) {
+      const [current] = await db
+        .select({ version: capitalTransactions.version })
+        .from(capitalTransactions)
+        .where(eq(capitalTransactions.id, id));
+      if (!current) return { error: "Capital transaction was already deleted." };
+      return { error: versionConflictError("capital transaction", expectedVersion, current.version) };
+    }
+
+    await db.insert(auditLog).values({
+      actorEmail: email,
+      action: "delete",
+      target: `capital_transactions:${existing.taxYear}`,
+      metadata: {
+        taxYear: existing.taxYear,
+        kind: existing.kind,
+        description: existing.description,
+        dispositionDate: existing.dispositionDate,
+        proceedsCents: existing.proceedsCents,
+        acbCents: existing.acbCents,
+        outlaysCents: existing.outlaysCents,
+        version: existing.version,
+      },
+    });
 
     revalidate(existing.taxYear);
     return { ok: "Capital transaction removed." };

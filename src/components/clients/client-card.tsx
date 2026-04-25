@@ -267,7 +267,7 @@ function ContractRowDisplay({
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   async function toggle() {
-    const r = contract.active ? await archiveContract(contract.id) : await reactivateContract(contract.id);
+    const r = contract.active ? await archiveContract(contract.id, contract.version) : await reactivateContract(contract.id, contract.version);
     if (r.ok) {
       toast.success(r.ok);
       router.refresh();

@@ -113,7 +113,7 @@ export default async function InvoicesPage() {
                       </td>
                       <td className="px-2 py-3 text-right">
                         {invoice.status === "draft" && (
-                          <DeleteInvoiceButton id={invoice.id} invoiceNumber={invoice.invoiceNumber} />
+                          <DeleteInvoiceButton id={invoice.id} invoiceNumber={invoice.invoiceNumber} version={invoice.version} />
                         )}
                       </td>
                     </tr>
