@@ -16,6 +16,11 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // CSP nonce is set per request by src/middleware.ts. Next.js reads it
+  // from the `x-nonce` request header automatically and injects it into
+  // its own bootstrap scripts. `strict-dynamic` in the CSP trusts
+  // anything those scripts chain-load (Analytics/SpeedInsights beacons,
+  // hydration chunks) so we don't have to thread the nonce manually.
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body
