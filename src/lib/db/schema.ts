@@ -758,6 +758,28 @@ export const documents = pgTable("documents", {
   contractId: uuid("contract_id").references((): AnyPgColumn => contracts.id, { onDelete: "set null" }),
 });
 
+// Web Push subscriptions — one row per (device, browser) tuple. Each row is
+// a complete payload for a webpush.sendNotification() call: endpoint + p256dh
+// + auth keys per RFC 8291. userEmail is denormalised onto the row so the
+// daily cron can fan out to all subs without needing a join.
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userEmail: text("user_email").notNull(),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("push_subscriptions_endpoint_unique").on(t.endpoint),
+    index("push_subscriptions_user_email_idx").on(t.userEmail),
+  ],
+);
+
 // Calendar / deadlines
 export const deadlines = pgTable(
   "deadlines",

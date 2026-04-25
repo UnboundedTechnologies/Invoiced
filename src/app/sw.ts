@@ -37,3 +37,56 @@ const serwist = new Serwist({
 });
 
 serwist.addEventListeners();
+
+// ── Web Push handlers ────────────────────────────────────────────────────────
+// Daily cron pushes a deadline summary to every subscription. The payload is
+// JSON-encoded { title, body, url }; on click we focus an existing tab on
+// the URL or open a new one.
+
+interface PushPayload {
+  title?: string;
+  body?: string;
+  url?: string;
+}
+
+self.addEventListener("push", (event) => {
+  let payload: PushPayload = {};
+  try {
+    payload = event.data?.json() ?? {};
+  } catch {
+    payload = { title: "Invoiced", body: event.data?.text() ?? "" };
+  }
+  const title = payload.title || "Invoiced";
+  const options: NotificationOptions = {
+    body: payload.body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    data: { url: payload.url || "/calendar" },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data as { url?: string } | undefined)?.url ?? "/calendar";
+  event.waitUntil(
+    (async () => {
+      const allClients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      // Focus an existing tab on the same origin if possible, navigate it.
+      for (const client of allClients) {
+        if ("focus" in client) {
+          await client.focus();
+          if ("navigate" in client) {
+            try {
+              await (client as WindowClient).navigate(url);
+            } catch {
+              /* cross-origin or otherwise — open new instead */
+            }
+          }
+          return;
+        }
+      }
+      await self.clients.openWindow(url);
+    })(),
+  );
+});
