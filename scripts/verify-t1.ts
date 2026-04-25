@@ -30,6 +30,7 @@ import {
   NON_ELIGIBLE_GROSS_UP_RATE,
   ONTARIO_SURTAX,
 } from "../src/lib/t1-rates-2026";
+import { computeSch3 } from "../src/lib/sch3";
 import { formatCAD } from "../src/lib/utils";
 
 type Result = { name: string; failures: string[] };
@@ -76,6 +77,7 @@ function input(overrides: Partial<T1Input> = {}): T1Input {
     donations: { totalCents: 0 },
     rrsp: { contributionsCents: 0, deductionLimitCents: 0 },
     fhsa: { contributionsCents: 0, roomCents: 0 },
+    capitalGains: { line19900Cents: 0, line12700Cents: 0, sch3Warnings: [] },
     ...overrides,
   };
 }
@@ -682,6 +684,97 @@ function input(overrides: Partial<T1Input> = {}): T1Input {
     failures.push(`expected ~$3K tax saved on $10K RRSP at $80K; got ${formatCAD(taxSaved)}`);
   }
   record("Combined: $80K + $10K RRSP → tax savings in ~$3K range (29.65% combined marginal)", failures);
+})();
+
+// ——— Test 36: No capital transactions → identical baseline ———
+
+(() => {
+  const failures: string[] = [];
+  const baseline = computeT1(input({ t4: { ...blankT4(), box14EmploymentIncomeCents: 80_000_00 } }));
+  const r = computeT1(
+    input({
+      t4: { ...blankT4(), box14EmploymentIncomeCents: 80_000_00 },
+      capitalGains: { line19900Cents: 0, line12700Cents: 0, sch3Warnings: [] },
+    }),
+  );
+  expectEq(failures, "no cap gains: line 12700 = 0", r.capitalGainsLine12700Cents, 0);
+  expectEq(failures, "no cap gains: totalTax unchanged", r.totalTaxPayableCents, baseline.totalTaxPayableCents);
+  record("Capital gains: zero transactions → no impact, baseline preserved", failures);
+})();
+
+// ——— Test 37: Single $10K gain → line 19900 = $10K, line 12700 = $5K ———
+
+(() => {
+  const failures: string[] = [];
+  const r = computeT1(
+    input({
+      t4: { ...blankT4(), box14EmploymentIncomeCents: 80_000_00 },
+      capitalGains: { line19900Cents: 10_000_00, line12700Cents: 5_000_00, sch3Warnings: [] },
+    }),
+  );
+  expectEq(failures, "line 19900 ≡ input", r.capitalGainsLine19900Cents, 10_000_00);
+  expectEq(failures, "line 12700 ≡ input", r.capitalGainsLine12700Cents, 5_000_00);
+  // totalIncome should include the $5K taxable inclusion.
+  const baseline = computeT1(input({ t4: { ...blankT4(), box14EmploymentIncomeCents: 80_000_00 } }));
+  expectEq(failures, "totalIncome += line 12700", r.totalIncomeCents - baseline.totalIncomeCents, 5_000_00);
+  record("Capital gains: single $10K gain → line 12700 = $5K, totalIncome += $5K", failures);
+})();
+
+// ——— Test 38: Net $5K loss → line 12700 = 0, warning passed through ———
+
+(() => {
+  const failures: string[] = [];
+  const r = computeT1(
+    input({
+      t4: { ...blankT4(), box14EmploymentIncomeCents: 80_000_00 },
+      capitalGains: {
+        line19900Cents: -5_000_00,
+        line12700Cents: 0,
+        sch3Warnings: ["Net capital LOSS of $5000.00 — losses don't offset other income on T1. Carryforward to a future year (s.111(1)(b)). Tracking is not yet automated; record manually."],
+      },
+    }),
+  );
+  expectEq(failures, "loss: line 12700 = 0", r.capitalGainsLine12700Cents, 0);
+  expectEq(failures, "loss: line 19900 < 0 preserved", r.capitalGainsLine19900Cents, -5_000_00);
+  if (!r.warnings.some((w) => w.includes("Net capital LOSS"))) {
+    failures.push(`expected loss-carryforward warning to pass through; got: ${JSON.stringify(r.warnings)}`);
+  }
+  // Total income unchanged from baseline (loss doesn't reduce other income on T1).
+  const baseline = computeT1(input({ t4: { ...blankT4(), box14EmploymentIncomeCents: 80_000_00 } }));
+  expectEq(failures, "loss: totalIncome unchanged", r.totalIncomeCents, baseline.totalIncomeCents);
+  record("Capital gains: $5K loss → line 12700 = 0 + warning passed through", failures);
+})();
+
+// ——— Test 39: Sch 3 engine — mixed + and − rows ———
+
+(() => {
+  const failures: string[] = [];
+  // Direct test of computeSch3 to make sure aggregation is correct.
+  const sch3 = computeSch3([
+    { kind: "public_security", proceedsCents: 12_000_00, acbCents: 10_000_00, outlaysCents: 0 },
+    { kind: "crypto",          proceedsCents: 1_000_00,  acbCents: 4_000_00,  outlaysCents: 0 },
+  ]);
+  expectEq(failures, "line 19900 = 2,000 − 3,000 = -1,000", sch3.line19900Cents, -1_000_00);
+  expectEq(failures, "line 12700 = 0 (net loss)", sch3.line12700Cents, 0);
+  if (sch3.warnings.length === 0) failures.push("expected loss warning");
+  record("Sch 3 engine: mixed gains and losses, net negative → 0 inclusion + warning", failures);
+})();
+
+// ——— Test 40: Sch 3 engine — multiple gains with outlays ———
+
+(() => {
+  const failures: string[] = [];
+  const sch3 = computeSch3([
+    { kind: "public_security", proceedsCents: 12_800_00, acbCents: 10_000_00, outlaysCents: 50_00 },
+    { kind: "mutual_fund",     proceedsCents: 5_000_00,  acbCents: 4_700_00,  outlaysCents: 0 },
+  ]);
+  // Tx1 gain = 12,800 − 10,000 − 50 = $2,750 ; Tx2 gain = 5,000 − 4,700 = $300
+  // Total = $3,050 ; line 12700 = round(3,050 × 0.5) = $1,525.
+  expectEq(failures, "line 19900 (with outlays)", sch3.line19900Cents, 3_050_00);
+  expectEq(failures, "line 12700 (50% inclusion)", sch3.line12700Cents, 1_525_00);
+  expectEq(failures, "byKind public_security", sch3.byKind.public_security, 2_750_00);
+  expectEq(failures, "byKind mutual_fund", sch3.byKind.mutual_fund, 300_00);
+  record("Sch 3 engine: multiple gains with outlays → byKind correctly attributed", failures);
 })();
 
 // ——— runner ———

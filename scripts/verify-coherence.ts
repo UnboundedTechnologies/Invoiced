@@ -1072,6 +1072,7 @@ const t1Fixture: T1Input = {
   donations: { totalCents: 0 },
   rrsp: { contributionsCents: 0, deductionLimitCents: 0 },
   fhsa: { contributionsCents: 0, roomCents: 0 },
+  capitalGains: { line19900Cents: 0, line12700Cents: 0, sch3Warnings: [] },
 };
 
 {
@@ -1414,6 +1415,7 @@ const t1Fixture: T1Input = {
     donations: { totalCents: 0 },
     rrsp: { contributionsCents: 0, deductionLimitCents: 0 },
     fhsa: { contributionsCents: 0, roomCents: 0 },
+    capitalGains: { line19900Cents: 0, line12700Cents: 0, sch3Warnings: [] },
   });
   // T1 line 10100/15000 employment-income floor MUST include the full box14 from the slip.
   // totalIncomeCents >= box14 (the slip value). Use >= because T1 also adds dividends / box117.
@@ -1454,6 +1456,7 @@ const t1Fixture: T1Input = {
     donations: { totalCents: 0 },
     rrsp: { contributionsCents: 0, deductionLimitCents: 0 },
     fhsa: { contributionsCents: 0, roomCents: 0 },
+    capitalGains: { line19900Cents: 0, line12700Cents: 0, sch3Warnings: [] },
   });
 
   // (3) Slip Box 24 (eligible actual) === raw (no loss).
