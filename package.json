@@ -35,7 +35,8 @@
     "verify-t1": "tsx scripts/verify-t1.ts",
     "verify-slips": "tsx scripts/verify-slips.ts",
     "verify-planner": "tsx scripts/verify-planner.ts",
-    "verify-all": "pnpm verify-math && pnpm verify-loans && pnpm verify-hst && pnpm verify-dashboard && pnpm verify-payroll && pnpm verify-deadlines && pnpm verify-vault && pnpm verify-vault-pin && pnpm verify-t2 && pnpm verify-t1 && pnpm verify-slips && pnpm verify-planner && pnpm verify-coherence",
+    "verify-audit-metadata": "tsx --env-file=.env.local scripts/verify-audit-metadata.ts",
+    "verify-all": "pnpm verify-math && pnpm verify-loans && pnpm verify-hst && pnpm verify-dashboard && pnpm verify-payroll && pnpm verify-deadlines && pnpm verify-vault && pnpm verify-vault-pin && pnpm verify-t2 && pnpm verify-t1 && pnpm verify-slips && pnpm verify-planner && pnpm verify-audit-metadata && pnpm verify-coherence",
     "gen-tax-pdf": "tsx scripts/gen-tax-pdf.tsx"
   },
   "dependencies": {
