@@ -68,6 +68,28 @@ export const FEDERAL_DTC_NON_ELIGIBLE_RATE = 0.090301;
 export const ONTARIO_DTC_ELIGIBLE_RATE = 0.10;
 export const ONTARIO_DTC_NON_ELIGIBLE_RATE_2026 = 0.029863;
 
+// ───── Charitable donations (line 34900 / ON428 line 5896) ─────
+
+/**
+ * Federal donations credit per ITA s.118.1(3):
+ *  - 15% on first $200
+ *  - 33% on the portion above $200 to the extent the donor has taxable income
+ *    in the top federal bracket (≥ FEDERAL_BRACKETS_2026[3].upTo, $258,482 for 2026)
+ *  - 29% on the remainder above $200
+ */
+export const FEDERAL_DONATION_LOW_RATE = 0.15;
+export const FEDERAL_DONATION_TOP_RATE = 0.33;  // matches top federal bracket rate
+export const FEDERAL_DONATION_HIGH_RATE = 0.29; // matches second-from-top bracket rate
+export const FEDERAL_DONATION_LOW_THRESHOLD_CENTS = 200_00;
+
+/**
+ * Ontario donations credit per Ontario Taxation Act s.9(1) — flat-rate above $200.
+ * The 11.16% rate is statutory, NOT derived from any bracket; it has not changed
+ * since 2014.
+ */
+export const ONTARIO_DONATION_LOW_RATE = 0.0505;
+export const ONTARIO_DONATION_HIGH_RATE = 0.1116;
+
 // ───── CPP credit / deduction split ─────
 
 /**

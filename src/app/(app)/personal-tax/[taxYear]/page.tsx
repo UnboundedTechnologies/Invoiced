@@ -21,6 +21,7 @@ import { t1FilingDueDate } from "@/lib/t1";
 import { formatCAD, formatLongDate } from "@/lib/utils";
 import { FileT1Button } from "@/components/personal-tax/file-t1-button";
 import { GenerateT1PdfButton } from "@/components/personal-tax/generate-t1-pdf-button";
+import { DonationsCard } from "@/components/personal-tax/donations-card";
 
 export const dynamic = "force-dynamic";
 
@@ -307,6 +308,16 @@ export default async function PersonalTaxDetailPage({
         </CardContent>
       </Card>
 
+      {/* Donations */}
+      <DonationsCard
+        taxYear={taxYear}
+        donations={live.donations.rows}
+        totalCents={live.donations.totalCents}
+        federalCreditCents={r.federal.donationsCreditCents}
+        ontarioCreditCents={r.ontario.donationsCreditCents}
+        isFiled={isFiled}
+      />
+
       {/* Federal calc */}
       <Card>
         <CardHeader className="pb-3">
@@ -321,6 +332,7 @@ export default async function PersonalTaxDetailPage({
           <LineRow line="35000" label="Credits × 14%" amount={r.federal.nonRefundableCreditsTaxCents} negative />
           <LineRow line="40425" label="DTC — eligible" amount={r.federal.dtcEligibleCents} negative />
           <LineRow line="40425" label="DTC — non-eligible" amount={r.federal.dtcNonEligibleCents} negative />
+          <LineRow line="34900" label="Donations credit" amount={r.federal.donationsCreditCents} negative />
           <LineRow line="42000" label="Federal tax payable" amount={r.federal.federalTaxPayableCents} strong />
         </CardContent>
       </Card>
@@ -340,6 +352,7 @@ export default async function PersonalTaxDetailPage({
           <LineRow label="Surtax tier 2 (+36% on basic over $7,446)" amount={r.ontario.surtaxTier2Cents} />
           <LineRow label="Ontario DTC — eligible" amount={r.ontario.dtcEligibleCents} negative />
           <LineRow label="Ontario DTC — non-eligible" amount={r.ontario.dtcNonEligibleCents} negative />
+          <LineRow line="5896" label="Ontario donations credit" amount={r.ontario.donationsCreditCents} negative />
           <LineRow label="Ontario Health Premium (ON479)" amount={r.ontario.ontarioHealthPremiumCents} />
           <LineRow label="Ontario tax payable" amount={r.ontario.ontarioTaxPayableCents} strong />
         </CardContent>

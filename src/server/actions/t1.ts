@@ -25,6 +25,7 @@ import { buildT1Inputs, taxYearsWithActivity } from "@/lib/queries/personal-tax-
 import { t4BoxesForYear } from "@/lib/queries/t4-slices";
 import { t5BoxesForYear } from "@/lib/queries/t5-slices";
 import { t4aBox117ForYear } from "@/lib/queries/t4a-slices";
+import { donationsForYear } from "@/lib/queries/donations-slices";
 import { getBannerDataUri } from "@/lib/pdf-banner";
 import { T1PrepPDF } from "@/lib/t1-pdf";
 
@@ -82,6 +83,7 @@ export type LiveT1Aggregate = {
   t4: Awaited<ReturnType<typeof t4BoxesForYear>>;
   t5: Awaited<ReturnType<typeof t5BoxesForYear>>;
   t4a: Awaited<ReturnType<typeof t4aBox117ForYear>>;
+  donations: Awaited<ReturnType<typeof donationsForYear>>;
   result: T1Result;
   // Grossed-up dividend slices — surfaced for PDF + coherence checks
   grossedUp: {
@@ -95,10 +97,11 @@ export async function loadLiveT1Aggregate(taxYear: number): Promise<LiveT1Aggreg
   const start = `${taxYear}-01-01`;
   const end = `${taxYear}-12-31`;
 
-  const [t4, t5, t4a] = await Promise.all([
+  const [t4, t5, t4a, don] = await Promise.all([
     t4BoxesForYear(taxYear),
     t5BoxesForYear(taxYear),
     t4aBox117ForYear(taxYear),
+    donationsForYear(taxYear),
   ]);
 
   const input = await buildT1Inputs(taxYear);
@@ -114,6 +117,7 @@ export async function loadLiveT1Aggregate(taxYear: number): Promise<LiveT1Aggreg
     t4,
     t5,
     t4a,
+    donations: don,
     result,
     grossedUp: {
       eligibleCents: grossedUpEligible,
@@ -276,6 +280,10 @@ export async function fileT1Return(
           totalWithheldCents: r.totalWithheldCents,
           cpp2OverpaymentCents: r.cpp2OverpaymentCents,
           refundOrOwingCents: r.refundOrOwingCents,
+          // Donations snapshot (line 34900 + ON428 line 5896)
+          donationsTotalCents: live.donations.totalCents,
+          federalDonationsCreditCents: r.federal.donationsCreditCents,
+          ontarioDonationsCreditCents: r.ontario.donationsCreditCents,
           // Meta
           ratesEditionTag: r.ratesEditionTag,
           craConfirmationNumber: parsed.data.craConfirmationNumber,

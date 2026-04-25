@@ -35,6 +35,7 @@ import {
   federalBpaFor,
   ontarioHealthPremiumAnnual,
 } from "./t1-rates-2026";
+import { computeDonationCredit } from "./donations";
 
 // ───── Types ─────
 
@@ -68,6 +69,10 @@ export type T1Input = {
   };
   /** T4A box 117 — Loan Benefits (s.15(2) inclusions + s.80.4 benefit) for the CY. */
   t4aBox117Cents: number;
+  /** Charitable donations — total amount given in the CY (line 34900 input). */
+  donations: {
+    totalCents: number;
+  };
 };
 
 export type T1Result = {
@@ -88,6 +93,7 @@ export type T1Result = {
     dtcEligibleCents: number;
     dtcNonEligibleCents: number;
     dtcTotalCents: number;           // 40425 (eligible + non-eligible)
+    donationsCreditCents: number;    // 34900
     federalTaxPayableCents: number;  // 42000
   };
   // Ontario side (ON428 line order)
@@ -104,7 +110,8 @@ export type T1Result = {
     dtcEligibleCents: number;
     dtcNonEligibleCents: number;
     dtcTotalCents: number;
-    taxAfterSurtaxAndDtcCents: number;     // ON428 line after DTC
+    donationsCreditCents: number;          // ON428 line 5896
+    taxAfterSurtaxAndDtcCents: number;     // ON428 line after DTC + donations
     ontarioHealthPremiumCents: number;
     ontarioTaxPayableCents: number;
   };
@@ -234,10 +241,18 @@ export function computeT1(input: T1Input): T1Result {
   const fedDtcNonEligibleCents = dividendTaxCredit(nonEligibleGrossedUp, FEDERAL_DTC_NON_ELIGIBLE_RATE);
   const fedDtcTotalCents = fedDtcEligibleCents + fedDtcNonEligibleCents;
 
-  // Federal tax payable (line 42000) — non-refundable credits + DTC can't push below 0.
+  // Charitable donations credit (line 34900) — needs taxable income for the
+  // 33% top-bracket bonus, so compute now that taxable is known.
+  const donationCredit = computeDonationCredit({
+    totalCents: input.donations.totalCents,
+    taxableIncomeCents,
+  });
+
+  // Federal tax payable (line 42000) — non-refundable credits + DTC + donations
+  // can't push below 0.
   const federalTaxPayableCents = Math.max(
     0,
-    fedBracketTaxCents - fedCreditsTaxCents - fedDtcTotalCents,
+    fedBracketTaxCents - fedCreditsTaxCents - fedDtcTotalCents - donationCredit.federalCreditCents,
   );
 
   // ── Ontario calc (ON428) ──
@@ -258,10 +273,10 @@ export function computeT1(input: T1Input): T1Result {
   const onDtcNonEligibleCents = dividendTaxCredit(nonEligibleGrossedUp, ONTARIO_DTC_NON_ELIGIBLE_RATE_2026);
   const onDtcTotalCents = onDtcEligibleCents + onDtcNonEligibleCents;
 
-  // Ontario tax after surtax + DTC — DTC can't push below 0.
+  // Ontario tax after surtax + DTC + donations — clamped at 0.
   const taxAfterSurtaxAndDtcCents = Math.max(
     0,
-    basicTaxAfterCreditsCents + surtax.totalCents - onDtcTotalCents,
+    basicTaxAfterCreditsCents + surtax.totalCents - onDtcTotalCents - donationCredit.ontarioCreditCents,
   );
 
   const ontarioHealthPremiumCents = ontarioHealthPremium(taxableIncomeCents);
@@ -311,6 +326,7 @@ export function computeT1(input: T1Input): T1Result {
       dtcEligibleCents: fedDtcEligibleCents,
       dtcNonEligibleCents: fedDtcNonEligibleCents,
       dtcTotalCents: fedDtcTotalCents,
+      donationsCreditCents: donationCredit.federalCreditCents,
       federalTaxPayableCents,
     },
     ontario: {
@@ -326,6 +342,7 @@ export function computeT1(input: T1Input): T1Result {
       dtcEligibleCents: onDtcEligibleCents,
       dtcNonEligibleCents: onDtcNonEligibleCents,
       dtcTotalCents: onDtcTotalCents,
+      donationsCreditCents: donationCredit.ontarioCreditCents,
       taxAfterSurtaxAndDtcCents,
       ontarioHealthPremiumCents,
       ontarioTaxPayableCents,

@@ -73,6 +73,7 @@ function input(overrides: Partial<T1Input> = {}): T1Input {
     t4: blankT4(),
     t5: { eligibleActualCents: 0, nonEligibleActualCents: 0 },
     t4aBox117Cents: 0,
+    donations: { totalCents: 0 },
     ...overrides,
   };
 }
@@ -507,6 +508,93 @@ function input(overrides: Partial<T1Input> = {}): T1Input {
     failures.push(`low-income marginal on next $100 out of range: ${lowMarg.combinedBps} bps`);
   }
   record("Totals identity + helper sanity checks", failures);
+})();
+
+// ——— Test 27: No donations → identical baseline ———
+
+(() => {
+  const failures: string[] = [];
+  const baseline = computeT1(input({ t4: { ...blankT4(), box14EmploymentIncomeCents: 80_000_00 } }));
+  const withZeroDonations = computeT1(
+    input({
+      t4: { ...blankT4(), box14EmploymentIncomeCents: 80_000_00 },
+      donations: { totalCents: 0 },
+    }),
+  );
+  expectEq(failures, "fed donations credit (no donations)", withZeroDonations.federal.donationsCreditCents, 0);
+  expectEq(failures, "on donations credit (no donations)", withZeroDonations.ontario.donationsCreditCents, 0);
+  expectEq(
+    failures,
+    "totalTax unchanged when no donations",
+    withZeroDonations.totalTaxPayableCents,
+    baseline.totalTaxPayableCents,
+  );
+  record("Donations: zero donations → no impact, baseline preserved", failures);
+})();
+
+// ——— Test 28: $300 donations at $80K — sub-top-bracket → 15% + 29% ———
+
+(() => {
+  const failures: string[] = [];
+  const r = computeT1(
+    input({
+      t4: { ...blankT4(), box14EmploymentIncomeCents: 80_000_00 },
+      donations: { totalCents: 300_00 },
+    }),
+  );
+  // Federal: 15% × 200 + 29% × 100 = 30.00 + 29.00 = 59.00
+  expectEq(failures, "fed donations credit at $80K (sub-top)", r.federal.donationsCreditCents, 59_00);
+  // Ontario: 5.05% × 200 + 11.16% × 100 = 10.10 + 11.16 = 21.26
+  expectEq(failures, "on donations credit ($300 total)", r.ontario.donationsCreditCents, 21_26);
+  record("Donations $300 at $80K taxable → fed 15%+29% tier (no top-bracket bonus)", failures);
+})();
+
+// ——— Test 29: $300 donations at $300K — full top-bracket bonus ———
+
+(() => {
+  const failures: string[] = [];
+  const r = computeT1(
+    input({
+      t4: {
+        ...blankT4(),
+        box14EmploymentIncomeCents: 300_000_00,
+        box26CppPensionableCents: 74_600_00,
+        box16CppBaseCents: Math.round((74_600 - 3_500) * 0.0595 * 100),
+        box16aCpp2Cents: Math.round((85_000 - 74_600) * 0.04 * 100),
+      },
+      donations: { totalCents: 300_00 },
+    }),
+  );
+  // Taxable income > $258,482 → all $100 of excess catches the 33% rate.
+  // Federal: 15% × 200 + 33% × 100 = 30.00 + 33.00 = 63.00
+  expectEq(failures, "fed donations credit at $300K (full top-bracket)", r.federal.donationsCreditCents, 63_00);
+  expectEq(failures, "on donations credit ($300 total)", r.ontario.donationsCreditCents, 21_26);
+  record("Donations $300 at $300K taxable → fed 15%+33% tier (full top-bracket bonus)", failures);
+})();
+
+// ——— Test 30: $1000 donations at $258,582 — partial top-bracket bonus ———
+
+(() => {
+  const failures: string[] = [];
+  // Construct so taxable ≈ $258,582 — ALL deductions reduce taxable, so target box14
+  // a touch high and let CPP enhanced/CPP2 deduct a thin slice. Simpler: aim at
+  // raw box14 = $258,582 with no CPP — taxable = $258,582 exactly.
+  const r = computeT1(
+    input({
+      t4: { ...blankT4(), box14EmploymentIncomeCents: 258_582_00 },
+      donations: { totalCents: 1_000_00 },
+    }),
+  );
+  // Excess in top bracket = 258,582 − 258,482 = $100
+  // above-low slice = $800
+  // top-bracket slice = min(800, 100) = $100  → 33% × 100 = $33
+  // standard slice    = $700                  → 29% × 700 = $203
+  // low slice         = $200                  → 15% × 200 = $30
+  // Federal credit = $30 + $33 + $203 = $266
+  expectEq(failures, "fed donations credit (partial top-bracket)", r.federal.donationsCreditCents, 266_00);
+  // Ontario: 5.05% × 200 + 11.16% × 800 = 10.10 + 89.28 = 99.38
+  expectEq(failures, "on donations credit ($1000 total)", r.ontario.donationsCreditCents, 99_38);
+  record("Donations $1000 at $258,582 taxable → partial 33% / 29% split", failures);
 })();
 
 // ——— runner ———
