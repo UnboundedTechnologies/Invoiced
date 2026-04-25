@@ -768,6 +768,83 @@ export async function fileT2Return(
 }
 
 // ————————————————————————————————————————————————————————————————
+// Unfile T2 — escape hatch when CRA needs a correction. Toggles status
+// filed → draft, re-creates the t2:<fy> deadline (file deletes it), audit
+// logs the prior CRA confirmation # + filed date. Frozen P&L + pool snapshot
+// columns stay intact (audit trail); refile overwrites them.
+//
+// **Later-FY guard**: T2 chains via `tax_pools` (FY+1 opening = FY closing).
+// Refusing to unfile when a later FY's T2 already exists prevents a silent
+// history rewrite of the downstream FY's opening balances. The user must
+// unfile in reverse FY order.
+//
+// Mirrors the unfileT1Return + unfileHstReturn patterns. tax_pools and
+// cca_pools rows are NOT deleted; they'll be overwritten via
+// onConflictDoUpdate when the user refiles.
+// ————————————————————————————————————————————————————————————————
+
+export async function unfileT2Return(fiscalYear: number): Promise<ActionResult> {
+  try {
+    const email = await requireSession();
+    const [existing] = await db
+      .select()
+      .from(t2Returns)
+      .where(eq(t2Returns.fiscalYear, fiscalYear));
+    if (!existing) return { error: "T2 return not found." };
+    if (existing.status !== "filed") return { error: "T2 return is not filed; nothing to unfile." };
+
+    // Later-FY guard. If FY+1 (or any later FY) T2 exists in any state, refuse:
+    // tax_pools chain via opening = prior-FY closing, so refiling FY would
+    // silently change FY+1's opening balances.
+    const [later] = await db
+      .select({ fiscalYear: t2Returns.fiscalYear, status: t2Returns.status })
+      .from(t2Returns)
+      .where(drizzleSql`${t2Returns.fiscalYear} > ${fiscalYear}`)
+      .orderBy(t2Returns.fiscalYear)
+      .limit(1);
+    if (later) {
+      return {
+        error: `Cannot unfile FY ${fiscalYear} T2 — FY ${later.fiscalYear} T2 already exists (${later.status}) and consumes its closing pool balances. Unfile FY ${later.fiscalYear} first.`,
+      };
+    }
+
+    await db.batch([
+      db
+        .update(t2Returns)
+        .set({ status: "draft", updatedAt: new Date() })
+        .where(eq(t2Returns.fiscalYear, fiscalYear)),
+      db
+        .insert(deadlines)
+        .values({
+          title: `T2 corporate return — FY ${fiscalYear}`,
+          description: "Federal T2 filing + any balance due (6 months after FYE per ITA s.150(1)).",
+          dueDate: t2FilingDueDate(existing.periodEnd),
+          category: "t2",
+          sourceKey: `t2:${fiscalYear}`,
+        })
+        .onConflictDoNothing({ target: deadlines.sourceKey }),
+      db.insert(auditLog).values({
+        actorEmail: email,
+        action: "update",
+        target: `t2_returns:${fiscalYear}:unfile`,
+        metadata: {
+          fiscalYear,
+          previousCraConfirmationNumber: existing.craConfirmationNumber,
+          previousFiledAt: existing.filedAt,
+          previousTotalTaxCents: existing.totalTaxCents,
+          previousTaxableIncomeCents: existing.taxableIncomeCents,
+        },
+      }),
+    ]);
+
+    revalidate(fiscalYear);
+    return { ok: "T2 return unfiled. Make corrections, then re-file with a new CRA confirmation number." };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unfile failed" };
+  }
+}
+
+// ————————————————————————————————————————————————————————————————
 // PDF + CSV generation
 // ————————————————————————————————————————————————————————————————
 

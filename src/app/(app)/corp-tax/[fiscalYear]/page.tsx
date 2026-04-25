@@ -23,6 +23,7 @@ import { t2FilingDueDate } from "@/lib/t2";
 import { hstPeriodFor } from "@/lib/hst";
 import { formatCAD, formatLongDate } from "@/lib/utils";
 import { FileT2Button } from "@/components/corp-tax/file-t2-button";
+import { UnfileT2Button } from "@/components/corp-tax/unfile-t2-button";
 import { GenerateT2PdfButton } from "@/components/corp-tax/generate-t2-pdf-button";
 import { ExportGifiButton } from "@/components/corp-tax/export-gifi-button";
 import { T2ConfigCard } from "@/components/corp-tax/t2-config-card";
@@ -94,12 +95,14 @@ export default async function CorpTaxDetailPage({
           <div className="flex items-center gap-2">
             <ExportGifiButton fiscalYear={fiscalYear} />
             <GenerateT2PdfButton fiscalYear={fiscalYear} />
-            {!isFiled && (
+            {!isFiled ? (
               <FileT2Button
                 fiscalYear={fiscalYear}
                 totalTaxCents={totalTax}
                 dividendRefundCents={dividendRefund}
               />
+            ) : (
+              <UnfileT2Button fiscalYear={fiscalYear} />
             )}
           </div>
         </div>
