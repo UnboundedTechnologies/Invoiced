@@ -27,6 +27,12 @@ export type VaultRowMeta = {
   archived: boolean;
   parentLabel: string | null;
   parentHref: string | null;
+  /** True when the parent flow OWNS this row (primary contract PDF, an
+   * invoice/paystub/receipt PDF) — vault delete + archive are disabled and
+   * the user must go to the parent flow to remove. False for ancillary
+   * contract attachments which are vault-owned even though they show a
+   * "Linked to" pill. */
+  parentOwned: boolean;
 };
 
 export function VaultRowActions({ row }: { row: VaultRowMeta }) {
@@ -34,7 +40,7 @@ export function VaultRowActions({ row }: { row: VaultRowMeta }) {
   const [pending, startTransition] = useTransition();
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const linked = row.parentLabel != null;
+  const lockedByParent = row.parentOwned;
 
   function doDelete() {
     setDeleteOpen(false);
@@ -102,9 +108,9 @@ export function VaultRowActions({ row }: { row: VaultRowMeta }) {
             size="icon"
             className="size-7 text-muted-foreground hover:text-foreground"
             onClick={doArchive}
-            disabled={pending || linked}
-            aria-label={linked ? "Cannot archive — linked to parent" : "Archive"}
-            title={linked ? `Linked to ${row.parentLabel}. Can't archive while bound.` : "Archive"}
+            disabled={pending || lockedByParent}
+            aria-label={lockedByParent ? "Cannot archive — lockedByParent to parent" : "Archive"}
+            title={lockedByParent ? `Linked to ${row.parentLabel}. Can't archive while bound.` : "Archive"}
           >
             <Archive className="size-3.5" />
           </Button>
@@ -115,9 +121,9 @@ export function VaultRowActions({ row }: { row: VaultRowMeta }) {
           size="icon"
           className="size-7 text-rose-400 hover:bg-rose-500/10 hover:text-rose-400 disabled:text-muted-foreground/50"
           onClick={() => setDeleteOpen(true)}
-          disabled={pending || linked}
-          aria-label={linked ? "Cannot delete — linked to parent" : "Delete"}
-          title={linked ? `Delete from ${row.parentLabel}` : "Delete"}
+          disabled={pending || lockedByParent}
+          aria-label={lockedByParent ? "Cannot delete — lockedByParent to parent" : "Delete"}
+          title={lockedByParent ? `Delete from ${row.parentLabel}` : "Delete"}
         >
           <Trash2 className="size-3.5" />
         </Button>

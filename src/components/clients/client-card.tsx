@@ -43,11 +43,21 @@ import {
 import { ClientForm } from "./client-form";
 import { ContractForm } from "./contract-form";
 import { ContractDocumentSection } from "./contract-document-section";
+import { ContractAttachmentsSection } from "./contract-attachments-section";
 import { archiveClient, restoreClient, archiveContract, reactivateContract } from "@/server/actions/clients";
 import { formatCAD } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
-type ContractRow = { contract: Contract; document: Document | null };
+type AttachmentRow = Pick<
+  Document,
+  "id" | "name" | "sizeBytes" | "contentType" | "uploadedAt"
+>;
+
+type ContractRow = {
+  contract: Contract;
+  document: Document | null;
+  attachments: AttachmentRow[];
+};
 
 const TERMS_LABEL: Record<string, string> = {
   DUE_ON_RECEIPT: "Due on receipt",
@@ -220,11 +230,14 @@ export function ClientCard({ client, contracts }: { client: Client; contracts: C
             </DialogDescription>
           </DialogHeader>
           {documentRow && (
-            <ContractDocumentSection
-              key={`${documentRow.contract.id}::${documentRow.document?.id ?? "none"}`}
-              contract={documentRow.contract}
-              document={documentRow.document}
-            />
+            <>
+              <ContractDocumentSection
+                key={`${documentRow.contract.id}::${documentRow.document?.id ?? "none"}`}
+                contract={documentRow.contract}
+                document={documentRow.document}
+              />
+              <ContractAttachmentsSection attachments={documentRow.attachments} />
+            </>
           )}
         </DialogContent>
       </Dialog>

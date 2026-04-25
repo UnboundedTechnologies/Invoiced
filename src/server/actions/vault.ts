@@ -63,10 +63,16 @@ function revalidate() {
   revalidatePath("/(app)", "layout");
 }
 
-const uploadSchema = z.object({
-  category: z.enum(USER_UPLOADABLE as readonly [VaultCategory, ...VaultCategory[]]),
-  name: z.string().trim().max(200).nullable().optional(),
-});
+const uploadSchema = z
+  .object({
+    category: z.enum(USER_UPLOADABLE as readonly [VaultCategory, ...VaultCategory[]]),
+    name: z.string().trim().max(200).nullable().optional(),
+    contractId: z.string().uuid().nullable().optional(),
+  })
+  .refine((v) => v.category !== "contract" || !!v.contractId, {
+    message: "Pick the contract this attachment relates to.",
+    path: ["contractId"],
+  });
 
 function sanitizeFilename(name: string): string {
   return name.replace(/[^\w.\-]+/g, "_").slice(0, 160) || "document";
@@ -83,11 +89,31 @@ export async function uploadMiscDocument(
       return { error: "Vercel Blob is not configured. Set BLOB_READ_WRITE_TOKEN in .env.local." };
     }
 
+    const rawContractId = fd.get("contractId");
     const parsed = uploadSchema.safeParse({
       category: fd.get("category"),
       name: fd.get("name") ? String(fd.get("name")).trim() || null : null,
+      // Form sends "" when the contract picker hasn't been touched; normalise
+      // to null so the schema can null-out non-contract uploads cleanly.
+      contractId:
+        typeof rawContractId === "string" && rawContractId.length > 0 ? rawContractId : null,
     });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+
+    // Defensive: only contract-category uploads carry a contractId; strip it
+    // if the picker was somehow populated for a different category.
+    const finalContractId = parsed.data.category === "contract" ? parsed.data.contractId ?? null : null;
+
+    // Validate the foreign key is real before attempting the FK insert. Cheap
+    // round-trip vs. a Postgres constraint error popping out of drizzle.
+    if (finalContractId) {
+      const [exists] = await db
+        .select({ id: contracts.id })
+        .from(contracts)
+        .where(eq(contracts.id, finalContractId))
+        .limit(1);
+      if (!exists) return { error: "That contract no longer exists." };
+    }
 
     const entry = fd.get("file");
     if (!(entry instanceof File) || entry.size === 0 || !entry.name) {
@@ -123,6 +149,7 @@ export async function uploadMiscDocument(
         contentType: entry.type,
         version: 1,
         uploadedBy: email,
+        contractId: finalContractId,
       })
       .returning({ id: documents.id });
 
@@ -130,7 +157,13 @@ export async function uploadMiscDocument(
       actorEmail: email,
       action: "create",
       target: `documents:${row!.id}`,
-      metadata: { name: displayName, category: parsed.data.category, sha256, source: "vault-upload" },
+      metadata: {
+        name: displayName,
+        category: parsed.data.category,
+        sha256,
+        source: "vault-upload",
+        ...(finalContractId ? { contractId: finalContractId } : {}),
+      },
     });
 
     await refreshVaultSession();

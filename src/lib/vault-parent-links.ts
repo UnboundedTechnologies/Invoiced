@@ -1,13 +1,21 @@
 /**
  * Resolves, for a list of vault `documents` rows, whether each one is still
- * bound to a live parent (contract, invoice, expense, paycheque). Runs 4
- * parallel queries and returns a Map by documentId.
+ * bound to a live parent (contract, invoice, expense, paycheque). Runs in
+ * parallel and returns a Map by documentId.
+ *
+ * Two passes for contract-category docs:
+ *  1. Primary contract PDFs — found via `contracts.documentId` pointing at
+ *     the doc. These are parent-owned (can't delete from vault).
+ *  2. Ancillary attachments — found via `documents.contractId` pointing at
+ *     a contract. Vault-uploaded, vault-deletable. Pass 1 wins for any doc
+ *     that's both (shouldn't happen by design, but defensive).
  */
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, isNotNull, and } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   contracts,
   clients,
+  documents,
   invoices,
   expenses,
   paycheques,
@@ -15,7 +23,7 @@ import {
 } from "@/lib/db/schema";
 
 export type ParentLink = {
-  kind: "contract" | "invoice" | "expense" | "paycheque";
+  kind: "contract" | "contract-attachment" | "invoice" | "expense" | "paycheque";
   label: string;
   href: string;
   /** Preferred parent API route for the "download via parent" flow. */
@@ -88,6 +96,43 @@ export async function resolveParentLinks(
       href: `/clients`,
       parentApiHref: `/api/contracts/${row.contractId}/document`,
     });
+  }
+
+  // Pass 2 — ancillary contract attachments. These are vault-uploaded docs
+  // with documents.contractId pointing at a contract row. Skip any doc id
+  // already mapped from pass 1 (parent-owned wins; should never overlap by
+  // design but be defensive).
+  const contractDocIdSet = new Set(contractDocIds);
+  if (contractDocIdSet.size > 0) {
+    const ancillary = await db
+      .select({
+        docId: documents.id,
+        contractId: documents.contractId,
+        contractLabel: contracts.label,
+        clientName: clients.legalName,
+      })
+      .from(documents)
+      .innerJoin(contracts, eq(contracts.id, documents.contractId))
+      .innerJoin(clients, eq(clients.id, contracts.clientId))
+      .where(
+        and(
+          inArray(documents.id, Array.from(contractDocIdSet)),
+          isNotNull(documents.contractId),
+        ),
+      );
+
+    for (const row of ancillary) {
+      if (out.has(row.docId)) continue;
+      if (!row.contractId) continue;
+      const label = row.contractLabel
+        ? `${row.clientName} · ${row.contractLabel}`
+        : row.clientName;
+      out.set(row.docId, {
+        kind: "contract-attachment",
+        label,
+        href: `/clients`,
+      });
+    }
   }
 
   const byBlobToDoc = new Map<string, string>();

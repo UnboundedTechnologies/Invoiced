@@ -11,6 +11,7 @@ import {
   pgEnum,
   uniqueIndex,
   index,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -748,6 +749,13 @@ export const documents = pgTable("documents", {
   archived: boolean("archived").notNull().default(false),
   uploadedBy: text("uploaded_by"),
   uploadedAt: timestamp("uploaded_at", { withTimezone: true }).defaultNow().notNull(),
+  // Optional ancillary link to a contract — when set, this is a vault-uploaded
+  // attachment (insurance certificate, code of conduct, addendum, etc.) tied
+  // to a specific contract. The PRIMARY contract PDF is still discovered via
+  // contracts.documentId; the two relationships coexist (a row can be either,
+  // never both — see resolveParentLinks for the precedence). ON DELETE SET NULL
+  // keeps user-uploaded files intact if the contract is later deleted.
+  contractId: uuid("contract_id").references((): AnyPgColumn => contracts.id, { onDelete: "set null" }),
 });
 
 // Calendar / deadlines

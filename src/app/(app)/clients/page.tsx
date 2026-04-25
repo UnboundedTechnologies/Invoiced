@@ -1,6 +1,6 @@
 import { db } from "@/lib/db/client";
 import { clients, contracts, documents } from "@/lib/db/schema";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNotNull } from "drizzle-orm";
 import { Building2 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { ClientCard } from "@/components/clients/client-card";
@@ -9,18 +9,58 @@ import { NewClientButton } from "@/components/clients/new-client-button";
 export const dynamic = "force-dynamic";
 
 export default async function ClientsPage() {
-  const [allClients, contractRows] = await Promise.all([
+  const [allClients, contractRows, attachmentRows] = await Promise.all([
     db.select().from(clients).orderBy(asc(clients.archived), asc(clients.legalName)),
     db
       .select({ contract: contracts, document: documents })
       .from(contracts)
       .leftJoin(documents, eq(documents.id, contracts.documentId))
       .orderBy(asc(contracts.startDate)),
+    // Ancillary contract attachments — vault rows where category=contract AND
+    // contractId is set. Used by the Attachments accordion on each contract.
+    db
+      .select({
+        id: documents.id,
+        name: documents.name,
+        sizeBytes: documents.sizeBytes,
+        contentType: documents.contentType,
+        uploadedAt: documents.uploadedAt,
+        contractId: documents.contractId,
+      })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.category, "contract"),
+          isNotNull(documents.contractId),
+          eq(documents.archived, false),
+        ),
+      )
+      .orderBy(asc(documents.uploadedAt)),
   ]);
+
+  // Group attachments by contractId — and exclude any row that's actually the
+  // primary PDF for that contract (parent-owned, already shown via the
+  // ContractDocumentSection). With the current upload flow that overlap can't
+  // happen, but be defensive.
+  const primaryDocIds = new Set(
+    contractRows.map((r) => r.contract.documentId).filter((id): id is string => !!id),
+  );
+  const attachmentsByContract = new Map<string, typeof attachmentRows>();
+  for (const a of attachmentRows) {
+    if (!a.contractId || primaryDocIds.has(a.id)) continue;
+    const list = attachmentsByContract.get(a.contractId) ?? [];
+    list.push(a);
+    attachmentsByContract.set(a.contractId, list);
+  }
 
   const grouped = allClients.map((c) => ({
     client: c,
-    contracts: contractRows.filter((row) => row.contract.clientId === c.id),
+    contracts: contractRows
+      .filter((row) => row.contract.clientId === c.id)
+      .map((row) => ({
+        ...row,
+        attachments: attachmentsByContract.get(row.contract.id) ?? [],
+      })),
   }));
 
   return (

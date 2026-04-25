@@ -13,6 +13,7 @@ import {
   type VaultCategory,
 } from "@/lib/vault-categories";
 import { resolveParentLinks } from "@/lib/vault-parent-links";
+import { listContractsForPicker } from "@/lib/queries/contracts-picker";
 import { PinGate } from "@/components/vault/pin-gate";
 import { TwoFAGate } from "@/components/vault/twofa-gate";
 import { VaultFilters } from "@/components/vault/vault-filters";
@@ -113,6 +114,10 @@ export default async function VaultPage({ searchParams }: { searchParams: Search
 
   const parentLinks = await resolveParentLinks(rows);
   const pinSetAt = await getPinSetAt();
+  // Pre-fetch contracts for the upload dialog's "Contract" category picker.
+  // Includes ended ones so the dialog can offer a "Show ended" toggle without
+  // a second round-trip.
+  const contractOptions = await listContractsForPicker({ includeEnded: true });
 
   return (
     <div className="space-y-6">
@@ -120,7 +125,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Search
         right={
           <div className="flex items-center gap-2">
             <LockVaultButton />
-            <UploadVaultDialog />
+            <UploadVaultDialog contracts={contractOptions} />
           </div>
         }
         pinSetAt={pinSetAt}
