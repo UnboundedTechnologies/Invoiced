@@ -1,10 +1,13 @@
 import { db } from "@/lib/db/client";
-import { clients, contracts, documents } from "@/lib/db/schema";
+import { clients, contracts, documents, users } from "@/lib/db/schema";
 import { and, asc, eq, isNotNull } from "drizzle-orm";
 import { Building2 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { ClientCard } from "@/components/clients/client-card";
 import { NewClientButton } from "@/components/clients/new-client-button";
+import { hasVaultPinSession } from "@/lib/vault-pin-session";
+import { hasVault2faSession } from "@/lib/vault-2fa-session";
+import { auth } from "../../../../auth";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +66,24 @@ export default async function ClientsPage() {
       })),
   }));
 
+  // Vault unlock state — passed down so the attachments section knows whether
+  // each link can open directly or has to detour through the inline unlock
+  // dialog. PIN cookie alone isn't enough when 2FA is enrolled.
+  const session = await auth();
+  const sessionEmail = session?.user?.email?.toLowerCase() ?? null;
+  const [me] = sessionEmail
+    ? await db
+        .select({ totpEnabledAt: users.totpEnabledAt })
+        .from(users)
+        .where(eq(users.email, sessionEmail))
+    : [];
+  const twofaEnrolled = !!me?.totpEnabledAt;
+  const [pinUnlocked, twofaUnlocked] = await Promise.all([
+    hasVaultPinSession(),
+    hasVault2faSession(),
+  ]);
+  const vaultUnlocked = pinUnlocked && (twofaEnrolled ? twofaUnlocked : true);
+
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
@@ -94,7 +115,12 @@ export default async function ClientsPage() {
               className="animate-in fade-in slide-in-from-bottom-2 fill-mode-backwards"
               style={{ animationDuration: "450ms", animationDelay: `${i * 80}ms` }}
             >
-              <ClientCard client={client} contracts={cs} />
+              <ClientCard
+                client={client}
+                contracts={cs}
+                vaultUnlocked={vaultUnlocked}
+                twofaEnrolled={twofaEnrolled}
+              />
             </div>
           ))}
         </div>
