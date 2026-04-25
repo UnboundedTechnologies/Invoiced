@@ -51,7 +51,12 @@ export default async function SettingsPage() {
           Everything below is the source of truth for invoices, slips, and tax tools.
         </p>
       </div>
-      <SettingsForm data={s} openingPoolsLocked={openingPoolsLocked} totpEnabledAt={totpEnabledAt} />
+      <SettingsForm
+        data={s}
+        openingPoolsLocked={openingPoolsLocked}
+        totpEnabledAt={totpEnabledAt}
+        vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? null}
+      />
     </div>
   );
 }

@@ -16,6 +16,7 @@ import { changeVaultPin } from "@/server/actions/vault-pin";
 import { PayrollCard } from "@/components/settings/payroll-card";
 import { InfoReturnsCard } from "@/components/settings/info-returns-card";
 import { TotpStatusCard } from "@/components/settings/totp-status-card";
+import { PushNotificationsCard } from "@/components/settings/push-notifications-card";
 import { PinInput } from "@/components/vault/pin-input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -85,10 +86,12 @@ export function SettingsForm({
   data,
   openingPoolsLocked,
   totpEnabledAt,
+  vapidPublicKey,
 }: {
   data: SettingsRow;
   openingPoolsLocked: boolean;
   totpEnabledAt: Date | null;
+  vapidPublicKey: string | null;
 }) {
   return (
     <Tabs defaultValue="corp" className="w-full">
@@ -137,6 +140,7 @@ export function SettingsForm({
       </TabsContent>
       <TabsContent value="security" className="space-y-4">
         <TotpStatusCard totpEnabledAt={totpEnabledAt} />
+        <PushNotificationsCard vapidPublicKey={vapidPublicKey} />
         <SecurityPanel data={data} />
       </TabsContent>
     </Tabs>
