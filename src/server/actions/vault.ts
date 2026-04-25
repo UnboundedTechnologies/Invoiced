@@ -16,7 +16,9 @@ import {
 } from "@/lib/db/schema";
 import { auth } from "../../../auth";
 import { USER_UPLOADABLE, type VaultCategory } from "@/lib/vault-categories";
-import { requireVaultPinSession } from "@/lib/vault-pin-session";
+import { requireVaultPinSession, refreshVaultSession } from "@/lib/vault-pin-session";
+import { requireVault2faSession } from "@/lib/vault-2fa-session";
+import { users } from "@/lib/db/schema";
 
 type ActionResult = { ok?: string; error?: string; documentId?: string };
 
@@ -35,6 +37,25 @@ async function requireSession() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
+}
+
+/**
+ * Full vault gate: session → PIN cookie → (if 2FA enrolled) 2FA cookie.
+ * Throws on any miss. Centralised so every mutating vault action enforces
+ * the same three-factor stack — PR2 added 2FA to /api/documents but missed
+ * the server actions; this helper closes that gap.
+ */
+async function requireFullVaultAccess(): Promise<string> {
+  const email = await requireSession();
+  await requireVaultPinSession();
+  const [me] = await db
+    .select({ totpEnabledAt: users.totpEnabledAt })
+    .from(users)
+    .where(eq(users.email, email.toLowerCase()));
+  if (me?.totpEnabledAt) {
+    await requireVault2faSession();
+  }
+  return email;
 }
 
 function revalidate() {
@@ -57,8 +78,7 @@ export async function uploadMiscDocument(
 ): Promise<ActionResult> {
   let uploadedBlobUrl: string | null = null;
   try {
-    const email = await requireSession();
-    await requireVaultPinSession();
+    const email = await requireFullVaultAccess();
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       return { error: "Vercel Blob is not configured. Set BLOB_READ_WRITE_TOKEN in .env.local." };
     }
@@ -113,6 +133,7 @@ export async function uploadMiscDocument(
       metadata: { name: displayName, category: parsed.data.category, sha256, source: "vault-upload" },
     });
 
+    await refreshVaultSession();
     revalidate();
     return { ok: "Uploaded to vault.", documentId: row!.id };
   } catch (e) {
@@ -166,8 +187,7 @@ async function resolveLiveParentLink(docId: string, blobUrl: string): Promise<st
 
 export async function deleteMiscDocument(documentId: string): Promise<ActionResult> {
   try {
-    const email = await requireSession();
-    await requireVaultPinSession();
+    const email = await requireFullVaultAccess();
 
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId));
     if (!doc) return { error: "Document not found." };
@@ -196,6 +216,7 @@ export async function deleteMiscDocument(documentId: string): Promise<ActionResu
       },
     });
 
+    await refreshVaultSession();
     revalidate();
     return { ok: "Deleted from vault." };
   } catch (e) {
@@ -205,8 +226,7 @@ export async function deleteMiscDocument(documentId: string): Promise<ActionResu
 
 export async function archiveDocument(documentId: string): Promise<ActionResult> {
   try {
-    const email = await requireSession();
-    await requireVaultPinSession();
+    const email = await requireFullVaultAccess();
 
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId));
     if (!doc) return { error: "Document not found." };
@@ -225,6 +245,7 @@ export async function archiveDocument(documentId: string): Promise<ActionResult>
       metadata: { name: doc.name },
     });
 
+    await refreshVaultSession();
     revalidate();
     return { ok: "Archived." };
   } catch (e) {
@@ -234,8 +255,7 @@ export async function archiveDocument(documentId: string): Promise<ActionResult>
 
 export async function unarchiveDocument(documentId: string): Promise<ActionResult> {
   try {
-    const email = await requireSession();
-    await requireVaultPinSession();
+    const email = await requireFullVaultAccess();
 
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId));
     if (!doc) return { error: "Document not found." };
@@ -249,6 +269,7 @@ export async function unarchiveDocument(documentId: string): Promise<ActionResul
       metadata: { name: doc.name },
     });
 
+    await refreshVaultSession();
     revalidate();
     return { ok: "Restored." };
   } catch (e) {

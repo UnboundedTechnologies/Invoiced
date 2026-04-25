@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "../../../../../auth";
 import { db } from "@/lib/db/client";
 import { documents, users, auditLog } from "@/lib/db/schema";
-import { hasVaultPinSession } from "@/lib/vault-pin-session";
+import { hasVaultPinSession, refreshVaultSession } from "@/lib/vault-pin-session";
 import { hasVault2faSession } from "@/lib/vault-2fa-session";
 import { streamBlob } from "@/lib/blob";
 
@@ -62,6 +62,10 @@ export async function GET(
     target: `documents:${id}`,
     metadata: { name: row.name, category: row.category, download, contentType },
   });
+
+  // Sliding refresh: download succeeded, extend the vault session by another
+  // 60s so an active session doesn't lock mid-download-spree.
+  await refreshVaultSession();
 
   return new NextResponse(upstream.stream, {
     status: 200,
