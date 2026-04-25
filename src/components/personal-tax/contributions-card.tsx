@@ -265,7 +265,7 @@ function ContributionRow({
       return;
     }
     startTransition(async () => {
-      const r = await deleteContribution(row.id);
+      const r = await deleteContribution(row.id, row.version);
       if (r.ok) {
         toast.success(r.ok);
         onDeleted();

@@ -1,13 +1,14 @@
 "use server";
 
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auditLog, donations } from "@/lib/db/schema";
 import { db } from "@/lib/db/client";
 import { auth } from "../../../auth";
 import { taxYearFor } from "@/lib/t1";
 import { t1PeriodLockError } from "./t1";
+import { versionConflictError } from "@/lib/optimistic-lock";
 
 type ActionResult = { ok?: string; error?: string };
 
@@ -112,29 +113,43 @@ export async function createDonation(
   }
 }
 
-export async function deleteDonation(id: string): Promise<ActionResult> {
+export async function deleteDonation(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
     const email = await requireSession();
     const [existing] = await db.select().from(donations).where(eq(donations.id, id));
     if (!existing) return { error: "Donation not found." };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("donation", expectedVersion, existing.version) };
+    }
 
     const lockErr = await t1PeriodLockError(existing.dateReceived);
     if (lockErr) return { error: lockErr };
 
-    await db.batch([
-      db.delete(donations).where(eq(donations.id, id)),
-      db.insert(auditLog).values({
-        actorEmail: email,
-        action: "delete",
-        target: `donations:${existing.taxYear}`,
-        metadata: {
-          taxYear: existing.taxYear,
-          charityName: existing.charityName,
-          amountCents: existing.amountCents,
-          dateReceived: existing.dateReceived,
-        },
-      }),
-    ]);
+    const deleted = await db
+      .delete(donations)
+      .where(and(eq(donations.id, id), eq(donations.version, expectedVersion)))
+      .returning({ id: donations.id });
+    if (!deleted.length) {
+      const [current] = await db
+        .select({ version: donations.version })
+        .from(donations)
+        .where(eq(donations.id, id));
+      if (!current) return { error: "Donation was already deleted." };
+      return { error: versionConflictError("donation", expectedVersion, current.version) };
+    }
+
+    await db.insert(auditLog).values({
+      actorEmail: email,
+      action: "delete",
+      target: `donations:${existing.taxYear}`,
+      metadata: {
+        taxYear: existing.taxYear,
+        charityName: existing.charityName,
+        amountCents: existing.amountCents,
+        dateReceived: existing.dateReceived,
+        version: existing.version,
+      },
+    });
 
     revalidate(existing.taxYear);
     return { ok: "Donation removed." };

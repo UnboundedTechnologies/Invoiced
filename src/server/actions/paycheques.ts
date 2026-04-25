@@ -22,6 +22,7 @@ import { getBannerDataUri } from "@/lib/pdf-banner";
 import { t2PeriodLockError } from "./t2";
 import { t1PeriodLockError } from "./t1";
 import { t4SlipLockError } from "./slips";
+import { bumpVersion, versionConflictError } from "@/lib/optimistic-lock";
 
 type ActionResult = { ok?: string; error?: string };
 
@@ -238,7 +239,11 @@ export async function createPaycheque(
 
 const statusSchema = z.enum(["draft", "issued", "void"]);
 
-export async function setPaychequeStatus(id: string, status: string): Promise<ActionResult> {
+export async function setPaychequeStatus(
+  id: string,
+  status: string,
+  expectedVersion: number,
+): Promise<ActionResult> {
   try {
     const email = await requireSession();
     const parsed = statusSchema.safeParse(status);
@@ -246,6 +251,9 @@ export async function setPaychequeStatus(id: string, status: string): Promise<Ac
 
     const [pq] = await db.select().from(paycheques).where(eq(paycheques.id, id));
     if (!pq) return { error: "Paycheque not found." };
+    if (pq.version !== expectedVersion) {
+      return { error: versionConflictError("paycheque", expectedVersion, pq.version) };
+    }
 
     const t2Lock = await t2PeriodLockError(pq.payDate);
     if (t2Lock) return { error: t2Lock };
@@ -254,7 +262,19 @@ export async function setPaychequeStatus(id: string, status: string): Promise<Ac
     const t4Lock = await t4SlipLockError(pq.payDate);
     if (t4Lock) return { error: t4Lock };
 
-    await db.update(paycheques).set({ status: parsed.data }).where(eq(paycheques.id, id));
+    const [updated] = await db
+      .update(paycheques)
+      .set({ status: parsed.data, version: bumpVersion() })
+      .where(and(eq(paycheques.id, id), eq(paycheques.version, expectedVersion)))
+      .returning({ version: paycheques.version });
+    if (!updated) {
+      const [current] = await db
+        .select({ version: paycheques.version })
+        .from(paycheques)
+        .where(eq(paycheques.id, id));
+      if (!current) return { error: "Paycheque was deleted in another tab." };
+      return { error: versionConflictError("paycheque", expectedVersion, current.version) };
+    }
 
     // When transitioning to issued: create the remittance row (once per pay period).
     if (parsed.data === "issued" && pq.status !== "issued") {
@@ -301,7 +321,7 @@ export async function setPaychequeStatus(id: string, status: string): Promise<Ac
       actorEmail: email,
       action: "update",
       target: `paycheques:${id}:status`,
-      metadata: { from: pq.status, to: parsed.data },
+      metadata: { from: pq.status, to: parsed.data, fromVersion: pq.version, toVersion: updated.version },
     });
     revalidate();
     return { ok: `Marked as ${parsed.data}.` };
@@ -310,11 +330,14 @@ export async function setPaychequeStatus(id: string, status: string): Promise<Ac
   }
 }
 
-export async function deleteDraftPaycheque(id: string): Promise<ActionResult> {
+export async function deleteDraftPaycheque(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
     const email = await requireSession();
     const [pq] = await db.select().from(paycheques).where(eq(paycheques.id, id));
     if (!pq) return { error: "Paycheque not found." };
+    if (pq.version !== expectedVersion) {
+      return { error: versionConflictError("paycheque", expectedVersion, pq.version) };
+    }
     if (pq.status !== "draft") return { error: "Only draft paycheques can be deleted." };
 
     const t2Lock = await t2PeriodLockError(pq.payDate);
@@ -333,7 +356,18 @@ export async function deleteDraftPaycheque(id: string): Promise<ActionResult> {
       await db.delete(documents).where(eq(documents.blobUrl, pq.pdfBlobUrl));
     }
 
-    await db.delete(paycheques).where(eq(paycheques.id, id));
+    const deleted = await db
+      .delete(paycheques)
+      .where(and(eq(paycheques.id, id), eq(paycheques.version, expectedVersion)))
+      .returning({ id: paycheques.id });
+    if (!deleted.length) {
+      const [current] = await db
+        .select({ version: paycheques.version })
+        .from(paycheques)
+        .where(eq(paycheques.id, id));
+      if (!current) return { error: "Paycheque was already deleted." };
+      return { error: versionConflictError("paycheque", expectedVersion, current.version) };
+    }
 
     // Defensive: drop any unpaid source-deduction remittance for this same period.
     // Drafts shouldn't have one, but this catches orphans from earlier issue/revert cycles.

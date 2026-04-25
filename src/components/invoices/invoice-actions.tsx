@@ -17,14 +17,22 @@ import {
 } from "@/components/ui/alert-dialog";
 import { setInvoiceStatus, deleteDraftInvoice } from "@/server/actions/invoices";
 
-export function InvoiceActions({ id, status }: { id: string; status: string }) {
+export function InvoiceActions({
+  id,
+  status,
+  version,
+}: {
+  id: string;
+  status: string;
+  version: number;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   function changeStatus(next: string) {
     startTransition(async () => {
-      const r = await setInvoiceStatus(id, next);
+      const r = await setInvoiceStatus(id, next, version);
       if (r.ok) {
         toast.success(r.ok);
         router.refresh();
@@ -36,7 +44,7 @@ export function InvoiceActions({ id, status }: { id: string; status: string }) {
   function doDelete() {
     setDeleteOpen(false);
     startTransition(async () => {
-      const r = await deleteDraftInvoice(id);
+      const r = await deleteDraftInvoice(id, version);
       if (r.ok) {
         toast.success(r.ok);
         router.push("/invoices");

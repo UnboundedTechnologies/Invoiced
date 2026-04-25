@@ -17,14 +17,22 @@ import {
 } from "@/components/ui/alert-dialog";
 import { setPaychequeStatus, deleteDraftPaycheque } from "@/server/actions/paycheques";
 
-export function PaychequeActions({ id, status }: { id: string; status: string }) {
+export function PaychequeActions({
+  id,
+  status,
+  version,
+}: {
+  id: string;
+  status: string;
+  version: number;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   function changeStatus(next: string) {
     startTransition(async () => {
-      const r = await setPaychequeStatus(id, next);
+      const r = await setPaychequeStatus(id, next, version);
       if (r.ok) {
         toast.success(r.ok);
         router.refresh();
@@ -36,7 +44,7 @@ export function PaychequeActions({ id, status }: { id: string; status: string })
   function doDelete() {
     setDeleteOpen(false);
     startTransition(async () => {
-      const r = await deleteDraftPaycheque(id);
+      const r = await deleteDraftPaycheque(id, version);
       if (r.ok) {
         toast.success(r.ok);
         router.push("/paycheques");

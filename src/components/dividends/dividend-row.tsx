@@ -49,7 +49,7 @@ export function DividendRow({
   function doDelete() {
     setDeleteOpen(false);
     startTransition(async () => {
-      const r = await deleteDividend(dividend.id);
+      const r = await deleteDividend(dividend.id, dividend.version);
       if (r.ok) {
         toast.success(r.ok);
         router.refresh();
@@ -61,8 +61,8 @@ export function DividendRow({
   function togglePaid() {
     startTransition(async () => {
       const r = dividend.paidDate
-        ? await markDividendUnpaid(dividend.id)
-        : await markDividendPaid(dividend.id, new Date().toISOString().slice(0, 10));
+        ? await markDividendUnpaid(dividend.id, dividend.version)
+        : await markDividendPaid(dividend.id, new Date().toISOString().slice(0, 10), dividend.version);
       if (r.ok) {
         toast.success(r.ok);
         router.refresh();

@@ -68,7 +68,7 @@ export function LoanEntryRow({
   function doDelete() {
     setDeleteOpen(false);
     startTransition(async () => {
-      const r = await deleteLoanEntry(entry.id);
+      const r = await deleteLoanEntry(entry.id, entry.version);
       if (r.ok) {
         toast.success(r.ok);
         router.refresh();

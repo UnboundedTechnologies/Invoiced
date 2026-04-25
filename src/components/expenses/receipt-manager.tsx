@@ -44,9 +44,11 @@ const ALLOWED_MIMES = new Set([
  */
 export function ReceiptManager({
   expenseId,
+  expenseVersion,
   hasReceipt,
 }: {
   expenseId: string;
+  expenseVersion: number;
   hasReceipt: boolean;
 }) {
   const router = useRouter();
@@ -68,7 +70,7 @@ export function ReceiptManager({
     const fd = new FormData();
     fd.append("receipt", file);
     startTransition(async () => {
-      const r = await uploadReceipt(expenseId, fd);
+      const r = await uploadReceipt(expenseId, expenseVersion, fd);
       if (r.ok) {
         toast.success(r.ok);
         router.refresh();
@@ -83,7 +85,7 @@ export function ReceiptManager({
     const fd = new FormData();
     fd.append("receipt", file);
     startTransition(async () => {
-      const r = await replaceReceipt(expenseId, fd);
+      const r = await replaceReceipt(expenseId, expenseVersion, fd);
       if (r.ok) {
         toast.success(r.ok);
         router.refresh();
@@ -95,7 +97,7 @@ export function ReceiptManager({
   function doDelete() {
     setDeleteOpen(false);
     startTransition(async () => {
-      const r = await deleteReceipt(expenseId);
+      const r = await deleteReceipt(expenseId, expenseVersion);
       if (r.ok) {
         toast.success(r.ok);
         router.refresh();

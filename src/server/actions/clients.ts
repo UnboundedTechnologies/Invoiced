@@ -1,11 +1,12 @@
 "use server";
 
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
 import { clients, contracts, auditLog, invoices } from "@/lib/db/schema";
 import { auth } from "../../../auth";
+import { bumpVersion, parseExpectedVersion, versionConflictError } from "@/lib/optimistic-lock";
 
 type ActionResult = { ok?: string; error?: string };
 
@@ -191,19 +192,34 @@ export async function updateContract(
 ): Promise<ActionResult> {
   try {
     const email = await requireSession();
-    // we still need clientId for the schema even though we're not changing it
-    const existing = await db.select({ clientId: contracts.clientId }).from(contracts).where(eq(contracts.id, id));
-    if (!existing[0]) return { error: "Contract not found" };
+    const expectedVersion = parseExpectedVersion(fd);
+    const [existing] = await db.select().from(contracts).where(eq(contracts.id, id));
+    if (!existing) return { error: "Contract not found" };
+    if (expectedVersion !== null && existing.version !== expectedVersion) {
+      return { error: versionConflictError("contract", expectedVersion, existing.version) };
+    }
 
-    const parsed = parseContractForm(existing[0].clientId, fd);
+    const parsed = parseContractForm(existing.clientId, fd);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
     const { rateDollars, ...rest } = parsed.data;
-    await db
+    const whereClause = expectedVersion !== null
+      ? and(eq(contracts.id, id), eq(contracts.version, expectedVersion))
+      : eq(contracts.id, id);
+    const [updated] = await db
       .update(contracts)
-      .set({ ...rest, rateCents: Math.round(rateDollars * 100) })
-      .where(eq(contracts.id, id));
-    await audit(email, `contracts:update:${id}`, parsed.data);
+      .set({ ...rest, rateCents: Math.round(rateDollars * 100), version: bumpVersion(), updatedAt: new Date() })
+      .where(whereClause)
+      .returning({ version: contracts.version });
+    if (!updated) {
+      const [current] = await db
+        .select({ version: contracts.version })
+        .from(contracts)
+        .where(eq(contracts.id, id));
+      if (!current) return { error: "Contract was deleted in another tab." };
+      return { error: versionConflictError("contract", expectedVersion ?? existing.version, current.version) };
+    }
+    await audit(email, `contracts:update:${id}`, { ...parsed.data, fromVersion: existing.version, toVersion: updated.version });
     revalidate();
     return { ok: "Contract saved." };
   } catch (e) {
@@ -211,35 +227,64 @@ export async function updateContract(
   }
 }
 
-export async function archiveContract(id: string): Promise<ActionResult> {
+export async function archiveContract(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
     const email = await requireSession();
+    const [existing] = await db.select().from(contracts).where(eq(contracts.id, id));
+    if (!existing) return { error: "Contract not found" };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("contract", expectedVersion, existing.version) };
+    }
     // refuse if any invoices reference this contract — keep referential integrity for tax history
     const used = await db
       .select({ id: invoices.id })
       .from(invoices)
       .where(eq(invoices.contractId, id))
       .limit(1);
-    if (used[0]) {
-      await db.update(contracts).set({ active: false }).where(eq(contracts.id, id));
-      await audit(email, `contracts:deactivate:${id}`, { reason: "has invoices" });
-      revalidate();
-      return { ok: "Contract deactivated. Past invoices remain linked." };
+    const whereClause = and(eq(contracts.id, id), eq(contracts.version, expectedVersion));
+    const [updated] = await db
+      .update(contracts)
+      .set({ active: false, version: bumpVersion(), updatedAt: new Date() })
+      .where(whereClause)
+      .returning({ version: contracts.version });
+    if (!updated) {
+      const [current] = await db
+        .select({ version: contracts.version })
+        .from(contracts)
+        .where(eq(contracts.id, id));
+      if (!current) return { error: "Contract was deleted in another tab." };
+      return { error: versionConflictError("contract", expectedVersion, current.version) };
     }
-    await db.update(contracts).set({ active: false }).where(eq(contracts.id, id));
-    await audit(email, `contracts:deactivate:${id}`, {});
+    await audit(email, `contracts:deactivate:${id}`, used[0] ? { reason: "has invoices", fromVersion: existing.version, toVersion: updated.version } : { fromVersion: existing.version, toVersion: updated.version });
     revalidate();
-    return { ok: "Contract deactivated." };
+    return { ok: used[0] ? "Contract deactivated. Past invoices remain linked." : "Contract deactivated." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Deactivate failed" };
   }
 }
 
-export async function reactivateContract(id: string): Promise<ActionResult> {
+export async function reactivateContract(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
     const email = await requireSession();
-    await db.update(contracts).set({ active: true }).where(eq(contracts.id, id));
-    await audit(email, `contracts:reactivate:${id}`, {});
+    const [existing] = await db.select().from(contracts).where(eq(contracts.id, id));
+    if (!existing) return { error: "Contract not found" };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("contract", expectedVersion, existing.version) };
+    }
+    const [updated] = await db
+      .update(contracts)
+      .set({ active: true, version: bumpVersion(), updatedAt: new Date() })
+      .where(and(eq(contracts.id, id), eq(contracts.version, expectedVersion)))
+      .returning({ version: contracts.version });
+    if (!updated) {
+      const [current] = await db
+        .select({ version: contracts.version })
+        .from(contracts)
+        .where(eq(contracts.id, id));
+      if (!current) return { error: "Contract was deleted in another tab." };
+      return { error: versionConflictError("contract", expectedVersion, current.version) };
+    }
+    await audit(email, `contracts:reactivate:${id}`, { fromVersion: existing.version, toVersion: updated.version });
     revalidate();
     return { ok: "Contract reactivated." };
   } catch (e) {

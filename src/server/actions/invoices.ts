@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { put, del } from "@vercel/blob";
@@ -23,6 +23,7 @@ import { InvoicePDF } from "@/lib/invoice-pdf";
 import { getBannerDataUri } from "@/lib/pdf-banner";
 import { hstPeriodLockError } from "./hst";
 import { t2PeriodLockError } from "./t2";
+import { bumpVersion, versionConflictError } from "@/lib/optimistic-lock";
 
 type ActionResult = { ok?: string; error?: string; invoiceId?: string };
 
@@ -223,7 +224,11 @@ export async function createInvoice(_prev: ActionResult | undefined, fd: FormDat
 
 const statusSchema = z.enum(["draft", "sent", "paid", "overdue", "void"]);
 
-export async function setInvoiceStatus(id: string, status: string): Promise<ActionResult> {
+export async function setInvoiceStatus(
+  id: string,
+  status: string,
+  expectedVersion: number,
+): Promise<ActionResult> {
   try {
     const email = await requireSession();
     const parsed = statusSchema.safeParse(status);
@@ -231,19 +236,37 @@ export async function setInvoiceStatus(id: string, status: string): Promise<Acti
 
     const [existing] = await db.select().from(invoices).where(eq(invoices.id, id));
     if (!existing) return { error: "Invoice not found." };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("invoice", expectedVersion, existing.version) };
+    }
     const lockErr = await periodLockError(existing.issueDate);
     if (lockErr) return { error: lockErr };
 
-    const patch: { status: typeof parsed.data; paidAt?: Date | null } = { status: parsed.data };
+    const patch: { status: typeof parsed.data; paidAt?: Date | null; version: ReturnType<typeof bumpVersion> } = {
+      status: parsed.data,
+      version: bumpVersion(),
+    };
     if (parsed.data === "paid") patch.paidAt = new Date();
     if (parsed.data !== "paid") patch.paidAt = null;
 
-    await db.update(invoices).set(patch).where(eq(invoices.id, id));
+    const [updated] = await db
+      .update(invoices)
+      .set(patch)
+      .where(and(eq(invoices.id, id), eq(invoices.version, expectedVersion)))
+      .returning({ version: invoices.version });
+    if (!updated) {
+      const [current] = await db
+        .select({ version: invoices.version })
+        .from(invoices)
+        .where(eq(invoices.id, id));
+      if (!current) return { error: "Invoice was deleted in another tab." };
+      return { error: versionConflictError("invoice", expectedVersion, current.version) };
+    }
     await db.insert(auditLog).values({
       actorEmail: email,
       action: "update",
       target: `invoices:${id}:status`,
-      metadata: { status: parsed.data },
+      metadata: { status: parsed.data, fromVersion: existing.version, toVersion: updated.version },
     });
     revalidatePath("/invoices");
     revalidatePath(`/invoices/${id}`);
@@ -254,11 +277,14 @@ export async function setInvoiceStatus(id: string, status: string): Promise<Acti
   }
 }
 
-export async function deleteDraftInvoice(id: string): Promise<ActionResult> {
+export async function deleteDraftInvoice(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
     const email = await requireSession();
     const [inv] = await db.select().from(invoices).where(eq(invoices.id, id));
     if (!inv) return { error: "Invoice not found." };
+    if (inv.version !== expectedVersion) {
+      return { error: versionConflictError("invoice", expectedVersion, inv.version) };
+    }
     if (inv.status !== "draft") return { error: "Only draft invoices can be deleted." };
     const lockErr = await periodLockError(inv.issueDate);
     if (lockErr) return { error: lockErr };
@@ -274,7 +300,18 @@ export async function deleteDraftInvoice(id: string): Promise<ActionResult> {
     }
 
     await db.delete(invoiceLines).where(eq(invoiceLines.invoiceId, id));
-    await db.delete(invoices).where(eq(invoices.id, id));
+    const deleted = await db
+      .delete(invoices)
+      .where(and(eq(invoices.id, id), eq(invoices.version, expectedVersion)))
+      .returning({ id: invoices.id });
+    if (!deleted.length) {
+      const [current] = await db
+        .select({ version: invoices.version })
+        .from(invoices)
+        .where(eq(invoices.id, id));
+      if (!current) return { error: "Invoice was already deleted." };
+      return { error: versionConflictError("invoice", expectedVersion, current.version) };
+    }
 
     // Reclaim the sequence: next number should be (max trailing seq of remaining
     // invoices) + 1, or 1 if the table is now empty. This correctly handles

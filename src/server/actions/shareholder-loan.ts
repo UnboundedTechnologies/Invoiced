@@ -19,6 +19,7 @@ import { t1PeriodLockError } from "./t1";
 import { t4aSlipLockError, t5SlipLockError } from "./slips";
 import { t1Returns } from "@/lib/db/schema";
 import { gte, lte } from "drizzle-orm";
+import { bumpVersion, parseExpectedVersion, versionConflictError } from "@/lib/optimistic-lock";
 
 type ActionResult = { ok?: string; error?: string };
 
@@ -121,11 +122,15 @@ export async function updateLoanEntry(
 ): Promise<ActionResult> {
   try {
     const email = await requireSession();
+    const expectedVersion = parseExpectedVersion(fd);
     const [existing] = await db
       .select()
       .from(shareholderLoanEntries)
       .where(eq(shareholderLoanEntries.id, id));
     if (!existing) return { error: "Entry not found." };
+    if (expectedVersion !== null && existing.version !== expectedVersion) {
+      return { error: versionConflictError("loan entry", expectedVersion, existing.version) };
+    }
 
     // Guard: linked reclassifications (created by the "Declare as dividend"
     // flow) must stay tied to their dividend — the amount, date, and type
@@ -167,16 +172,28 @@ export async function updateLoanEntry(
       if (newT1Lock) return { error: newT1Lock };
     }
 
-    await db
+    const whereClause = expectedVersion !== null
+      ? and(eq(shareholderLoanEntries.id, id), eq(shareholderLoanEntries.version, expectedVersion))
+      : eq(shareholderLoanEntries.id, id);
+    const [updated] = await db
       .update(shareholderLoanEntries)
-      .set({ entryDate, type, amountCents, description, sourceKind, sourceRef, fiscalYear })
-      .where(eq(shareholderLoanEntries.id, id));
+      .set({ entryDate, type, amountCents, description, sourceKind, sourceRef, fiscalYear, version: bumpVersion() })
+      .where(whereClause)
+      .returning({ version: shareholderLoanEntries.version });
+    if (!updated) {
+      const [current] = await db
+        .select({ version: shareholderLoanEntries.version })
+        .from(shareholderLoanEntries)
+        .where(eq(shareholderLoanEntries.id, id));
+      if (!current) return { error: "Entry was deleted in another tab." };
+      return { error: versionConflictError("loan entry", expectedVersion ?? existing.version, current.version) };
+    }
 
     await db.insert(auditLog).values({
       actorEmail: email,
       action: "update",
       target: `shareholder_loan_entries:${id}`,
-      metadata: { type, amountCents, entryDate, fiscalYear },
+      metadata: { type, amountCents, entryDate, fiscalYear, fromVersion: existing.version, toVersion: updated.version },
     });
     revalidate();
     return { ok: "Entry saved." };
@@ -185,7 +202,7 @@ export async function updateLoanEntry(
   }
 }
 
-export async function deleteLoanEntry(id: string): Promise<ActionResult> {
+export async function deleteLoanEntry(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
     const email = await requireSession();
     const [existing] = await db
@@ -193,6 +210,9 @@ export async function deleteLoanEntry(id: string): Promise<ActionResult> {
       .from(shareholderLoanEntries)
       .where(eq(shareholderLoanEntries.id, id));
     if (!existing) return { error: "Entry not found." };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("loan entry", expectedVersion, existing.version) };
+    }
     const t4aLock = await t4aSlipLockError(existing.entryDate);
     if (t4aLock) return { error: t4aLock };
     const t2Lock = await t2PeriodLockError(existing.entryDate);
@@ -226,9 +246,21 @@ export async function deleteLoanEntry(id: string): Promise<ActionResult> {
       }
     }
 
+    const deleted = await db
+      .delete(shareholderLoanEntries)
+      .where(and(eq(shareholderLoanEntries.id, id), eq(shareholderLoanEntries.version, expectedVersion)))
+      .returning({ id: shareholderLoanEntries.id });
+    if (!deleted.length) {
+      const [current] = await db
+        .select({ version: shareholderLoanEntries.version })
+        .from(shareholderLoanEntries)
+        .where(eq(shareholderLoanEntries.id, id));
+      if (!current) return { error: "Entry was already deleted." };
+      return { error: versionConflictError("loan entry", expectedVersion, current.version) };
+    }
+
     if (linkedDividendId) {
       await db.batch([
-        db.delete(shareholderLoanEntries).where(eq(shareholderLoanEntries.id, id)),
         db.delete(dividends).where(eq(dividends.id, linkedDividendId)),
         db.insert(auditLog).values([
           {
@@ -241,6 +273,7 @@ export async function deleteLoanEntry(id: string): Promise<ActionResult> {
               entryDate: existing.entryDate,
               fiscalYear: existing.fiscalYear,
               cascadeDeletedDividendId: linkedDividendId,
+              version: existing.version,
             },
           },
           {
@@ -255,7 +288,6 @@ export async function deleteLoanEntry(id: string): Promise<ActionResult> {
       return { ok: "Entry and linked dividend deleted." };
     }
 
-    await db.delete(shareholderLoanEntries).where(eq(shareholderLoanEntries.id, id));
     await db.insert(auditLog).values({
       actorEmail: email,
       action: "delete",
@@ -265,6 +297,7 @@ export async function deleteLoanEntry(id: string): Promise<ActionResult> {
         amountCents: existing.amountCents,
         entryDate: existing.entryDate,
         fiscalYear: existing.fiscalYear,
+        version: existing.version,
       },
     });
     revalidate();

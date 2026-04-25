@@ -80,6 +80,7 @@ export function ShareholderLoanEntryForm({
 
   return (
     <form action={formAction} className="space-y-4">
+      {entry && <input type="hidden" name="expectedVersion" value={entry.version} />}
       <div className="space-y-1.5">
         <Label htmlFor="type">Type *</Label>
         <Select name="type" value={type} onValueChange={(v) => setType(v as EntryType)}>

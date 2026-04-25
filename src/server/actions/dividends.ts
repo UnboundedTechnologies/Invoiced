@@ -10,6 +10,7 @@ import { fiscalYearFor } from "@/lib/utils";
 import { t2PeriodLockError } from "./t2";
 import { t1PeriodLockError } from "./t1";
 import { t4aSlipLockError, t5SlipLockError } from "./slips";
+import { bumpVersion, parseExpectedVersion, versionConflictError } from "@/lib/optimistic-lock";
 
 type ActionResult = { ok?: string; error?: string };
 
@@ -113,8 +114,12 @@ export async function updateDividend(
 ): Promise<ActionResult> {
   try {
     const email = await requireSession();
+    const expectedVersion = parseExpectedVersion(fd);
     const [existing] = await db.select().from(dividends).where(eq(dividends.id, id));
     if (!existing) return { error: "Dividend not found." };
+    if (expectedVersion !== null && existing.version !== expectedVersion) {
+      return { error: versionConflictError("dividend", expectedVersion, existing.version) };
+    }
 
     const parsed = parseForm(fd);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -153,16 +158,29 @@ export async function updateDividend(
       if (newT1Lock) return { error: newT1Lock };
     }
 
-    await db
+    const whereClause = expectedVersion !== null
+      ? and(eq(dividends.id, id), eq(dividends.version, expectedVersion))
+      : eq(dividends.id, id);
+    const [updated] = await db
       .update(dividends)
-      .set({ declaredDate, paidDate, amountCents, eligible, fiscalYear, notes })
-      .where(eq(dividends.id, id));
+      .set({ declaredDate, paidDate, amountCents, eligible, fiscalYear, notes, version: bumpVersion() })
+      .where(whereClause)
+      .returning({ id: dividends.id, version: dividends.version });
+
+    if (!updated) {
+      const [current] = await db
+        .select({ version: dividends.version })
+        .from(dividends)
+        .where(eq(dividends.id, id));
+      if (!current) return { error: "Dividend was deleted in another tab." };
+      return { error: versionConflictError("dividend", expectedVersion ?? existing.version, current.version) };
+    }
 
     await db.insert(auditLog).values({
       actorEmail: email,
       action: "update",
       target: `dividends:${id}`,
-      metadata: { amountCents, eligible, fiscalYear, declaredDate, paidDate },
+      metadata: { amountCents, eligible, fiscalYear, declaredDate, paidDate, fromVersion: existing.version, toVersion: updated.version },
     });
     revalidate();
     return { ok: "Dividend saved." };
@@ -171,11 +189,14 @@ export async function updateDividend(
   }
 }
 
-export async function deleteDividend(id: string): Promise<ActionResult> {
+export async function deleteDividend(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
     const email = await requireSession();
     const [existing] = await db.select().from(dividends).where(eq(dividends.id, id));
     if (!existing) return { error: "Dividend not found." };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("dividend", expectedVersion, existing.version) };
+    }
     // T5 lock: only paid dividends are on any T5. Unpaid ones can be deleted
     // freely.
     if (existing.paidDate) {
@@ -211,8 +232,23 @@ export async function deleteDividend(id: string): Promise<ActionResult> {
       if (t4aLock) {
         return { error: `${t4aLock} Cascade-delete of the linked loan-ledger entry blocked.` };
       }
+    }
+
+    const deleted = await db
+      .delete(dividends)
+      .where(and(eq(dividends.id, id), eq(dividends.version, expectedVersion)))
+      .returning({ id: dividends.id });
+    if (!deleted.length) {
+      const [current] = await db
+        .select({ version: dividends.version })
+        .from(dividends)
+        .where(eq(dividends.id, id));
+      if (!current) return { error: "Dividend was already deleted." };
+      return { error: versionConflictError("dividend", expectedVersion, current.version) };
+    }
+
+    if (linkedEntry) {
       await db.batch([
-        db.delete(dividends).where(eq(dividends.id, id)),
         db.delete(shareholderLoanEntries).where(eq(shareholderLoanEntries.id, linkedEntry.id)),
         db.insert(auditLog).values([
           {
@@ -225,6 +261,7 @@ export async function deleteDividend(id: string): Promise<ActionResult> {
               fiscalYear: existing.fiscalYear,
               declaredDate: existing.declaredDate,
               cascadeDeletedLoanEntryId: linkedEntry.id,
+              version: existing.version,
             },
           },
           {
@@ -239,7 +276,6 @@ export async function deleteDividend(id: string): Promise<ActionResult> {
       return { ok: "Dividend and linked loan-ledger entry deleted." };
     }
 
-    await db.delete(dividends).where(eq(dividends.id, id));
     await db.insert(auditLog).values({
       actorEmail: email,
       action: "delete",
@@ -249,6 +285,7 @@ export async function deleteDividend(id: string): Promise<ActionResult> {
         eligible: existing.eligible,
         fiscalYear: existing.fiscalYear,
         declaredDate: existing.declaredDate,
+        version: existing.version,
       },
     });
     revalidate();
@@ -258,12 +295,19 @@ export async function deleteDividend(id: string): Promise<ActionResult> {
   }
 }
 
-export async function markDividendPaid(id: string, paidDate: string): Promise<ActionResult> {
+export async function markDividendPaid(
+  id: string,
+  paidDate: string,
+  expectedVersion: number,
+): Promise<ActionResult> {
   try {
     const email = await requireSession();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(paidDate)) return { error: "Invalid paid date." };
     const [existing] = await db.select().from(dividends).where(eq(dividends.id, id));
     if (!existing) return { error: "Dividend not found." };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("dividend", expectedVersion, existing.version) };
+    }
     if (paidDate < existing.declaredDate) {
       return { error: "Paid date can't be before the declared date." };
     }
@@ -275,12 +319,26 @@ export async function markDividendPaid(id: string, paidDate: string): Promise<Ac
     // T1 lock on the new paid date — it puts a dividend into that CY's T1.
     const t1Lock = await t1PeriodLockError(paidDate);
     if (t1Lock) return { error: t1Lock };
-    await db.update(dividends).set({ paidDate }).where(eq(dividends.id, id));
+
+    const [updated] = await db
+      .update(dividends)
+      .set({ paidDate, version: bumpVersion() })
+      .where(and(eq(dividends.id, id), eq(dividends.version, expectedVersion)))
+      .returning({ version: dividends.version });
+    if (!updated) {
+      const [current] = await db
+        .select({ version: dividends.version })
+        .from(dividends)
+        .where(eq(dividends.id, id));
+      if (!current) return { error: "Dividend was deleted in another tab." };
+      return { error: versionConflictError("dividend", expectedVersion, current.version) };
+    }
+
     await db.insert(auditLog).values({
       actorEmail: email,
       action: "update",
       target: `dividends:${id}:markPaid`,
-      metadata: { paidDate },
+      metadata: { paidDate, fromVersion: existing.version, toVersion: updated.version },
     });
     revalidate();
     return { ok: "Marked as paid." };
@@ -289,11 +347,14 @@ export async function markDividendPaid(id: string, paidDate: string): Promise<Ac
   }
 }
 
-export async function markDividendUnpaid(id: string): Promise<ActionResult> {
+export async function markDividendUnpaid(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
     const email = await requireSession();
     const [existing] = await db.select().from(dividends).where(eq(dividends.id, id));
     if (!existing) return { error: "Dividend not found." };
+    if (existing.version !== expectedVersion) {
+      return { error: versionConflictError("dividend", expectedVersion, existing.version) };
+    }
     // T5 lock on the existing paid date — unpaying it removes the dividend
     // from that CY's T5 (history rewrite if the T5 is filed).
     if (existing.paidDate) {
@@ -308,12 +369,26 @@ export async function markDividendUnpaid(id: string): Promise<ActionResult> {
       const t1Lock = await t1PeriodLockError(existing.paidDate);
       if (t1Lock) return { error: t1Lock };
     }
-    await db.update(dividends).set({ paidDate: null }).where(eq(dividends.id, id));
+
+    const [updated] = await db
+      .update(dividends)
+      .set({ paidDate: null, version: bumpVersion() })
+      .where(and(eq(dividends.id, id), eq(dividends.version, expectedVersion)))
+      .returning({ version: dividends.version });
+    if (!updated) {
+      const [current] = await db
+        .select({ version: dividends.version })
+        .from(dividends)
+        .where(eq(dividends.id, id));
+      if (!current) return { error: "Dividend was deleted in another tab." };
+      return { error: versionConflictError("dividend", expectedVersion, current.version) };
+    }
+
     await db.insert(auditLog).values({
       actorEmail: email,
       action: "update",
       target: `dividends:${id}:markUnpaid`,
-      metadata: {},
+      metadata: { fromVersion: existing.version, toVersion: updated.version },
     });
     revalidate();
     return { ok: "Marked as unpaid." };

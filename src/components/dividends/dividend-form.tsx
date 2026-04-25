@@ -50,6 +50,7 @@ export function DividendForm({
 
   return (
     <form action={formAction} className="space-y-4">
+      {dividend && <input type="hidden" name="expectedVersion" value={dividend.version} />}
       <div className="space-y-1.5">
         <Label htmlFor="amountDollars">Amount (CAD) *</Label>
         <Input

@@ -159,6 +159,7 @@ export const settings = pgTable("settings", {
   // Invoice numbering
   invoicePrefix: text("invoice_prefix").notNull().default("UT"),
   nextInvoiceSeq: integer("next_invoice_seq").notNull().default(1),
+  version: integer("version").notNull().default(1),
   // Updated
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -201,7 +202,9 @@ export const contracts = pgTable(
     // PSB defensibility signals
     billingModel: text("billing_model").notNull().default("hourly"), // hourly | fixed_fee | milestone
     rightToSubcontract: boolean("right_to_subcontract").notNull().default(false),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     // Each document can be linked to at most one contract
@@ -230,7 +233,9 @@ export const invoices = pgTable(
     pdfSha256: text("pdf_sha256"),
     notes: text("notes"),
     paidAt: timestamp("paid_at", { withTimezone: true }),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     uniqueIndex("invoices_number_unique").on(t.invoiceNumber),
@@ -278,7 +283,9 @@ export const paycheques = pgTable(
     pdfBlobUrl: text("pdf_blob_url"),
     pdfSha256: text("pdf_sha256"),
     notes: text("notes"),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("paycheques_pay_date_idx").on(t.payDate)],
 );
@@ -294,7 +301,9 @@ export const dividends = pgTable(
     eligible: boolean("eligible").notNull().default(true), // eligible vs non-eligible dividend
     fiscalYear: integer("fiscal_year").notNull(),
     notes: text("notes"),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     index("dividends_declared_date_idx").on(t.declaredDate),
@@ -317,7 +326,9 @@ export const expenses = pgTable("expenses", {
   receiptSha256: text("receipt_sha256"),
   cca: jsonb("cca"), // capital cost allowance details if asset
   fiscalYear: integer("fiscal_year").notNull(),
+  version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 // Remittances to CRA (HST, payroll source deductions, corp tax)
@@ -332,6 +343,7 @@ export const remittances = pgTable("remittances", {
   confirmationNumber: text("confirmation_number"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 // HST returns — one row per fiscal year (annual filer only, per Phase 3B scope).
@@ -365,6 +377,7 @@ export const hstReturns = pgTable(
     filedAt: timestamp("filed_at", { withTimezone: true }),
     filedBy: text("filed_by"),
     notes: text("notes"),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -434,6 +447,7 @@ export const t2Returns = pgTable(
     filedAt: timestamp("filed_at", { withTimezone: true }),
     filedBy: text("filed_by"),
     notes: text("notes"),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -564,6 +578,7 @@ export const t1Returns = pgTable(
     filedAt: timestamp("filed_at", { withTimezone: true }),
     filedBy: text("filed_by"),
     notes: text("notes"),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -586,6 +601,7 @@ export const rrspContributions = pgTable(
     institutionName: text("institution_name"),
     receiptNumber: text("receipt_number"),
     notes: text("notes"),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("rrsp_contributions_applied_year_idx").on(t.appliedToTaxYear)],
@@ -609,6 +625,7 @@ export const capitalTransactions = pgTable(
     acbCents: bigint("acb_cents", { mode: "number" }).notNull(),
     outlaysCents: bigint("outlays_cents", { mode: "number" }).notNull().default(0),
     notes: text("notes"),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("capital_transactions_tax_year_idx").on(t.taxYear)],
@@ -627,6 +644,7 @@ export const donations = pgTable(
     amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
     dateReceived: date("date_received").notNull(),
     notes: text("notes"),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("donations_tax_year_idx").on(t.taxYear)],
@@ -749,6 +767,7 @@ export const shareholderLoanEntries = pgTable(
     sourceKind: text("source_kind"),     // "bank_xfer" | "expense_personal" | "reimbursement" | free-form
     sourceRef: text("source_ref"),       // free-form reference (txn id, invoice #, etc.)
     fiscalYear: integer("fiscal_year").notNull(),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [

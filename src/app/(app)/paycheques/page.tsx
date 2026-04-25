@@ -185,7 +185,7 @@ export default async function PaychequesPage() {
                         </td>
                         <td className="px-2 py-3 text-right">
                           {p.status === "draft" && (
-                            <DeletePaychequeButton id={p.id} payDate={p.payDate} />
+                            <DeletePaychequeButton id={p.id} payDate={p.payDate} version={p.version} />
                           )}
                         </td>
                       </tr>
