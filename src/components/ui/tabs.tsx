@@ -14,6 +14,11 @@ const TabsList = React.forwardRef<
     ref={ref}
     className={cn(
       "inline-flex h-10 items-center justify-start gap-1 rounded-lg border border-border/60 bg-card/40 p-1 backdrop-blur-sm",
+      // Mobile horizontal scroll: cap width to the parent and let the
+      // children overflow horizontally with a hidden scrollbar. Desktop
+      // viewports are wide enough that overflow never kicks in.
+      "max-w-full overflow-x-auto",
+      "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
       className,
     )}
     {...props}
