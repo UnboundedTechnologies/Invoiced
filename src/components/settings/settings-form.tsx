@@ -15,6 +15,7 @@ import {
 import { changeVaultPin } from "@/server/actions/vault-pin";
 import { PayrollCard } from "@/components/settings/payroll-card";
 import { InfoReturnsCard } from "@/components/settings/info-returns-card";
+import { TotpStatusCard } from "@/components/settings/totp-status-card";
 import { PinInput } from "@/components/vault/pin-input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -83,9 +84,11 @@ function SaveBar({ pending, dirty }: { pending: boolean; dirty: boolean }) {
 export function SettingsForm({
   data,
   openingPoolsLocked,
+  totpEnabledAt,
 }: {
   data: SettingsRow;
   openingPoolsLocked: boolean;
+  totpEnabledAt: Date | null;
 }) {
   return (
     <Tabs defaultValue="corp" className="w-full">
@@ -132,7 +135,8 @@ export function SettingsForm({
       <TabsContent value="branding">
         <BrandingPanel data={data} />
       </TabsContent>
-      <TabsContent value="security">
+      <TabsContent value="security" className="space-y-4">
+        <TotpStatusCard totpEnabledAt={totpEnabledAt} />
         <SecurityPanel data={data} />
       </TabsContent>
     </Tabs>

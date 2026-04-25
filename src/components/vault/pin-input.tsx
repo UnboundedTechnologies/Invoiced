@@ -16,6 +16,7 @@ export function PinInput({
   onChange,
   disabled,
   invalid,
+  mask = true,
 }: {
   name: string;
   autoFocus?: boolean;
@@ -23,6 +24,9 @@ export function PinInput({
   onChange?: (v: string) => void;
   disabled?: boolean;
   invalid?: boolean;
+  /** Whether to mask digits (default true). Set false for non-secret transient
+   * codes like TOTP, where the user benefits from seeing what they typed. */
+  mask?: boolean;
 }) {
   const controlled = value !== undefined;
   const [internal, setInternal] = useState("");
@@ -88,7 +92,7 @@ export function PinInput({
             ref={(el) => {
               refs.current[idx] = el;
             }}
-            type="password"
+            type={mask ? "password" : "text"}
             inputMode="numeric"
             pattern="\d*"
             autoComplete="off"

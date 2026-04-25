@@ -7,22 +7,31 @@ import { db } from "@/lib/db/client";
 import { users, auditLog } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { checkLoginRateLimit } from "@/lib/rate-limit";
+import {
+  setPendingCookie,
+  readPendingUserId,
+  clearPendingCookie,
+} from "@/lib/totp-pending";
+import {
+  decryptSecret,
+  verifyTotp,
+  verifyAndConsumeBackupCode,
+} from "@/lib/totp";
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(256),
 });
 
-// Comma-separated allowlist. First entry is the admin (the only email that
-// can bootstrap from ADMIN_PASSWORD_HASH on first login). Additional entries
-// are test/visitor accounts — their users rows must already exist (create
-// via `pnpm set-password <email>`).
 const ALLOWED_EMAILS = (process.env.ALLOWED_LOGIN_EMAILS ?? process.env.ALLOWED_LOGIN_EMAIL ?? "")
   .split(",")
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean);
 const ADMIN_EMAIL = ALLOWED_EMAILS[0];
 const ENV_HASH = process.env.ADMIN_PASSWORD_HASH;
+
+const TOTP_LOCKOUT_THRESHOLD = 5;
+const TOTP_LOCKOUT_MINUTES = 15;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -31,11 +40,96 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        mode: { type: "text" },
+        code: { type: "text" },
       },
       async authorize(rawCreds) {
-        // IP-level rate limit FIRST — runs before DB lookup, before Argon2,
-        // before audit-log inserts on bad creds. Distributed brute-force
-        // bouncers off here without burning server CPU.
+        const mode = typeof rawCreds?.mode === "string" ? rawCreds.mode : "";
+
+        // ── Step 2: 2FA completion ──────────────────────────────────────────
+        // /login/2fa calls signIn("credentials", { mode: "2fa" | "2fa-backup", code }).
+        // We trust the pending cookie (HMAC-signed, 60s TTL) for the userId — the
+        // password was already verified in step 1 below.
+        if (mode === "2fa" || mode === "2fa-backup") {
+          const userId = await readPendingUserId();
+          if (!userId) return null;
+          const code = String(rawCreds?.code ?? "").replace(/\s+/g, "");
+          const [user] = await db.select().from(users).where(eq(users.id, userId));
+          if (!user || !user.totpEnabledAt || !user.totpSecretEncrypted) return null;
+
+          // Lockout gate (5 fails / 15 min on 2FA specifically).
+          if (user.totpLockedUntil && user.totpLockedUntil > new Date()) {
+            await db.insert(auditLog).values({
+              actorEmail: user.email,
+              action: "login",
+              metadata: { success: false, step: "2fa", reason: "locked" },
+            });
+            return null;
+          }
+
+          const key = process.env.TOTP_ENCRYPTION_KEY;
+          if (!key) return null;
+
+          let ok = false;
+          let usedBackup = false;
+          if (mode === "2fa") {
+            try {
+              const secret = decryptSecret(user.totpSecretEncrypted, key);
+              ok = /^\d{6}$/.test(code) && verifyTotp(secret, code);
+            } catch {
+              ok = false;
+            }
+          } else {
+            const remaining = await verifyAndConsumeBackupCode(
+              code,
+              user.totpBackupCodesHashed ?? [],
+            );
+            if (remaining !== null) {
+              ok = true;
+              usedBackup = true;
+              await db
+                .update(users)
+                .set({ totpBackupCodesHashed: remaining })
+                .where(eq(users.id, user.id));
+            }
+          }
+
+          if (!ok) {
+            const newCount = (user.totpFailedCount ?? 0) + 1;
+            const locked =
+              newCount >= TOTP_LOCKOUT_THRESHOLD
+                ? new Date(Date.now() + TOTP_LOCKOUT_MINUTES * 60 * 1000)
+                : null;
+            await db
+              .update(users)
+              .set({ totpFailedCount: newCount, totpLockedUntil: locked })
+              .where(eq(users.id, user.id));
+            await db.insert(auditLog).values({
+              actorEmail: user.email,
+              action: "login",
+              metadata: { success: false, step: "2fa", mode },
+            });
+            return null;
+          }
+
+          await db
+            .update(users)
+            .set({
+              totpFailedCount: 0,
+              totpLockedUntil: null,
+              lastLoginAt: new Date(),
+            })
+            .where(eq(users.id, user.id));
+          await db.insert(auditLog).values({
+            actorEmail: user.email,
+            action: "login",
+            metadata: { success: true, step: "2fa", mode, usedBackup },
+          });
+          await clearPendingCookie();
+          return { id: user.id, email: user.email };
+        }
+
+        // ── Step 1: email + password ────────────────────────────────────────
         const rl = await checkLoginRateLimit();
         if (!rl.success) {
           await db.insert(auditLog).values({
@@ -53,12 +147,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const { email, password } = parsed.data;
         const normalizedEmail = email.toLowerCase();
 
-        // Email must be in the env allowlist.
         if (!ALLOWED_EMAILS.length || !ALLOWED_EMAILS.includes(normalizedEmail)) {
           return null;
         }
 
-        // Resolve hash: prefer DB row, fall back to env (bootstrap before first login)
         let userId: string | null = null;
         let storedHash: string | null = null;
 
@@ -70,8 +162,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           userId = userRow.id;
           storedHash = userRow.passwordHash;
         } else if (ENV_HASH && normalizedEmail === ADMIN_EMAIL) {
-          // First-run bootstrap — admin only. Other allowlisted emails must
-          // have a users row already (created via `pnpm set-password <email>`).
           storedHash = ENV_HASH;
           const inserted = await db
             .insert(users)
@@ -102,6 +192,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
+        // Password verified. If user has 2FA enrolled, set the pending cookie
+        // and return null — the loginAction wrapper inspects the cookie and
+        // redirects to /login/2fa instead of treating null as a generic fail.
+        if (userRow?.totpEnabledAt) {
+          await setPendingCookie(userRow.id);
+          await db.insert(auditLog).values({
+            actorEmail: normalizedEmail,
+            action: "login",
+            metadata: { success: true, step: "password", twofa: "pending" },
+          });
+          return null;
+        }
+
+        // No 2FA: issue session immediately (existing flow).
         await db
           .update(users)
           .set({ failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() })
