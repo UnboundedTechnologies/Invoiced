@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { auth } from "../../../../../auth";
 import { db } from "@/lib/db/client";
-import { documents, auditLog } from "@/lib/db/schema";
+import { documents, users, auditLog } from "@/lib/db/schema";
 import { hasVaultPinSession } from "@/lib/vault-pin-session";
+import { hasVault2faSession } from "@/lib/vault-2fa-session";
 import { streamBlob } from "@/lib/blob";
 
 export const runtime = "nodejs";
@@ -25,6 +26,17 @@ export async function GET(
 
   const unlocked = await hasVaultPinSession();
   if (!unlocked) return new NextResponse("Vault locked", { status: 401 });
+
+  // If the signed-in user has 2FA enrolled, require the vault-2fa cookie too.
+  const sessionEmail = session.user.email.toLowerCase();
+  const [me] = await db
+    .select({ totpEnabledAt: users.totpEnabledAt })
+    .from(users)
+    .where(eq(users.email, sessionEmail));
+  if (me?.totpEnabledAt) {
+    const twofaUnlocked = await hasVault2faSession();
+    if (!twofaUnlocked) return new NextResponse("Vault 2FA required", { status: 401 });
+  }
 
   const { id } = await ctx.params;
   const url = new URL(req.url);

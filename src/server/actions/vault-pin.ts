@@ -1,5 +1,6 @@
 "use server";
 
+import { clearVault2faCookie } from "@/lib/vault-2fa-session";
 import { cookies, headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -238,6 +239,9 @@ export async function lockVaultSession(): Promise<ActionResult> {
   try {
     const email = await requireSession();
     await clearPinCookie();
+    // 2FA cookie lives in parallel — clear it on the same lock action so
+    // re-entry requires both factors again.
+    await clearVault2faCookie();
     await db.insert(auditLog).values({
       actorEmail: email,
       action: "logout",
