@@ -1,0 +1,4 @@
+# Invoiced is a private single-user tool — never indexed by search engines.
+# This pairs with the noindex/nofollow meta tags emitted by src/app/layout.tsx.
+User-agent: *
+Disallow: /
