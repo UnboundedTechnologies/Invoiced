@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight } from "lucide-react";
+import { MobileNav } from "./mobile-nav";
 
 type Meta = { section: string; sectionHref: string; page: string };
 
@@ -41,8 +42,10 @@ export function TopBar({ corpName }: { corpName: string }) {
 
   return (
     <div className="sticky top-0 z-20 border-b border-border/40 bg-background/60 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3">
-        <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-muted-foreground">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-2">
+          <MobileNav corpName={corpName} />
+        <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
           <Link href="/dashboard" className="hover:text-foreground transition-colors">
             {corpName}
           </Link>
@@ -54,13 +57,14 @@ export function TopBar({ corpName }: { corpName: string }) {
             {meta.section}
           </Link>
           <ChevronRight className="size-3.5 opacity-50 hidden sm:inline" />
-          <span className="font-medium text-foreground" aria-current="page">
+          <span className="truncate font-medium text-foreground" aria-current="page">
             {meta.page}
           </span>
         </nav>
+        </div>
 
         <div
-          className="dq-scene relative h-10 w-[200px] overflow-hidden rounded-md border border-border/40 shadow-sm"
+          className="dq-scene relative hidden h-10 w-[200px] overflow-hidden rounded-md border border-border/40 shadow-sm sm:block"
           role="img"
           aria-label="Heroes walking through the landscape"
         >
