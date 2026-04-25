@@ -74,7 +74,17 @@ const CADENCE_LABEL: Record<string, string> = {
   monthly: "Monthly",
 };
 
-export function ClientCard({ client, contracts }: { client: Client; contracts: ContractRow[] }) {
+export function ClientCard({
+  client,
+  contracts,
+  vaultUnlocked,
+  twofaEnrolled,
+}: {
+  client: Client;
+  contracts: ContractRow[];
+  vaultUnlocked: boolean;
+  twofaEnrolled: boolean;
+}) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
   const [contractOpen, setContractOpen] = useState(false);
@@ -236,7 +246,11 @@ export function ClientCard({ client, contracts }: { client: Client; contracts: C
                 contract={documentRow.contract}
                 document={documentRow.document}
               />
-              <ContractAttachmentsSection attachments={documentRow.attachments} />
+              <ContractAttachmentsSection
+                attachments={documentRow.attachments}
+                vaultUnlocked={vaultUnlocked}
+                twofaEnrolled={twofaEnrolled}
+              />
             </>
           )}
         </DialogContent>
