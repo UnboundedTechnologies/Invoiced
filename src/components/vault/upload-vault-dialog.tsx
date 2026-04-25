@@ -118,7 +118,7 @@ export function UploadVaultDialog() {
           Upload
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-w-[calc(100vw-2rem)] overflow-hidden">
         <DialogHeader>
           <DialogTitle>Upload to vault</DialogTitle>
           <DialogDescription>
@@ -127,7 +127,7 @@ export function UploadVaultDialog() {
           </DialogDescription>
         </DialogHeader>
 
-        <form action={formAction} className="space-y-4">
+        <form action={formAction} className="space-y-4 min-w-0">
           <div className="space-y-1.5">
             <Label htmlFor="category">Category</Label>
             <Select
@@ -158,8 +158,9 @@ export function UploadVaultDialog() {
               name="name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder={staged?.name ?? "Leave blank to use the file name"}
+              placeholder="Leave blank to use the file name"
               maxLength={200}
+              className="w-full min-w-0"
             />
           </div>
 
@@ -200,8 +201,11 @@ export function UploadVaultDialog() {
                   className={cn("size-6 shrink-0", dragOver ? "text-primary" : "text-muted-foreground")}
                 />
               )}
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <div
+                  className="truncate text-sm font-medium"
+                  title={staged ? staged.name : undefined}
+                >
                   {staged ? staged.name : "Drop a file here or click to browse"}
                 </div>
                 <div className="text-[11px] text-muted-foreground">
