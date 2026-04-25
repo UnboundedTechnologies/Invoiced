@@ -24,10 +24,12 @@ type VaultDoc = Awaited<ReturnType<typeof listAvailableContractDocuments>>[numbe
 
 export function VaultPicker({
   contractId,
+  contractVersion,
   open,
   onOpenChange,
 }: {
   contractId: string;
+  contractVersion: number;
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
@@ -49,7 +51,7 @@ export function VaultPicker({
   function handleLink() {
     if (!selected) return;
     startTransition(async () => {
-      const r = await linkVaultDocumentToContract(contractId, selected);
+      const r = await linkVaultDocumentToContract(contractId, selected, contractVersion);
       if (r.ok) {
         toast.success(r.ok);
         router.refresh();
