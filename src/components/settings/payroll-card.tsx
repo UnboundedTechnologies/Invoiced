@@ -133,6 +133,7 @@ function InactivePayrollPanel({ data }: { data: SettingsRow }) {
           {step === "input" && (
             <InputStep
               businessNumber={data.businessNumber}
+              expectedVersion={data.version}
               onBack={() => setStep("ask")}
             />
           )}
@@ -216,7 +217,15 @@ function InstructionsStep({ onBack, onClose }: { onBack: () => void; onClose: ()
 }
 
 //  STEP 2b - Input 
-function InputStep({ businessNumber, onBack }: { businessNumber: string; onBack: () => void }) {
+function InputStep({
+  businessNumber,
+  expectedVersion,
+  onBack,
+}: {
+  businessNumber: string;
+  expectedVersion: number;
+  onBack: () => void;
+}) {
   const [value, setValue] = useState(businessNumber + "RP0001");
   const [state, formAction, pending] = useActionState(activatePayroll, undefined as Result | undefined);
 
@@ -231,6 +240,7 @@ function InputStep({ businessNumber, onBack }: { businessNumber: string; onBack:
 
   return (
     <form action={formAction} className="space-y-4">
+      <input type="hidden" name="expectedVersion" value={expectedVersion} />
       <div>
         <Label htmlFor="payrollAccount">Payroll account number</Label>
         <div className="mt-1.5 relative">

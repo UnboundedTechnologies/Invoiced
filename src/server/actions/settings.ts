@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
 import {
@@ -14,8 +14,10 @@ import {
   t2Returns,
 } from "@/lib/db/schema";
 import { auth } from "../../../auth";
+import { bumpVersion, parseExpectedVersion, versionConflictError } from "@/lib/optimistic-lock";
 
 type ActionResult = { ok?: string; error?: string };
+type CommitResult = { ok: true } | { error: string };
 
 async function requireSession() {
   const session = await auth();
@@ -27,20 +29,44 @@ async function commit(
   email: string,
   patch: Partial<typeof settings.$inferInsert>,
   section: string,
-): Promise<void> {
-  await db
+  expectedVersion: number | null = null,
+): Promise<CommitResult> {
+  if (expectedVersion !== null) {
+    const [current] = await db
+      .select({ version: settings.version })
+      .from(settings)
+      .where(eq(settings.id, 1));
+    if (!current) return { error: "Settings not seeded." };
+    if (current.version !== expectedVersion) {
+      return { error: versionConflictError("settings", expectedVersion, current.version) };
+    }
+  }
+  const whereClause = expectedVersion !== null
+    ? and(eq(settings.id, 1), eq(settings.version, expectedVersion))
+    : eq(settings.id, 1);
+  const [updated] = await db
     .update(settings)
-    .set({ ...patch, updatedAt: new Date() })
-    .where(eq(settings.id, 1));
+    .set({ ...patch, version: bumpVersion(), updatedAt: new Date() })
+    .where(whereClause)
+    .returning({ version: settings.version });
+  if (!updated) {
+    const [current] = await db
+      .select({ version: settings.version })
+      .from(settings)
+      .where(eq(settings.id, 1));
+    if (!current) return { error: "Settings not seeded." };
+    return { error: versionConflictError("settings", expectedVersion ?? -1, current.version) };
+  }
   await db.insert(auditLog).values({
     actorEmail: email,
     action: "update",
     target: `settings:${section}`,
-    metadata: patch as Record<string, unknown>,
+    metadata: { ...(patch as Record<string, unknown>), toVersion: updated.version },
   });
   revalidatePath("/settings");
   revalidatePath("/dashboard");
   revalidatePath("/(app)", "layout");
+  return { ok: true };
 }
 
 //  Corporation 
@@ -82,7 +108,9 @@ export async function updateCorporation(_prev: ActionResult | undefined, fd: For
       country: ((fd.get("country") as string) ?? "CA").toUpperCase(),
     });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
-    await commit(email, parsed.data, "corporation");
+    const expectedVersion = parseExpectedVersion(fd);
+    const result = await commit(email, parsed.data, "corporation", expectedVersion);
+    if ("error" in result) return result;
     return { ok: "Corporation saved." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Save failed" };
@@ -108,11 +136,14 @@ export async function activatePayroll(_prev: ActionResult | undefined, fd: FormD
       return { error: `First 9 digits must match your Business Number (${s.businessNumber}).` };
     }
 
-    await commit(
+    const expectedVersion = parseExpectedVersion(fd);
+    const result = await commit(
       email,
       { payrollAccount: parsed.data.payrollAccount, payrollAccountActive: true },
       "payroll-activate",
+      expectedVersion,
     );
+    if ("error" in result) return result;
     return { ok: "Payroll account activated. Salary tool unlocked." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Activation failed" };
@@ -135,7 +166,8 @@ export async function deactivatePayroll(): Promise<ActionResult> {
         error: "Can't deactivate payroll while a draft paycheque is open. Issue it or delete it first.",
       };
     }
-    await commit(email, { payrollAccountActive: false }, "payroll-deactivate");
+    const result = await commit(email, { payrollAccountActive: false }, "payroll-deactivate");
+    if ("error" in result) return result;
     return { ok: "Payroll deactivated. Salary tool locked." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Deactivation failed" };
@@ -160,11 +192,14 @@ export async function activatePayerRz(_prev: ActionResult | undefined, fd: FormD
       return { error: `First 9 digits must match your Business Number (${s.businessNumber}).` };
     }
 
-    await commit(
+    const expectedVersion = parseExpectedVersion(fd);
+    const result = await commit(
       email,
       { payerRzAccount: parsed.data.payerRzAccount, payerRzActive: true },
       "payer-rz-activate",
+      expectedVersion,
     );
+    if ("error" in result) return result;
     return { ok: "Info-returns (RZ) account activated. T5 slip generation unlocked." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Activation failed" };
@@ -176,7 +211,8 @@ export async function deactivatePayerRz(): Promise<ActionResult> {
     const email = await requireSession();
     // No draft-slip guard yet (file/void actions land in 4E-4). When they ship,
     // mirror the payroll pattern: refuse deactivation while a draft T5 slip exists.
-    await commit(email, { payerRzActive: false }, "payer-rz-deactivate");
+    const result = await commit(email, { payerRzActive: false }, "payer-rz-deactivate");
+    if ("error" in result) return result;
     return { ok: "Info-returns (RZ) deactivated. T5 slip generation locked." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Deactivation failed" };
@@ -197,7 +233,9 @@ export async function updateDirector(_prev: ActionResult | undefined, fd: FormDa
       directorEmail: fd.get("directorEmail"),
     });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
-    await commit(email, parsed.data, "director");
+    const expectedVersion = parseExpectedVersion(fd);
+    const result = await commit(email, parsed.data, "director", expectedVersion);
+    if ("error" in result) return result;
     return { ok: "Director saved." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Save failed" };
@@ -256,7 +294,9 @@ export async function updateFiscal(_prev: ActionResult | undefined, fd: FormData
       }
     }
 
-    await commit(email, parsed.data, "fiscal");
+    const expectedVersion = parseExpectedVersion(fd);
+    const result = await commit(email, parsed.data, "fiscal", expectedVersion);
+    if ("error" in result) return result;
     return { ok: "Fiscal & HST saved." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Save failed" };
@@ -284,14 +324,17 @@ export async function updatePersonalTax(_prev: ActionResult | undefined, fd: For
     });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
-    await commit(
+    const expectedVersion = parseExpectedVersion(fd);
+    const result = await commit(
       email,
       {
         rrspRoomCents: parsed.data.rrspRoomDollars == null ? null : Math.round(parsed.data.rrspRoomDollars * 100),
         fhsaRoomCents: parsed.data.fhsaRoomDollars == null ? null : Math.round(parsed.data.fhsaRoomDollars * 100),
       },
       "personal-tax",
+      expectedVersion,
     );
+    if ("error" in result) return result;
     return { ok: "Personal tax saved." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Save failed" };
@@ -316,7 +359,8 @@ export async function updateSelfPay(_prev: ActionResult | undefined, fd: FormDat
       payDayRule: fd.get("payDayRule"),
     });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
-    await commit(
+    const expectedVersion = parseExpectedVersion(fd);
+    const result = await commit(
       email,
       {
         paymentStrategy: parsed.data.paymentStrategy,
@@ -325,7 +369,9 @@ export async function updateSelfPay(_prev: ActionResult | undefined, fd: FormDat
         payDayRule: parsed.data.payDayRule,
       },
       "self-pay",
+      expectedVersion,
     );
+    if ("error" in result) return result;
     return { ok: "Self-pay saved." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Save failed" };
@@ -350,7 +396,9 @@ export async function updateBranding(_prev: ActionResult | undefined, fd: FormDa
       nextInvoiceSeq: fd.get("nextInvoiceSeq"),
     });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
-    await commit(email, parsed.data, "branding");
+    const expectedVersion = parseExpectedVersion(fd);
+    const result = await commit(email, parsed.data, "branding", expectedVersion);
+    if ("error" in result) return result;
     return { ok: "Branding saved." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Save failed" };
@@ -422,7 +470,8 @@ export async function updateCorpTax(
       }
     }
 
-    await commit(
+    const expectedVersion = parseExpectedVersion(fd);
+    const result = await commit(
       email,
       {
         isCcpc: parsed.data.isCcpc,
@@ -431,7 +480,9 @@ export async function updateCorpTax(
         ...newOpenings,
       },
       "corp-tax",
+      expectedVersion,
     );
+    if ("error" in result) return result;
     return { ok: "Corporate tax configuration saved." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Save failed" };

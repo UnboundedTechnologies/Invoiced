@@ -366,6 +366,7 @@ function DirectorPanel({ data }: { data: SettingsRow }) {
       </CardHeader>
       <CardContent>
         <form action={formAction} className="space-y-5" onChange={() => setDirty(true)}>
+          <input type="hidden" name="expectedVersion" value={data.version} />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Legal name" htmlFor="directorLegalName">
               <Input id="directorLegalName" name="directorLegalName" defaultValue={data.directorLegalName} required />
@@ -398,6 +399,7 @@ function FiscalPanel({ data }: { data: SettingsRow }) {
       </CardHeader>
       <CardContent>
         <form action={formAction} className="space-y-5" onChange={() => setDirty(true)}>
+          <input type="hidden" name="expectedVersion" value={data.version} />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Fiscal year-end month" htmlFor="fiscalYearEndMonth">
               <Input
@@ -506,6 +508,7 @@ function CorpTaxPanel({
           className="space-y-5"
           onChange={() => setDirty(true)}
         >
+          <input type="hidden" name="expectedVersion" value={data.version} />
           <div className="flex items-center justify-between gap-3 rounded-md border border-border/40 bg-card/30 p-3">
             <div>
               <Label htmlFor="isCcpc">CCPC status</Label>
@@ -681,6 +684,7 @@ function SelfPayPanel({ data }: { data: SettingsRow }) {
       </CardHeader>
       <CardContent>
         <form action={formAction} className="space-y-5" onChange={() => setDirty(true)}>
+          <input type="hidden" name="expectedVersion" value={data.version} />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Strategy" htmlFor="paymentStrategy">
               <Select name="paymentStrategy" defaultValue={data.paymentStrategy}>
@@ -755,6 +759,7 @@ function PersonalTaxPanel({ data }: { data: SettingsRow }) {
       </CardHeader>
       <CardContent>
         <form action={formAction} className="space-y-5" onChange={() => setDirty(true)}>
+          <input type="hidden" name="expectedVersion" value={data.version} />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label="RRSP deduction limit (CAD)"
@@ -830,6 +835,7 @@ function BrandingPanel({ data }: { data: SettingsRow }) {
       </CardHeader>
       <CardContent>
         <form action={formAction} className="space-y-5" onChange={() => setDirty(true)}>
+          <input type="hidden" name="expectedVersion" value={data.version} />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Primary color" htmlFor="brandPrimaryHex">
               <div className="flex items-center gap-2">
