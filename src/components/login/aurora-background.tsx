@@ -2,21 +2,24 @@ import styles from "./aurora-background.module.css";
 
 /**
  * Animated oklch mesh-gradient backdrop. Server component, zero JS state, all
- * motion in CSS — ships with `prefers-reduced-motion` fallback (freezes the
- * gradient and hides the orb layer) and a mobile branch that drops the orbs
- * to keep the blur cost in budget.
+ * motion in CSS. Mounted as the first child of /login (and /login/2fa) so the
+ * form card sits on top of the animation.
  *
- * Mounted as the first child of /login (and /login/2fa) so the form card sits
- * on top of the animation. The host is fixed-position with z-index -10, so the
- * card needs no special z-index of its own.
+ * Effect: four large blurred color blobs (indigo / cyan / violet / sky) drift
+ * + scale on staggered loops, cross-fading to produce a slow "aurora" color
+ * morph. SVG noise overlay + edge vignette finish it.
+ *
+ * Fallbacks: prefers-reduced-motion freezes the drift; mobile drops two blobs
+ * to keep the blur budget reasonable.
  */
 export function AuroraBackground() {
   return (
     <div className={styles.root} aria-hidden>
       <div className={styles.base} />
-      <div className={styles.gradient} />
-      <div className={`${styles.orb} ${styles.orbA}`} />
-      <div className={`${styles.orb} ${styles.orbB}`} />
+      <div className={`${styles.blob} ${styles.blobIndigo}`} />
+      <div className={`${styles.blob} ${styles.blobCyan}`} />
+      <div className={`${styles.blob} ${styles.blobViolet}`} />
+      <div className={`${styles.blob} ${styles.blobSky}`} />
       <div className={styles.noise} />
       <div className={styles.vignette} />
     </div>
