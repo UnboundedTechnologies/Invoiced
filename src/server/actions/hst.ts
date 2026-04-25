@@ -398,6 +398,63 @@ export async function fileReturn(
 }
 
 // ——————————————————————————————————————————————————————————————
+// Unfile return — escape hatch when CRA needs a correction. Toggles status
+// filed → draft, re-creates the hst:<fy> deadline (file deletes it), audit
+// logs the prior CRA confirmation # + filed date as the trail. Frozen line
+// snapshot stays intact (audit history); refile overwrites it.
+//
+// Mirrors the unfileT1Return pattern (commit 3a23781). HST returns are
+// independent FY-to-FY (no chain), so no later-FY guard is needed.
+// ——————————————————————————————————————————————————————————————
+
+export async function unfileHstReturn(fiscalYear: number): Promise<ActionResult> {
+  try {
+    const email = await requireSession();
+    const [existing] = await db
+      .select()
+      .from(hstReturns)
+      .where(eq(hstReturns.fiscalYear, fiscalYear));
+    if (!existing) return { error: "Return not found." };
+    if (existing.status !== "filed") return { error: "Return is not filed; nothing to unfile." };
+
+    const dueIso = hstFilingDueDate(existing.periodEnd);
+
+    await db.batch([
+      db
+        .update(hstReturns)
+        .set({ status: "draft", updatedAt: new Date() })
+        .where(eq(hstReturns.fiscalYear, fiscalYear)),
+      db
+        .insert(deadlines)
+        .values({
+          title: `HST return — FY ${fiscalYear}`,
+          description: `Annual HST return filing + payment due.`,
+          dueDate: dueIso,
+          category: "hst",
+          sourceKey: `hst:${fiscalYear}`,
+        })
+        .onConflictDoNothing({ target: deadlines.sourceKey }),
+      db.insert(auditLog).values({
+        actorEmail: email,
+        action: "update",
+        target: `hst_returns:${fiscalYear}:unfile`,
+        metadata: {
+          fiscalYear,
+          previousCraConfirmationNumber: existing.craConfirmationNumber,
+          previousFiledAt: existing.filedAt,
+          previousLine109Cents: existing.line109Cents,
+        },
+      }),
+    ]);
+
+    revalidate(fiscalYear);
+    return { ok: "HST return unfiled. Make corrections, then re-file with a new CRA confirmation number." };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unfile failed" };
+  }
+}
+
+// ——————————————————————————————————————————————————————————————
 // PDF generation — returns base64 so the client can download it
 // ——————————————————————————————————————————————————————————————
 
