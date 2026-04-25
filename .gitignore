@@ -28,6 +28,14 @@ build/
 *.tsbuildinfo
 next-env.d.ts
 
+# ───── Service worker artifacts (Serwist build output) ─────
+public/sw.js
+public/sw.js.map
+public/swe-worker-*.js
+public/swe-worker-*.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+
 # ───── Database & local data ─────
 *.sqlite
 *.sqlite3
