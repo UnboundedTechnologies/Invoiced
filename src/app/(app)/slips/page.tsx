@@ -37,12 +37,13 @@ export default async function SlipsPage() {
   ]);
 
   // Group existing (non-void) slips by CY for quick lookup.
-  const activeByYear = new Map<number, { t4: boolean; t5: boolean }>();
+  const activeByYear = new Map<number, { t4: boolean; t5: boolean; t4a: boolean }>();
   for (const s of allSlips) {
     if (s.status === "void") continue;
-    const entry = activeByYear.get(s.taxYear) ?? { t4: false, t5: false };
+    const entry = activeByYear.get(s.taxYear) ?? { t4: false, t5: false, t4a: false };
     if (s.type === "T4") entry.t4 = true;
     if (s.type === "T5") entry.t5 = true;
+    if (s.type === "T4A") entry.t4a = true;
     activeByYear.set(s.taxYear, entry);
   }
 
@@ -59,7 +60,7 @@ export default async function SlipsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Year-end slips</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            T4 (employment income) + T5 (dividend income) · Calendar year · Due Feb 28 of the following year
+            T4 (employment income) + T5 (dividend income) + T4A (loan benefits) · Calendar year · Due Feb 28 of the following year
           </p>
         </div>
       </div>
@@ -90,6 +91,7 @@ export default async function SlipsPage() {
                     <th className="px-4 py-3 text-left font-semibold">Filing due</th>
                     <th className="px-4 py-3 text-center font-semibold">T4</th>
                     <th className="px-4 py-3 text-center font-semibold">T5</th>
+                    <th className="px-4 py-3 text-center font-semibold">T4A</th>
                     <th className="px-4 py-3 text-left font-semibold">Countdown</th>
                     <th className="px-2 py-3 sr-only">Open</th>
                   </tr>
@@ -101,6 +103,7 @@ export default async function SlipsPage() {
                     const hasAny = activeByYear.get(cy);
                     const t4Filed = !!hasAny?.t4;
                     const t5Filed = !!hasAny?.t5;
+                    const t4aFiled = !!hasAny?.t4a;
                     const countdownClass =
                       daysToDue < 0
                         ? "text-rose-400"
@@ -119,6 +122,9 @@ export default async function SlipsPage() {
                         </td>
                         <td className="px-4 py-3 text-center">
                           <SlipStatusBadge filed={t5Filed} />
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <SlipStatusBadge filed={t4aFiled} />
                         </td>
                         <td className={`px-4 py-3 text-xs ${countdownClass}`}>
                           {daysToDue < 0 ? `${-daysToDue} days overdue` : `${daysToDue} days`}

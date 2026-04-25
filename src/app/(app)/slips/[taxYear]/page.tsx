@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { loadSlipPreview } from "@/server/actions/slips";
 import { formatCAD, formatLongDate } from "@/lib/utils";
 import { CPP_YMPE_2026 } from "@/lib/payroll-2026";
-import type { T4SlipBoxes, T5SlipBoxes } from "@/lib/slip-boxes";
+import type { T4ASlipBoxes, T4SlipBoxes, T5SlipBoxes } from "@/lib/slip-boxes";
 import type { Slip } from "@/lib/db/schema";
 import { SlipActionsMenu } from "@/components/slips/slip-actions-menu";
 
@@ -97,10 +97,13 @@ export default async function SlipPreviewPage({
 
   const t4 = preview.t4;
   const t5 = preview.t5;
+  const t4a = preview.t4a;
   const t4Filed = preview.existing.t4?.status === "filed";
   const t5Filed = preview.existing.t5?.status === "filed";
+  const t4aFiled = preview.existing.t4a?.status === "filed";
   const t4Voided = preview.existing.t4?.status === "void";
   const t5Voided = preview.existing.t5?.status === "void";
+  const t4aVoided = preview.existing.t4a?.status === "void";
 
   // Preflight warnings
   const warnings: string[] = [];
@@ -121,6 +124,9 @@ export default async function SlipPreviewPage({
     t5.totals.actualCents < 50_00
   ) {
     warnings.push("Total dividends to recipient are under $50 — T5 slip is technically optional, but filing is recommended for completeness.");
+  }
+  if (t4a.box117Cents > 0 && !s.payerRzActive) {
+    warnings.push("Payer RZ account not registered/active in Settings — T4A filing blocked. Register your RZ account at canada.ca, then enable it under Settings → Corporation.");
   }
 
   return (
@@ -173,6 +179,13 @@ export default async function SlipPreviewPage({
               activityCount={t5.eligible.count + t5.nonEligible.count}
               programAccountActive={s.payerRzActive}
               filed={preview.existing.t5 && t5Filed ? { id: preview.existing.t5.id } : null}
+            />
+            <SlipActionsMenu
+              kind="T4A"
+              taxYear={taxYear}
+              activityCount={t4a.box117Cents > 0 ? 1 : 0}
+              programAccountActive={s.payerRzActive}
+              filed={preview.existing.t4a && t4aFiled ? { id: preview.existing.t4a.id } : null}
             />
           </div>
         </div>
@@ -268,6 +281,11 @@ export default async function SlipPreviewPage({
 
       {/* T5 preview */}
       <T5Card boxes={t5} existing={preview.existing.t5} filed={t5Filed} voided={t5Voided} taxYear={taxYear} />
+
+      {/* T4A preview — only render when there's loan-benefit activity */}
+      {t4a.box117Cents > 0 || preview.existing.t4a ? (
+        <T4ACard boxes={t4a} existing={preview.existing.t4a} filed={t4aFiled} voided={t4aVoided} />
+      ) : null}
 
       {/* T4 + T5 summary / totals */}
       <Card>
@@ -373,6 +391,67 @@ function T4Card({
             className="inline-flex items-center gap-1 font-medium text-white underline underline-offset-4 decoration-indigo-400/60 hover:decoration-indigo-300"
           >
             View source paycheques
+            <ArrowRight className="size-3.5" />
+          </Link>
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function T4ACard({
+  boxes,
+  existing,
+  filed,
+  voided,
+}: {
+  boxes: T4ASlipBoxes;
+  existing: Slip | null;
+  filed: boolean;
+  voided: boolean;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex flex-wrap items-center gap-3 text-base">
+          <FileCheck className="size-4 text-amber-400" />
+          T4A · Statement of Other Income (Box 117 — Loan Benefits)
+          {filed ? (
+            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400">
+              <Lock className="size-3" />
+              Filed
+            </span>
+          ) : voided ? (
+            <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-400">
+              Voided — preview reflects live data
+            </span>
+          ) : (
+            <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400">
+              Draft preview
+            </span>
+          )}
+          {filed && existing?.craConfirmationNumber ? (
+            <span className="text-xs font-normal text-muted-foreground">
+              CRA #{existing.craConfirmationNumber}
+            </span>
+          ) : null}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-1">
+        <BoxRow box="Box 022" label="Income tax deducted (corp doesn't withhold on loan benefits)" amount={boxes.box022TaxWithheldCents} muted />
+        <BoxRow box="Box 117" label="Loan benefits — total filed value" amount={boxes.box117Cents} strong />
+        <div className="pt-3 border-t border-border/30" />
+        <p className="pt-2 pb-2 text-xs font-medium text-muted-foreground">
+          Audit breakdown (informational — not on the CRA T4A)
+        </p>
+        <BoxRow label="s.80.4(2) deemed-interest benefit (after interest-paid offset)" amount={boxes.breakdown.benefit80_4Cents} muted />
+        <BoxRow label="s.15(2) inclusion (loan past 15(2.6) deadline)" amount={boxes.breakdown.inclusion15_2Cents} muted />
+        <p className="pt-3 text-xs">
+          <Link
+            href="/shareholder-loan"
+            className="inline-flex items-center gap-1 font-medium text-white underline underline-offset-4 decoration-amber-400/60 hover:decoration-amber-300"
+          >
+            View source loan ledger
             <ArrowRight className="size-3.5" />
           </Link>
         </p>

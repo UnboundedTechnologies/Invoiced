@@ -50,14 +50,17 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   fileT4Slip,
   fileT5Slip,
+  fileT4aSlip,
   voidSlip,
   generateT4WorkingCopyPdf,
   generateT5WorkingCopyPdf,
+  generateT4aWorkingCopyPdf,
   generateT4WorkingCopyCsv,
   generateT5WorkingCopyCsv,
+  generateT4aWorkingCopyCsv,
 } from "@/server/actions/slips";
 
-type Kind = "T4" | "T5";
+type Kind = "T4" | "T5" | "T4A";
 type Filed = { id: string };
 
 export type SlipActionsMenuProps = {
@@ -98,7 +101,13 @@ export function SlipActionsMenu({
   const [voidOpen, setVoidOpen] = useState(false);
 
   const hasActivity = activityCount > 0;
-  const zeroActivityReason = `No ${kind === "T4" ? "issued paycheques" : "paid dividends"} in CY ${taxYear} — nothing to generate.`;
+  const activityNoun =
+    kind === "T4"
+      ? "issued paycheques"
+      : kind === "T5"
+        ? "paid dividends"
+        : "shareholder-loan benefits";
+  const zeroActivityReason = `No ${activityNoun} in CY ${taxYear} — nothing to generate.`;
   const programGate =
     kind === "T4"
       ? "Activate the RP payroll account in Settings first."
@@ -109,7 +118,9 @@ export function SlipActionsMenu({
       const r =
         kind === "T4"
           ? await generateT4WorkingCopyPdf(taxYear)
-          : await generateT5WorkingCopyPdf(taxYear);
+          : kind === "T5"
+            ? await generateT5WorkingCopyPdf(taxYear)
+            : await generateT4aWorkingCopyPdf(taxYear);
       if (r.error) {
         toast.error(r.error);
         return;
@@ -128,7 +139,9 @@ export function SlipActionsMenu({
       const r =
         kind === "T4"
           ? await generateT4WorkingCopyCsv(taxYear)
-          : await generateT5WorkingCopyCsv(taxYear);
+          : kind === "T5"
+            ? await generateT5WorkingCopyCsv(taxYear)
+            : await generateT4aWorkingCopyCsv(taxYear);
       if (r.error) {
         toast.error(r.error);
         return;
@@ -268,7 +281,7 @@ function FileDialog({
   const [typedConfirm, setTypedConfirm] = useState("");
   const today = new Date().toISOString().slice(0, 10);
   const expectedPhrase = `FILE ${kind} CY${taxYear}`;
-  const action = kind === "T4" ? fileT4Slip : fileT5Slip;
+  const action = kind === "T4" ? fileT4Slip : kind === "T5" ? fileT5Slip : fileT4aSlip;
 
   const [state, formAction, pending] = useActionState(
     action.bind(null, taxYear),
@@ -303,9 +316,9 @@ function FileDialog({
                   WORKING COPY watermark and carries the FILED ribbon + CRA confirmation.
                 </p>
                 <p className="text-muted-foreground">
-                  Locks every {kind === "T4" ? "paycheque" : "paid dividend"} whose
-                  {kind === "T4" ? " pay-date" : " paid-date"} falls in CY {taxYear}.
-                  Corrections after filing route through {kind === "T4" ? "CRA T4-ADJ" : "CRA T5-ADJ"};
+                  Locks every {kind === "T4" ? "paycheque" : kind === "T5" ? "paid dividend" : "shareholder-loan ledger entry"} whose
+                  {kind === "T4" ? " pay-date" : kind === "T5" ? " paid-date" : " entry-date"} falls in CY {taxYear}.
+                  Corrections after filing route through {kind === "T4" ? "CRA T4-ADJ" : kind === "T5" ? "CRA T5-ADJ" : "an amended T4A"};
                   alternatively, void the slip here to re-open edits.
                 </p>
               </div>
@@ -336,7 +349,7 @@ function FileDialog({
               />
               <Label htmlFor="accountantSignoff" className="text-xs cursor-pointer">
                 I have accountant sign-off on the boxes above, or I have reviewed them
-                myself against the underlying {kind === "T4" ? "paycheques" : "dividends"}.
+                myself against the underlying {kind === "T4" ? "paycheques" : kind === "T5" ? "dividends" : "shareholder-loan timeline"}.
               </Label>
             </div>
             <div className="space-y-1.5">
@@ -417,7 +430,7 @@ function VoidDialog({
               <div className="space-y-2 text-sm">
                 <p>
                   Marks the filed slip row as voided and re-opens{" "}
-                  {kind === "T4" ? "paycheques" : "paid dividends"} for CY {taxYear}
+                  {kind === "T4" ? "paycheques" : kind === "T5" ? "paid dividends" : "shareholder-loan ledger entries"} for CY {taxYear}
                   against edits. The filed PDF stays in the vault for audit trail.
                 </p>
                 <p className="text-muted-foreground">
