@@ -46,7 +46,7 @@ async function setPinCookie() {
     value: issueToken(),
     httpOnly: true,
     secure: true,
-    sameSite: "lax",
+    sameSite: "strict",
     path: "/",
     maxAge: VAULT_PIN_TTL_SECONDS,
   });
@@ -62,7 +62,7 @@ async function clearPinCookie() {
     value: "",
     httpOnly: true,
     secure: true,
-    sameSite: "lax",
+    sameSite: "strict",
     path: "/",
     maxAge: 0,
   });
