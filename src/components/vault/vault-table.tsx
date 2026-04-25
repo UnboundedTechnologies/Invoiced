@@ -138,6 +138,11 @@ export function VaultTable({
                           archived: row.archived,
                           parentLabel: parent?.label ?? null,
                           parentHref: parent?.href ?? null,
+                          // Ancillary contract attachments are vault-owned —
+                          // user can delete/archive them from /vault. Only
+                          // primary parent-owned docs lock the row.
+                          parentOwned:
+                            !!parent && parent.kind !== "contract-attachment",
                         }}
                       />
                     </td>

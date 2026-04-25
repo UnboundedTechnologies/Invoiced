@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CloudUpload, FileText, X, Upload } from "lucide-react";
@@ -30,6 +30,7 @@ import {
   CATEGORY_HINT,
   type VaultCategory,
 } from "@/lib/vault-categories";
+import type { ContractPickerOption } from "@/lib/queries/contracts-picker";
 import { uploadMiscDocument } from "@/server/actions/vault";
 
 const MAX_MB = 10;
@@ -45,7 +46,11 @@ const ALLOWED_MIMES = new Set([
 
 type Result = { ok?: string; error?: string; documentId?: string };
 
-export function UploadVaultDialog() {
+export function UploadVaultDialog({
+  contracts,
+}: {
+  contracts: ContractPickerOption[];
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(uploadMiscDocument, undefined as Result | undefined);
@@ -55,6 +60,14 @@ export function UploadVaultDialog() {
   const [dragOver, setDragOver] = useState(false);
   const [fileErr, setFileErr] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState("");
+  const [contractId, setContractId] = useState<string>("");
+  const [showEnded, setShowEnded] = useState(false);
+
+  const visibleContracts = useMemo(
+    () => (showEnded ? contracts : contracts.filter((c) => c.active)),
+    [contracts, showEnded],
+  );
+  const hasEnded = useMemo(() => contracts.some((c) => !c.active), [contracts]);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const hiddenRef = useRef<HTMLInputElement>(null);
@@ -75,6 +88,8 @@ export function UploadVaultDialog() {
     setStaged(null);
     setFileErr(null);
     setDisplayName("");
+    setContractId("");
+    setShowEnded(false);
     if (hiddenRef.current) hiddenRef.current.value = "";
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -133,7 +148,13 @@ export function UploadVaultDialog() {
             <Select
               name="category"
               value={category}
-              onValueChange={(v) => setCategory(v as VaultCategory)}
+              onValueChange={(v) => {
+                const next = v as VaultCategory;
+                setCategory(next);
+                // Switching away from contract clears the picker so a stale
+                // contractId can't sneak through on submit.
+                if (next !== "contract") setContractId("");
+              }}
             >
               <SelectTrigger id="category">
                 <SelectValue />
@@ -148,6 +169,42 @@ export function UploadVaultDialog() {
             </Select>
             <p className="text-[11px] text-muted-foreground">{CATEGORY_HINT[category]}</p>
           </div>
+
+          {category === "contract" && (
+            <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="contract-picker">Contract</Label>
+                {hasEnded && (
+                  <button
+                    type="button"
+                    className="text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => setShowEnded((v) => !v)}
+                  >
+                    {showEnded ? "Hide ended" : "Show ended"}
+                  </button>
+                )}
+              </div>
+              <input type="hidden" name="contractId" value={contractId} />
+              {visibleContracts.length === 0 ? (
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5 text-xs text-amber-300">
+                  No {showEnded ? "" : "active "}contracts found. Create one in /clients first.
+                </div>
+              ) : (
+                <Select value={contractId} onValueChange={setContractId}>
+                  <SelectTrigger id="contract-picker">
+                    <SelectValue placeholder="Pick a contract" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {visibleContracts.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="name">
@@ -254,7 +311,15 @@ export function UploadVaultDialog() {
             >
               Cancel
             </Button>
-            <Button type="submit" variant="brand" disabled={pending || !staged}>
+            <Button
+              type="submit"
+              variant="brand"
+              disabled={
+                pending ||
+                !staged ||
+                (category === "contract" && !contractId)
+              }
+            >
               {pending ? "Uploading…" : "Upload"}
             </Button>
           </DialogFooter>
