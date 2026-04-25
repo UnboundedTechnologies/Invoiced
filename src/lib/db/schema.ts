@@ -53,6 +53,7 @@ export const t2ReturnStatusEnum = pgEnum("t2_return_status", ["draft", "filed"])
 export const t1ReturnStatusEnum = pgEnum("t1_return_status", ["draft", "filed"]);
 export const taxPoolEnum = pgEnum("tax_pool", ["grip", "erdtoh", "nerdtoh", "cda"]);
 export const ccaClassEnum = pgEnum("cca_class", ["8", "10", "10.1", "12", "50", "other"]);
+export const contributionKindEnum = pgEnum("contribution_kind", ["rrsp", "fhsa"]);
 
 // Identity & Auth (single user enforced via CHECK + allowlist)
 export const users = pgTable(
@@ -130,11 +131,14 @@ export const settings = pgTable("settings", {
   // the Phase 6 Holdco-countdown card formula: opening + Σ(filed T2 net-after-tax)
   // − Σ(dividends declared). Editable while no T2 return is filed; locked after.
   openingRetainedEarningsCents: bigint("opening_retained_earnings_cents", { mode: "number" }).notNull().default(0),
-  // T1 / personal-tax configuration — UI deferred to RRSP feature phase.
+  // T1 / personal-tax configuration.
   // Starting RRSP deduction room (from most recent CRA notice of assessment).
   // Null until the user enters it; Phase 6's self-pay planner reads this to
   // surface "salary unlocks $X RRSP room for next year" hints.
   rrspRoomCents: bigint("rrsp_room_cents", { mode: "number" }),
+  // FHSA contribution room (lifetime cap $40K, $8K/yr starting the year you
+  // open one). Null until you open an FHSA + enter the room.
+  fhsaRoomCents: bigint("fhsa_room_cents", { mode: "number" }),
   // Self-pay
   paymentStrategy: payStrategyEnum("payment_strategy").notNull().default("blend"),
   targetAnnualSalaryCents: bigint("target_annual_salary_cents", { mode: "number" }).default(7130000), // $71,300
@@ -538,6 +542,11 @@ export const t1Returns = pgTable(
     donationsTotalCents: bigint("donations_total_cents", { mode: "number" }),
     federalDonationsCreditCents: bigint("federal_donations_credit_cents", { mode: "number" }),
     ontarioDonationsCreditCents: bigint("ontario_donations_credit_cents", { mode: "number" }),
+    // RRSP / FHSA snapshot (line 20800 / 20805)
+    rrspContributionsCents: bigint("rrsp_contributions_cents", { mode: "number" }),
+    rrspDeductionCents: bigint("rrsp_deduction_cents", { mode: "number" }),
+    fhsaContributionsCents: bigint("fhsa_contributions_cents", { mode: "number" }),
+    fhsaDeductionCents: bigint("fhsa_deduction_cents", { mode: "number" }),
     // Rate-file metadata (for reproducibility on re-render years later)
     ratesEditionTag: text("rates_edition_tag"),
     // Filing metadata
@@ -549,6 +558,27 @@ export const t1Returns = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [uniqueIndex("t1_returns_tax_year_unique").on(t.taxYear)],
+);
+
+// RRSP / FHSA contributions — one row per receipt. CY assignment is explicit
+// via `appliedToTaxYear` so the first-60-days RRSP election (contributions made
+// Jan-Mar of cy+1, deductible against cy) is captured directly. The
+// `dateContributed` is preserved for audit trail.
+// Edits/deletes blocked once the T1 for `appliedToTaxYear` is filed.
+export const rrspContributions = pgTable(
+  "rrsp_contributions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    appliedToTaxYear: integer("applied_to_tax_year").notNull(),
+    kind: contributionKindEnum("kind").notNull(),
+    amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+    dateContributed: date("date_contributed").notNull(),
+    institutionName: text("institution_name"),
+    receiptNumber: text("receipt_number"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("rrsp_contributions_applied_year_idx").on(t.appliedToTaxYear)],
 );
 
 // Charitable donations — one row per receipt. CY assignment is via dateReceived.
@@ -841,6 +871,8 @@ export type T1Return = typeof t1Returns.$inferSelect;
 export type NewT1Return = typeof t1Returns.$inferInsert;
 export type Donation = typeof donations.$inferSelect;
 export type NewDonation = typeof donations.$inferInsert;
+export type RrspContribution = typeof rrspContributions.$inferSelect;
+export type NewRrspContribution = typeof rrspContributions.$inferInsert;
 export type CcaPool = typeof ccaPools.$inferSelect;
 export type NewCcaPool = typeof ccaPools.$inferInsert;
 export type TaxPool = typeof taxPools.$inferSelect;

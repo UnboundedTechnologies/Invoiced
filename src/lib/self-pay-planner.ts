@@ -234,6 +234,8 @@ export function simulateScenario(input: ScenarioInput): ScenarioResult {
     },
     t4aBox117Cents: 0,
     donations: { totalCents: 0 },
+    rrsp: { contributionsCents: 0, deductionLimitCents: 0 },
+    fhsa: { contributionsCents: 0, roomCents: 0 },
   });
 
   // 5. Warnings assembly

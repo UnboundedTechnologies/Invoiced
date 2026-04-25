@@ -263,7 +263,42 @@ export async function updateFiscal(_prev: ActionResult | undefined, fd: FormData
   }
 }
 
-//  Self-pay 
+//  Personal tax (RRSP / FHSA room)
+const personalTaxSchema = z.object({
+  rrspRoomDollars: z.preprocess(
+    (v) => (v === "" || v == null ? null : v),
+    z.coerce.number().min(0).nullable(),
+  ),
+  fhsaRoomDollars: z.preprocess(
+    (v) => (v === "" || v == null ? null : v),
+    z.coerce.number().min(0).nullable(),
+  ),
+});
+
+export async function updatePersonalTax(_prev: ActionResult | undefined, fd: FormData): Promise<ActionResult> {
+  try {
+    const email = await requireSession();
+    const parsed = personalTaxSchema.safeParse({
+      rrspRoomDollars: fd.get("rrspRoomDollars") ?? undefined,
+      fhsaRoomDollars: fd.get("fhsaRoomDollars") ?? undefined,
+    });
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+
+    await commit(
+      email,
+      {
+        rrspRoomCents: parsed.data.rrspRoomDollars == null ? null : Math.round(parsed.data.rrspRoomDollars * 100),
+        fhsaRoomCents: parsed.data.fhsaRoomDollars == null ? null : Math.round(parsed.data.fhsaRoomDollars * 100),
+      },
+      "personal-tax",
+    );
+    return { ok: "Personal tax saved." };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Save failed" };
+  }
+}
+
+//  Self-pay
 const selfPaySchema = z.object({
   paymentStrategy: z.enum(["salary_only", "dividends_only", "blend"]),
   targetAnnualSalaryDollars: z.coerce.number().min(0),

@@ -7,21 +7,24 @@
  * detection (CYs where paycheques/dividends/loan benefits exist).
  */
 
-import { isNotNull, sql } from "drizzle-orm";
+import { eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { dividends, paycheques, shareholderLoanEntries } from "../db/schema";
+import { dividends, paycheques, settings, shareholderLoanEntries } from "../db/schema";
 import type { T1Input } from "../t1";
 import { t4BoxesForYear } from "./t4-slices";
 import { t5BoxesForYear } from "./t5-slices";
 import { t4aBox117ForYear } from "./t4a-slices";
 import { donationsForYear } from "./donations-slices";
+import { contributionsForYear } from "./contributions-slices";
 
 export async function buildT1Inputs(taxYear: number): Promise<T1Input> {
-  const [t4, t5, t4a, don] = await Promise.all([
+  const [t4, t5, t4a, don, contrib, [s]] = await Promise.all([
     t4BoxesForYear(taxYear),
     t5BoxesForYear(taxYear),
     t4aBox117ForYear(taxYear),
     donationsForYear(taxYear),
+    contributionsForYear(taxYear),
+    db.select().from(settings).where(eq(settings.id, 1)),
   ]);
 
   return {
@@ -43,6 +46,14 @@ export async function buildT1Inputs(taxYear: number): Promise<T1Input> {
     },
     t4aBox117Cents: t4a.cents,
     donations: { totalCents: don.totalCents },
+    rrsp: {
+      contributionsCents: contrib.rrspCents,
+      deductionLimitCents: s?.rrspRoomCents ?? 0,
+    },
+    fhsa: {
+      contributionsCents: contrib.fhsaCents,
+      roomCents: s?.fhsaRoomCents ?? 0,
+    },
   };
 }
 
