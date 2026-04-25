@@ -11,12 +11,13 @@ import { slips, settings, documents, deadlines, auditLog, type Slip } from "@/li
 import { taxYearFor } from "@/lib/t1";
 import { auth } from "../../../auth";
 import { taxYearsWithActivity } from "@/lib/queries/personal-tax-slices";
-import { buildT4SlipBoxes, buildT5SlipBoxes } from "@/lib/queries/slip-aggregation";
-import type { T4SlipBoxes, T5SlipBoxes } from "@/lib/slip-boxes";
+import { buildT4ASlipBoxes, buildT4SlipBoxes, buildT5SlipBoxes } from "@/lib/queries/slip-aggregation";
+import type { T4ASlipBoxes, T4SlipBoxes, T5SlipBoxes } from "@/lib/slip-boxes";
 import { T4SlipPDF } from "@/lib/t4-slip-pdf";
+import { T4ASlipPDF } from "@/lib/t4a-slip-pdf";
 import { T5SlipPDF } from "@/lib/t5-slip-pdf";
 import { getBannerDataUri } from "@/lib/pdf-banner";
-import { t4BoxesToCsv, t5BoxesToCsv, type SlipCsvPayer } from "@/lib/slip-csv";
+import { t4BoxesToCsv, t4aBoxesToCsv, t5BoxesToCsv, type SlipCsvPayer } from "@/lib/slip-csv";
 
 type PdfActionResult = { ok?: string; error?: string; pdfBase64?: string; filename?: string };
 type CsvActionResult = { ok?: string; error?: string; csvBase64?: string; filename?: string };
@@ -104,20 +105,22 @@ export type SlipPreview = {
   taxYear: number;
   t4: T4SlipBoxes;
   t5: T5SlipBoxes;
+  t4a: T4ASlipBoxes;
   /** Existing DB rows for each slip type (active or voided). */
-  existing: { t4: Slip | null; t5: Slip | null };
+  existing: { t4: Slip | null; t5: Slip | null; t4a: Slip | null };
 };
 
-/** Full preview for a tax year: live T4/T5 boxes from aggregators + any existing slip rows. */
+/** Full preview for a tax year: live T4/T5/T4A boxes from aggregators + any existing slip rows. */
 export async function loadSlipPreview(taxYear: number): Promise<SlipPreview> {
   await requireSession();
-  const [t4, t5, rows] = await Promise.all([
+  const [t4, t5, t4a, rows] = await Promise.all([
     buildT4SlipBoxes(taxYear),
     buildT5SlipBoxes(taxYear),
+    buildT4ASlipBoxes(taxYear),
     db.select().from(slips).where(eq(slips.taxYear, taxYear)),
   ]);
   // Pick the active (non-void) slip per type, falling back to newest voided if no active exists.
-  const pickByType = (type: "T4" | "T5"): Slip | null => {
+  const pickByType = (type: "T4" | "T5" | "T4A"): Slip | null => {
     const typed = rows.filter((r) => r.type === type);
     const active = typed.find((r) => r.status !== "void");
     if (active) return active;
@@ -127,7 +130,8 @@ export async function loadSlipPreview(taxYear: number): Promise<SlipPreview> {
     taxYear,
     t4,
     t5,
-    existing: { t4: pickByType("T4"), t5: pickByType("T5") },
+    t4a,
+    existing: { t4: pickByType("T4"), t5: pickByType("T5"), t4a: pickByType("T4A") },
   };
 }
 
@@ -197,6 +201,68 @@ export async function generateT4WorkingCopyPdf(taxYear: number): Promise<PdfActi
       ok: "T4 working copy generated.",
       pdfBase64,
       filename: `T4-WorkingCopy-CY${taxYear}.pdf`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "PDF generation failed" };
+  }
+}
+
+export async function generateT4aWorkingCopyPdf(taxYear: number): Promise<PdfActionResult> {
+  try {
+    const email = await requireSession();
+    const [boxes, s, bannerDataUri] = await Promise.all([
+      buildT4ASlipBoxes(taxYear),
+      requireSettings(),
+      getBannerDataUri(),
+    ]);
+
+    if (boxes.box117Cents === 0) {
+      return { error: `No shareholder-loan benefits in CY ${taxYear} — nothing to generate.` };
+    }
+
+    const buffer = await renderToBuffer(
+      T4ASlipPDF({
+        taxYear,
+        boxes,
+        status: "draft",
+        payer: {
+          corpLegalName: s.corpLegalName,
+          businessNumber: s.businessNumber,
+          payrollAccount: s.payrollAccount,
+          payerRzAccount: s.payerRzAccount,
+          addressLine1: s.addressLine1,
+          addressLine2: s.addressLine2,
+          city: s.city,
+          province: s.province,
+          postalCode: s.postalCode,
+          country: s.country,
+        },
+        recipient: {
+          legalName: s.directorLegalName,
+          addressLine1: s.addressLine1,
+          addressLine2: s.addressLine2,
+          city: s.city,
+          province: s.province,
+          postalCode: s.postalCode,
+          country: s.country,
+        },
+        bannerDataUri,
+        filingDueDate: slipFilingDueDate(taxYear),
+      }),
+    );
+    const pdfBase64 = Buffer.from(buffer).toString("base64");
+
+    await db.insert(auditLog).values({
+      actorEmail: email,
+      action: "download",
+      target: `slips:T4A:${taxYear}:working-copy`,
+      metadata: { box117Cents: boxes.box117Cents },
+    });
+
+    return {
+      ok: "T4A working copy generated.",
+      pdfBase64,
+      filename: `T4A-WorkingCopy-CY${taxYear}.pdf`,
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "PDF generation failed" };
@@ -307,6 +373,31 @@ export async function generateT4WorkingCopyCsv(taxYear: number): Promise<CsvActi
       ok: "T4 CSV generated.",
       csvBase64,
       filename: `T4-WorkingCopy-CY${taxYear}.csv`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "CSV generation failed" };
+  }
+}
+
+export async function generateT4aWorkingCopyCsv(taxYear: number): Promise<CsvActionResult> {
+  try {
+    const email = await requireSession();
+    const [boxes, s] = await Promise.all([buildT4ASlipBoxes(taxYear), requireSettings()]);
+    if (boxes.box117Cents === 0) {
+      return { error: `No shareholder-loan benefits in CY ${taxYear} — nothing to generate.` };
+    }
+    const csv = t4aBoxesToCsv(boxes, csvPayer(s), taxYear);
+    const csvBase64 = Buffer.from(csv, "utf8").toString("base64");
+    await db.insert(auditLog).values({
+      actorEmail: email,
+      action: "download",
+      target: `slips:T4A:${taxYear}:working-copy-csv`,
+      metadata: { box117Cents: boxes.box117Cents, bytes: csv.length },
+    });
+    return {
+      ok: "T4A CSV generated.",
+      csvBase64,
+      filename: `T4A-WorkingCopy-CY${taxYear}.csv`,
     };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "CSV generation failed" };
@@ -713,6 +804,163 @@ export async function fileT5Slip(
   }
 }
 
+/** File a T4A slip (Box 117 — shareholder-loan benefits). Freezes snapshot,
+ *  renders final PDF, stores in vault, and locks the loan ledger for that CY. */
+export async function fileT4aSlip(
+  taxYear: number,
+  _prev: SlipActionResult | undefined,
+  fd: FormData,
+): Promise<SlipActionResult> {
+  try {
+    const email = await requireSession();
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return { error: "Vercel Blob is not configured. Set BLOB_READ_WRITE_TOKEN in .env.local." };
+    }
+
+    const parsed = parseFileSlipForm(fd);
+    if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+    const { craConfirmationNumber, filedAt, accountantSignoff, typedConfirm } = parsed.data;
+
+    const expectedPhrase = `FILE T4A CY${taxYear}`;
+    if (typedConfirm !== expectedPhrase) {
+      return { error: `Type "${expectedPhrase}" exactly to confirm.` };
+    }
+    if (!accountantSignoff) {
+      return { error: "Accountant sign-off checkbox is required before filing." };
+    }
+
+    const existing = await db
+      .select()
+      .from(slips)
+      .where(and(eq(slips.type, "T4A"), eq(slips.taxYear, taxYear)));
+    const active = existing.find((r) => r.status !== "void");
+    if (active) {
+      return {
+        error: `A T4A slip for CY ${taxYear} is already ${active.status}. Void it first to re-file.`,
+      };
+    }
+
+    const s = await requireSettings();
+    if (!s.payerRzActive) {
+      return { error: "Activate the RZ info-returns account in Settings before filing a T4A." };
+    }
+    const boxes = await buildT4ASlipBoxes(taxYear);
+    if (boxes.box117Cents === 0) {
+      return { error: `No shareholder-loan benefits in CY ${taxYear} — nothing to file.` };
+    }
+
+    const bannerDataUri = await getBannerDataUri();
+    const pdfBuffer = await renderToBuffer(
+      T4ASlipPDF({
+        taxYear,
+        boxes,
+        status: "filed",
+        filed: { craConfirmationNumber, filedAt },
+        payer: {
+          corpLegalName: s.corpLegalName,
+          businessNumber: s.businessNumber,
+          payrollAccount: s.payrollAccount,
+          payerRzAccount: s.payerRzAccount,
+          addressLine1: s.addressLine1,
+          addressLine2: s.addressLine2,
+          city: s.city,
+          province: s.province,
+          postalCode: s.postalCode,
+          country: s.country,
+        },
+        recipient: {
+          legalName: s.directorLegalName,
+          addressLine1: s.addressLine1,
+          addressLine2: s.addressLine2,
+          city: s.city,
+          province: s.province,
+          postalCode: s.postalCode,
+          country: s.country,
+        },
+        bannerDataUri,
+        filingDueDate: slipFilingDueDate(taxYear),
+      }),
+    );
+    const pdfSha256 = createHash("sha256").update(pdfBuffer).digest("hex");
+
+    const filename = `T4A-Filed-CY${taxYear}${craConfirmationNumber ? `-${craConfirmationNumber}` : ""}.pdf`;
+    const blob = await put(`slips/T4A/${taxYear}/${filename}`, pdfBuffer, {
+      access: "public",
+      contentType: "application/pdf",
+      addRandomSuffix: true,
+    });
+
+    const [vaultDoc] = await db
+      .insert(documents)
+      .values({
+        name: filename,
+        category: "slip",
+        blobUrl: blob.url,
+        sha256: pdfSha256,
+        sizeBytes: pdfBuffer.length,
+        contentType: "application/pdf",
+        version: 1,
+        uploadedBy: email,
+      })
+      .returning({ id: documents.id });
+
+    const filedAtTs = new Date(filedAt + "T00:00:00Z");
+    const totals = {
+      t4a: {
+        box117: boxes.box117Cents,
+        box022: boxes.box022TaxWithheldCents,
+        breakdown: {
+          benefit80_4: boxes.breakdown.benefit80_4Cents,
+          inclusion15_2: boxes.breakdown.inclusion15_2Cents,
+        },
+      },
+    };
+
+    const [created] = await db
+      .insert(slips)
+      .values({
+        type: "T4A",
+        taxYear,
+        status: "filed",
+        reportTypeCode: "O",
+        totals,
+        filedAt: filedAtTs,
+        filedBy: email,
+        craConfirmationNumber,
+        pdfBlobUrl: blob.url,
+        pdfSha256,
+        documentId: vaultDoc?.id ?? null,
+        t4aBox117Cents: boxes.box117Cents,
+        t4aBenefit80_4Cents: boxes.breakdown.benefit80_4Cents,
+        t4aInclusion15_2Cents: boxes.breakdown.inclusion15_2Cents,
+        ratesEditionTag: boxes.ratesEditionTag,
+      })
+      .returning({ id: slips.id });
+
+    await db.delete(deadlines).where(eq(deadlines.sourceKey, `t4a:${taxYear}`));
+
+    await db.insert(auditLog).values({
+      actorEmail: email,
+      action: "update",
+      target: `slips:T4A:${taxYear}:file`,
+      metadata: {
+        slipId: created?.id,
+        craConfirmationNumber,
+        filedAt,
+        box117Cents: boxes.box117Cents,
+        benefit80_4Cents: boxes.breakdown.benefit80_4Cents,
+        inclusion15_2Cents: boxes.breakdown.inclusion15_2Cents,
+        vaultDocumentId: vaultDoc?.id,
+      },
+    });
+
+    revalidateSlipPaths(taxYear);
+    return { ok: `T4A for CY ${taxYear} filed and locked.` };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "File failed" };
+  }
+}
+
 const voidSlipSchema = z.object({
   reason: z.string().min(3, "Reason is required").max(1000, "Reason too long"),
   typedConfirm: z.string(),
@@ -769,7 +1017,9 @@ export async function voidSlip(
           ? `T4 + T4 Summary for ${row.taxYear} pay year (due Feb 28 per Reg 210(2)).`
           : row.type === "T5"
             ? `T5 + T5 Summary for dividends paid in ${row.taxYear} (due Feb 28 per Reg 200(1)).`
-            : `${row.type} for ${row.taxYear}`;
+            : row.type === "T4A"
+              ? `T4A + T4A Summary for shareholder-loan benefits in ${row.taxYear} (due Feb 28 per Reg 200(1)).`
+              : `${row.type} for ${row.taxYear}`;
       await db.insert(deadlines).values({
         title,
         description,
