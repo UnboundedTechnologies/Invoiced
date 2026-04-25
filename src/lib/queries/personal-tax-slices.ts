@@ -14,12 +14,14 @@ import type { T1Input } from "../t1";
 import { t4BoxesForYear } from "./t4-slices";
 import { t5BoxesForYear } from "./t5-slices";
 import { t4aBox117ForYear } from "./t4a-slices";
+import { donationsForYear } from "./donations-slices";
 
 export async function buildT1Inputs(taxYear: number): Promise<T1Input> {
-  const [t4, t5, t4a] = await Promise.all([
+  const [t4, t5, t4a, don] = await Promise.all([
     t4BoxesForYear(taxYear),
     t5BoxesForYear(taxYear),
     t4aBox117ForYear(taxYear),
+    donationsForYear(taxYear),
   ]);
 
   return {
@@ -40,6 +42,7 @@ export async function buildT1Inputs(taxYear: number): Promise<T1Input> {
       nonEligibleActualCents: t5.nonEligible.actualCents,
     },
     t4aBox117Cents: t4a.cents,
+    donations: { totalCents: don.totalCents },
   };
 }
 

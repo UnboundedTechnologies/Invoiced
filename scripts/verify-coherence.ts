@@ -1069,6 +1069,7 @@ const t1Fixture: T1Input = {
     nonEligibleActualCents: 5_000_00,
   },
   t4aBox117Cents: 500_00,
+  donations: { totalCents: 0 },
 };
 
 {
@@ -1408,6 +1409,7 @@ const t1Fixture: T1Input = {
     t4: rawT4,
     t5: { eligibleActualCents: 0, nonEligibleActualCents: 0 },
     t4aBox117Cents: 0,
+    donations: { totalCents: 0 },
   });
   // T1 line 10100/15000 employment-income floor MUST include the full box14 from the slip.
   // totalIncomeCents >= box14 (the slip value). Use >= because T1 also adds dividends / box117.
@@ -1445,6 +1447,7 @@ const t1Fixture: T1Input = {
       nonEligibleActualCents: rawT5.nonEligible.actualCents,
     },
     t4aBox117Cents: 0,
+    donations: { totalCents: 0 },
   });
 
   // (3) Slip Box 24 (eligible actual) === raw (no loss).

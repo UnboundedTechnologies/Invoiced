@@ -534,6 +534,10 @@ export const t1Returns = pgTable(
     totalWithheldCents: bigint("total_withheld_cents", { mode: "number" }),
     cpp2OverpaymentCents: bigint("cpp2_overpayment_cents", { mode: "number" }),
     refundOrOwingCents: bigint("refund_or_owing_cents", { mode: "number" }),
+    // Charitable donations snapshot (line 34900 + ON428 line 5896)
+    donationsTotalCents: bigint("donations_total_cents", { mode: "number" }),
+    federalDonationsCreditCents: bigint("federal_donations_credit_cents", { mode: "number" }),
+    ontarioDonationsCreditCents: bigint("ontario_donations_credit_cents", { mode: "number" }),
     // Rate-file metadata (for reproducibility on re-render years later)
     ratesEditionTag: text("rates_edition_tag"),
     // Filing metadata
@@ -545,6 +549,24 @@ export const t1Returns = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [uniqueIndex("t1_returns_tax_year_unique").on(t.taxYear)],
+);
+
+// Charitable donations — one row per receipt. CY assignment is via dateReceived.
+// Edits/deletes blocked once the T1 for that CY is filed (t1PeriodLockError guard).
+export const donations = pgTable(
+  "donations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    taxYear: integer("tax_year").notNull(),
+    charityName: text("charity_name").notNull(),
+    registeredCharityNumber: text("registered_charity_number"),
+    receiptNumber: text("receipt_number"),
+    amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
+    dateReceived: date("date_received").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("donations_tax_year_idx").on(t.taxYear)],
 );
 
 // Year-end slips (T4 / T5 / T4A). One "active" (non-void) row per (type, taxYear);
@@ -817,6 +839,8 @@ export type T2Return = typeof t2Returns.$inferSelect;
 export type NewT2Return = typeof t2Returns.$inferInsert;
 export type T1Return = typeof t1Returns.$inferSelect;
 export type NewT1Return = typeof t1Returns.$inferInsert;
+export type Donation = typeof donations.$inferSelect;
+export type NewDonation = typeof donations.$inferInsert;
 export type CcaPool = typeof ccaPools.$inferSelect;
 export type NewCcaPool = typeof ccaPools.$inferInsert;
 export type TaxPool = typeof taxPools.$inferSelect;

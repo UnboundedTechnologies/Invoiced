@@ -233,6 +233,7 @@ export function simulateScenario(input: ScenarioInput): ScenarioResult {
       nonEligibleActualCents: input.nonEligibleDividendCents,
     },
     t4aBox117Cents: 0,
+    donations: { totalCents: 0 },
   });
 
   // 5. Warnings assembly
