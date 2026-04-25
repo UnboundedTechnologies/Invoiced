@@ -45,7 +45,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </div>
 
       <AppSidebar corpName={corpName} />
-      <main className="flex-1 overflow-x-hidden">
+      <main className="flex-1 overflow-x-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
         <TopBar corpName={corpName} />
         <div className="mx-auto max-w-7xl px-6 py-8 animate-in fade-in duration-300">{children}</div>
       </main>
