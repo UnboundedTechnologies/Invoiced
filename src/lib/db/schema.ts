@@ -73,6 +73,14 @@ export const users = pgTable(
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     failedLoginCount: integer("failed_login_count").default(0).notNull(),
     lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    // TOTP 2FA. Secret is AES-256-GCM ciphertext under TOTP_ENCRYPTION_KEY (env).
+    // Backup codes are argon2id hashes of single-use 8-char alphanumeric codes;
+    // each one is removed from the array on consumption.
+    totpSecretEncrypted: text("totp_secret_encrypted"),
+    totpEnabledAt: timestamp("totp_enabled_at", { withTimezone: true }),
+    totpBackupCodesHashed: text("totp_backup_codes_hashed").array(),
+    totpFailedCount: integer("totp_failed_count").default(0).notNull(),
+    totpLockedUntil: timestamp("totp_locked_until", { withTimezone: true }),
   },
   (t) => [uniqueIndex("users_email_unique").on(t.email)],
 );

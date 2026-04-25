@@ -2,11 +2,21 @@ import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/ca
 import { SettingsForm } from "@/components/settings/settings-form";
 import { getSettings } from "@/lib/db/queries";
 import { db } from "@/lib/db/client";
-import { t2Returns } from "@/lib/db/schema";
+import { t2Returns, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { auth } from "../../../../auth";
 
 export default async function SettingsPage() {
   const s = await getSettings();
+  const session = await auth();
+  const sessionEmail = session?.user?.email?.toLowerCase() ?? null;
+  const [me] = sessionEmail
+    ? await db
+        .select({ totpEnabledAt: users.totpEnabledAt })
+        .from(users)
+        .where(eq(users.email, sessionEmail))
+    : [];
+  const totpEnabledAt = me?.totpEnabledAt ?? null;
   // Opening-pool inputs lock once any T2 return has been filed — the
   // closing balance on that return becomes the source of truth. Passing
   // this flag down to the CorpTaxPanel disables the inputs visually in
@@ -41,7 +51,7 @@ export default async function SettingsPage() {
           Everything below is the source of truth for invoices, slips, and tax tools.
         </p>
       </div>
-      <SettingsForm data={s} openingPoolsLocked={openingPoolsLocked} />
+      <SettingsForm data={s} openingPoolsLocked={openingPoolsLocked} totpEnabledAt={totpEnabledAt} />
     </div>
   );
 }
