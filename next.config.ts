@@ -15,26 +15,8 @@ const securityHeaders = [
   // Opts the origin into per-origin agent clusters (tightens Spectre-style leaks
   // across documents sharing a process).
   { key: "Origin-Agent-Cluster", value: "?1" },
-  {
-    key: "Content-Security-Policy",
-    value: [
-      "default-src 'self'",
-      // script-src / style-src still allow 'unsafe-inline' — Next's hydration
-      // bootstrap + Tailwind/Radix inline styles need it. Nonce-based tightening
-      // lands in Phase 5-3.
-      "script-src 'self' 'unsafe-inline'",
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
-      "font-src 'self' data:",
-      "connect-src 'self'",
-      "frame-src 'self'",
-      "frame-ancestors 'self'",
-      // Blocks legacy <object>/<embed>/<applet> — defense in depth vs. Flash-style XSS.
-      "object-src 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-    ].join("; "),
-  },
+  // NOTE: Content-Security-Policy is set per-request by src/middleware.ts so
+  // it can include a rotating nonce for script-src. Don't duplicate it here.
 ];
 
 // Prevent browser back/forward cache (bfcache) from restoring a vault page
