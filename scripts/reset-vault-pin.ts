@@ -22,7 +22,18 @@ async function main() {
   const mode = (await rl.question("(1) Set a new PIN now, or (2) Clear PIN to trigger setup flow? [1/2]: ")).trim();
 
   if (mode === "2") {
+    // Typed-confirm guard so a stray keystroke on the mode prompt can't
+    // wipe the PIN + lockout ledger. Expected phrase is verbose and
+    // distinct from anything you'd type accidentally.
+    const confirm = (await rl.question(
+      "\n⚠  About to wipe vault_pin_hash + vault_pin_attempts ledger.\n" +
+      '    Type "CLEAR VAULT PIN" (exactly, including spaces) to continue, anything else to abort: ',
+    )).trim();
     rl.close();
+    if (confirm !== "CLEAR VAULT PIN") {
+      console.log("✘ Aborted — confirmation did not match.");
+      process.exit(1);
+    }
     await db
       .update(settings)
       .set({ vaultPinHash: null, vaultPinSetAt: null, updatedAt: new Date() })
