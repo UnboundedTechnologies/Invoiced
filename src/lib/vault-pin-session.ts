@@ -8,7 +8,7 @@
  */
 import { cookies } from "next/headers";
 import { VAULT_PIN_COOKIE, VAULT_PIN_TTL_SECONDS, issueToken, verifyToken } from "./vault-pin";
-import { setVault2faCookie } from "./vault-2fa-session";
+import { VAULT_2FA_COOKIE, setVault2faCookie, verifyVault2faToken } from "./vault-2fa-session";
 
 /** Non-throwing check. Use for render-time decisions. */
 export async function hasVaultPinSession(): Promise<boolean> {
@@ -29,6 +29,24 @@ export async function requireVaultPinSession(): Promise<void> {
   const token = c.get(VAULT_PIN_COOKIE)?.value;
   const v = verifyToken(token);
   if (!v.ok) throw new Error("Vault locked. Enter your PIN to continue.");
+}
+
+/**
+ * Earliest moment the current vault session will lock — min of PIN cookie
+ * expiresAt and (if a 2FA cookie exists) the 2FA cookie expiresAt. Used by
+ * the client-side auto-lock timer so a user staying on /vault doesn't sit
+ * on a stale view past the TTL. Returns null when the PIN cookie isn't
+ * valid (caller shouldn't be in the unlocked state).
+ */
+export async function getVaultSessionLockAt(): Promise<number | null> {
+  const c = await cookies();
+  const pinV = verifyToken(c.get(VAULT_PIN_COOKIE)?.value);
+  if (!pinV.ok || pinV.expiresAt == null) return null;
+  const twoFaV = verifyVault2faToken(c.get(VAULT_2FA_COOKIE)?.value);
+  if (twoFaV.ok && twoFaV.expiresAt != null) {
+    return Math.min(pinV.expiresAt, twoFaV.expiresAt);
+  }
+  return pinV.expiresAt;
 }
 
 /** Re-issue the PIN cookie. Internal — called from refreshVaultSession. */
