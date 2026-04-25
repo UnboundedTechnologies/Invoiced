@@ -27,6 +27,7 @@ import { t5BoxesForYear } from "@/lib/queries/t5-slices";
 import { t4aBox117ForYear } from "@/lib/queries/t4a-slices";
 import { donationsForYear } from "@/lib/queries/donations-slices";
 import { contributionsForYear } from "@/lib/queries/contributions-slices";
+import { capitalTransactionsForYear } from "@/lib/queries/capital-transactions-slices";
 import { getBannerDataUri } from "@/lib/pdf-banner";
 import { T1PrepPDF } from "@/lib/t1-pdf";
 
@@ -86,6 +87,7 @@ export type LiveT1Aggregate = {
   t4a: Awaited<ReturnType<typeof t4aBox117ForYear>>;
   donations: Awaited<ReturnType<typeof donationsForYear>>;
   contributions: Awaited<ReturnType<typeof contributionsForYear>>;
+  capitalTransactions: Awaited<ReturnType<typeof capitalTransactionsForYear>>;
   result: T1Result;
   // Grossed-up dividend slices — surfaced for PDF + coherence checks
   grossedUp: {
@@ -99,12 +101,13 @@ export async function loadLiveT1Aggregate(taxYear: number): Promise<LiveT1Aggreg
   const start = `${taxYear}-01-01`;
   const end = `${taxYear}-12-31`;
 
-  const [t4, t5, t4a, don, contrib] = await Promise.all([
+  const [t4, t5, t4a, don, contrib, captx] = await Promise.all([
     t4BoxesForYear(taxYear),
     t5BoxesForYear(taxYear),
     t4aBox117ForYear(taxYear),
     donationsForYear(taxYear),
     contributionsForYear(taxYear),
+    capitalTransactionsForYear(taxYear),
   ]);
 
   const input = await buildT1Inputs(taxYear);
@@ -122,6 +125,7 @@ export async function loadLiveT1Aggregate(taxYear: number): Promise<LiveT1Aggreg
     t4a,
     donations: don,
     contributions: contrib,
+    capitalTransactions: captx,
     result,
     grossedUp: {
       eligibleCents: grossedUpEligible,
@@ -293,6 +297,9 @@ export async function fileT1Return(
           rrspDeductionCents: r.rrspDeductionCents,
           fhsaContributionsCents: live.contributions.fhsaCents,
           fhsaDeductionCents: r.fhsaDeductionCents,
+          // Capital gains snapshot (Sch 3 → line 12700)
+          capitalGainsLine19900Cents: r.capitalGainsLine19900Cents,
+          capitalGainsLine12700Cents: r.capitalGainsLine12700Cents,
           // Meta
           ratesEditionTag: r.ratesEditionTag,
           craConfirmationNumber: parsed.data.craConfirmationNumber,

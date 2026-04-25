@@ -54,6 +54,13 @@ export const t1ReturnStatusEnum = pgEnum("t1_return_status", ["draft", "filed"])
 export const taxPoolEnum = pgEnum("tax_pool", ["grip", "erdtoh", "nerdtoh", "cda"]);
 export const ccaClassEnum = pgEnum("cca_class", ["8", "10", "10.1", "12", "50", "other"]);
 export const contributionKindEnum = pgEnum("contribution_kind", ["rrsp", "fhsa"]);
+export const capitalGainKindEnum = pgEnum("capital_gain_kind", [
+  "public_security",
+  "mutual_fund",
+  "real_estate",
+  "crypto",
+  "other",
+]);
 
 // Identity & Auth (single user enforced via CHECK + allowlist)
 export const users = pgTable(
@@ -547,6 +554,9 @@ export const t1Returns = pgTable(
     rrspDeductionCents: bigint("rrsp_deduction_cents", { mode: "number" }),
     fhsaContributionsCents: bigint("fhsa_contributions_cents", { mode: "number" }),
     fhsaDeductionCents: bigint("fhsa_deduction_cents", { mode: "number" }),
+    // Capital gains snapshot (Sch 3 → line 12700)
+    capitalGainsLine19900Cents: bigint("capital_gains_line_19900_cents", { mode: "number" }),
+    capitalGainsLine12700Cents: bigint("capital_gains_line_12700_cents", { mode: "number" }),
     // Rate-file metadata (for reproducibility on re-render years later)
     ratesEditionTag: text("rates_edition_tag"),
     // Filing metadata
@@ -579,6 +589,29 @@ export const rrspContributions = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("rrsp_contributions_applied_year_idx").on(t.appliedToTaxYear)],
+);
+
+// Capital transactions — one row per disposition. CY = dispositionDate's year,
+// frozen on insert. Gain (proceeds − acb − outlays) computed live; line 12700
+// is the 50% taxable inclusion of the net positive sum.
+// Capital LOSS carryforward is out of scope in v1; the engine emits a warning
+// when net is negative.
+export const capitalTransactions = pgTable(
+  "capital_transactions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    taxYear: integer("tax_year").notNull(),
+    kind: capitalGainKindEnum("kind").notNull(),
+    description: text("description").notNull(),
+    t5008Source: text("t5008_source"),
+    dispositionDate: date("disposition_date").notNull(),
+    proceedsCents: bigint("proceeds_cents", { mode: "number" }).notNull(),
+    acbCents: bigint("acb_cents", { mode: "number" }).notNull(),
+    outlaysCents: bigint("outlays_cents", { mode: "number" }).notNull().default(0),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("capital_transactions_tax_year_idx").on(t.taxYear)],
 );
 
 // Charitable donations — one row per receipt. CY assignment is via dateReceived.
@@ -873,6 +906,8 @@ export type Donation = typeof donations.$inferSelect;
 export type NewDonation = typeof donations.$inferInsert;
 export type RrspContribution = typeof rrspContributions.$inferSelect;
 export type NewRrspContribution = typeof rrspContributions.$inferInsert;
+export type CapitalTransaction = typeof capitalTransactions.$inferSelect;
+export type NewCapitalTransaction = typeof capitalTransactions.$inferInsert;
 export type CcaPool = typeof ccaPools.$inferSelect;
 export type NewCcaPool = typeof ccaPools.$inferInsert;
 export type TaxPool = typeof taxPools.$inferSelect;

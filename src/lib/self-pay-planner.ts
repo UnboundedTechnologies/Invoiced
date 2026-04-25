@@ -236,6 +236,7 @@ export function simulateScenario(input: ScenarioInput): ScenarioResult {
     donations: { totalCents: 0 },
     rrsp: { contributionsCents: 0, deductionLimitCents: 0 },
     fhsa: { contributionsCents: 0, roomCents: 0 },
+    capitalGains: { line19900Cents: 0, line12700Cents: 0, sch3Warnings: [] },
   });
 
   // 5. Warnings assembly

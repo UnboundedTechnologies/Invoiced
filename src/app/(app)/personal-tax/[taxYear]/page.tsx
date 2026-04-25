@@ -23,6 +23,7 @@ import { FileT1Button } from "@/components/personal-tax/file-t1-button";
 import { GenerateT1PdfButton } from "@/components/personal-tax/generate-t1-pdf-button";
 import { DonationsCard } from "@/components/personal-tax/donations-card";
 import { ContributionsCard } from "@/components/personal-tax/contributions-card";
+import { CapitalTransactionsCard } from "@/components/personal-tax/capital-transactions-card";
 
 export const dynamic = "force-dynamic";
 
@@ -302,6 +303,7 @@ export default async function PersonalTaxDetailPage({
           <CardTitle className="text-base">Income → taxable income</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1">
+          <LineRow line="12700" label="Taxable capital gains (Sch 3 × 50%)" amount={r.capitalGainsLine12700Cents} />
           <LineRow line="15000" label="Total income" amount={r.totalIncomeCents} />
           <LineRow line="22215" label="CPP enhanced deduction (s.60(e))" amount={r.cppEnhancedDeductionCents} negative />
           <LineRow line="22200" label="CPP2 deduction (s.60(e.1))" amount={r.cpp2DeductionCents} negative />
@@ -332,6 +334,15 @@ export default async function PersonalTaxDetailPage({
         fhsaDeductionCents={r.fhsaDeductionCents}
         rrspRoomCents={s?.rrspRoomCents ?? null}
         fhsaRoomCents={s?.fhsaRoomCents ?? null}
+        isFiled={isFiled}
+      />
+
+      {/* Capital transactions / Sch 3 */}
+      <CapitalTransactionsCard
+        taxYear={taxYear}
+        rows={live.capitalTransactions.rows}
+        line19900Cents={r.capitalGainsLine19900Cents}
+        line12700Cents={r.capitalGainsLine12700Cents}
         isFiled={isFiled}
       />
 

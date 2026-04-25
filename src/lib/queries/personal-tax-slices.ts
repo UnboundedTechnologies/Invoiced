@@ -16,14 +16,16 @@ import { t5BoxesForYear } from "./t5-slices";
 import { t4aBox117ForYear } from "./t4a-slices";
 import { donationsForYear } from "./donations-slices";
 import { contributionsForYear } from "./contributions-slices";
+import { capitalTransactionsForYear } from "./capital-transactions-slices";
 
 export async function buildT1Inputs(taxYear: number): Promise<T1Input> {
-  const [t4, t5, t4a, don, contrib, [s]] = await Promise.all([
+  const [t4, t5, t4a, don, contrib, captx, [s]] = await Promise.all([
     t4BoxesForYear(taxYear),
     t5BoxesForYear(taxYear),
     t4aBox117ForYear(taxYear),
     donationsForYear(taxYear),
     contributionsForYear(taxYear),
+    capitalTransactionsForYear(taxYear),
     db.select().from(settings).where(eq(settings.id, 1)),
   ]);
 
@@ -53,6 +55,11 @@ export async function buildT1Inputs(taxYear: number): Promise<T1Input> {
     fhsa: {
       contributionsCents: contrib.fhsaCents,
       roomCents: s?.fhsaRoomCents ?? 0,
+    },
+    capitalGains: {
+      line19900Cents: captx.sch3.line19900Cents,
+      line12700Cents: captx.sch3.line12700Cents,
+      sch3Warnings: captx.sch3.warnings,
     },
   };
 }

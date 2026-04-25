@@ -85,6 +85,13 @@ export type T1Input = {
     /** Available room. null = no FHSA opened → behave as 0. */
     roomCents: number;
   };
+  /** Capital gains — Sch 3 → line 12700 (50% taxable inclusion of net gains). */
+  capitalGains: {
+    line19900Cents: number;
+    line12700Cents: number;
+    /** Pre-aggregated warnings from sch3 (e.g. net-loss carryforward note). */
+    sch3Warnings: string[];
+  };
 };
 
 export type T1Result = {
@@ -94,6 +101,10 @@ export type T1Result = {
   cpp2DeductionCents: number;        // 22200 — s.60(e.1)
   rrspDeductionCents: number;        // 20800
   fhsaDeductionCents: number;        // 20805
+  /** Sch 3 total capital gains (can be negative) — line 19900. */
+  capitalGainsLine19900Cents: number;
+  /** 50% inclusion of net positive gains — line 12700. */
+  capitalGainsLine12700Cents: number;
   netIncomeCents: number;            // 23600
   taxableIncomeCents: number;        // 26000 (== net in v1 — no Sch 3)
   // Federal side
@@ -224,8 +235,15 @@ export function computeT1(input: T1Input): T1Result {
   const eligibleGrossedUp = dividendGrossUp(input.t5.eligibleActualCents, ELIGIBLE_GROSS_UP_RATE);
   const nonEligibleGrossedUp = dividendGrossUp(input.t5.nonEligibleActualCents, NON_ELIGIBLE_GROSS_UP_RATE);
 
-  // Total Income — line 15000
-  const totalIncomeCents = box14 + eligibleGrossedUp + nonEligibleGrossedUp + input.t4aBox117Cents;
+  // Total Income — line 15000 (incl. line 12700 = 50% taxable capital gains)
+  const totalIncomeCents =
+    box14 +
+    eligibleGrossedUp +
+    nonEligibleGrossedUp +
+    input.t4aBox117Cents +
+    input.capitalGains.line12700Cents;
+  // Pass through any Sch 3 warnings (e.g. net capital loss carryforward note).
+  warnings.push(...input.capitalGains.sch3Warnings);
 
   // ── Deductions ──
   // CPP enhanced portion of box 16 (1% of the 5.95%) → line 22215 deduction (s.60(e))
@@ -353,6 +371,8 @@ export function computeT1(input: T1Input): T1Result {
     cpp2DeductionCents,
     rrspDeductionCents,
     fhsaDeductionCents,
+    capitalGainsLine19900Cents: input.capitalGains.line19900Cents,
+    capitalGainsLine12700Cents: input.capitalGains.line12700Cents,
     netIncomeCents,
     taxableIncomeCents,
     federal: {
