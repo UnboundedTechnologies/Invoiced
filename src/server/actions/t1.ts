@@ -331,6 +331,63 @@ export async function fileT1Return(
 }
 
 // ————————————————————————————————————————————————————————————————
+// Unfile (T1-ADJ escape hatch). Reverts status filed → draft so corrections
+// can be made before re-filing under a new CRA confirmation number. Frozen
+// snapshot columns are kept intact (audit trail of the original filing); a
+// refile overwrites them. Re-creates the t1:<cy> deadline on the way back
+// out (file() deletes it).
+//
+// First unfile pattern in the codebase. HST and T2 unfile actions, when added,
+// should mirror this design.
+// ————————————————————————————————————————————————————————————————
+
+export async function unfileT1Return(taxYear: number): Promise<ActionResult> {
+  try {
+    const email = await requireSession();
+    const [existing] = await db
+      .select()
+      .from(t1Returns)
+      .where(eq(t1Returns.taxYear, taxYear));
+    if (!existing) return { error: "T1 return not found." };
+    if (existing.status !== "filed") return { error: "T1 return is not filed; nothing to unfile." };
+
+    await db.batch([
+      db
+        .update(t1Returns)
+        .set({ status: "draft", updatedAt: new Date() })
+        .where(eq(t1Returns.taxYear, taxYear)),
+      db
+        .insert(deadlines)
+        .values({
+          title: `T1 return — CY ${taxYear}`,
+          description: "Personal tax filing deadline (ITA s.150(1)(d)).",
+          dueDate: t1FilingDueDate(taxYear),
+          category: "t1",
+          sourceKey: `t1:${taxYear}`,
+        })
+        .onConflictDoNothing({ target: deadlines.sourceKey }),
+      db.insert(auditLog).values({
+        actorEmail: email,
+        action: "update",
+        target: `t1_returns:${taxYear}:unfile`,
+        metadata: {
+          taxYear,
+          previousCraConfirmationNumber: existing.craConfirmationNumber,
+          previousFiledAt: existing.filedAt,
+          previousTotalTaxCents: existing.totalTaxPayableCents,
+          previousRefundOrOwingCents: existing.refundOrOwingCents,
+        },
+      }),
+    ]);
+
+    revalidate(taxYear);
+    return { ok: "T1 return unfiled. Make corrections, then re-file with a new CRA confirmation number." };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unfile failed" };
+  }
+}
+
+// ————————————————————————————————————————————————————————————————
 // PDF generation
 // ————————————————————————————————————————————————————————————————
 
