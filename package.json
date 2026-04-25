@@ -5,7 +5,7 @@
   "description": "Single-user toolbox for Unbounded Technologies Inc.",
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
@@ -82,6 +82,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
+    "@serwist/next": "^9.5.7",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.10.5",
     "@types/qrcode": "^1.5.6",
@@ -92,6 +93,7 @@
     "eslint": "^9.18.0",
     "eslint-config-next": "^16.2.4",
     "postcss": "^8.5.1",
+    "serwist": "^9.5.7",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.19.2",

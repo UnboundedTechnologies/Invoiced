@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import withSerwistInit from "@serwist/next";
 
 const securityHeaders = [
   { key: "X-DNS-Prefetch-Control", value: "on" },
@@ -66,4 +67,24 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Serwist wraps the build to emit `public/sw.js` from `src/app/sw.ts`. The
+// service worker is intentionally limited to the static asset precache +
+// Serwist's safe runtime defaults — auth-sensitive routes (/api, /vault) are
+// never cached. Disabled in dev so HMR isn't shadowed by a stale SW.
+const withSerwist = withSerwistInit({
+  swSrc: "src/app/sw.ts",
+  swDest: "public/sw.js",
+  cacheOnNavigation: true,
+  reloadOnOnline: true,
+  disable: process.env.NODE_ENV !== "production",
+  exclude: [
+    /\/api\//,
+    /\/_next\/static\/.*\.map$/,
+    // Auth + vault routes set Cache-Control: no-store via headers() — being
+    // explicit here too belts the suspenders.
+    /\/login(?:\/|$)/,
+    /\/vault(?:\/|$)/,
+  ],
+});
+
+export default withSerwist(nextConfig);
