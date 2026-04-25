@@ -107,7 +107,49 @@ vercel --prod
 #    auth in the query string will 401.
 ```
 
-### 1.4 Upstash Redis REST URL + token
+### 1.4 `TOTP_ENCRYPTION_KEY` — 2FA secret encryption
+
+The 2FA secret in `users.totpSecretEncrypted` is AES-256-GCM ciphertext under
+this key. Rotating it invalidates every enrolled secret in the DB — every user
+must re-enroll from `/settings → Security` after the rotation.
+
+```bash
+# 1. Generate a new 32-byte key
+openssl rand -base64 32
+
+# 2. BEFORE flipping the env: nuke every existing TOTP secret in prod DB so
+#    users hit a clean re-enroll path on next login, not a "decrypt failed"
+#    error from a mid-rotation mismatch.
+#    Connect via Neon SQL Editor (production branch) and run:
+#      UPDATE users SET totp_secret_encrypted = NULL,
+#                       totp_backup_codes_hashed = NULL,
+#                       totp_enabled_at = NULL,
+#                       totp_failed_count = 0,
+#                       totp_locked_until = NULL;
+#    Repeat against the dev branch if dev users need the same reset.
+
+# 3. Update Vercel (Production + Development scope, marked Sensitive)
+vercel env rm TOTP_ENCRYPTION_KEY production
+vercel env add TOTP_ENCRYPTION_KEY production
+# paste the new value
+
+# 4. Mirror locally
+# edit .env.local → TOTP_ENCRYPTION_KEY=<new>
+
+# 5. Redeploy
+vercel --prod
+
+# 6. Verify
+#    - Try logging in. If you were enrolled, the post-password redirect will
+#      still go to /login/2fa, but verifying any code returns null (secret is
+#      gone). loginAction shows "Invalid code or session expired" — expected.
+#    - Wipe the pending cookie: hit /login/cancel-2fa or just wait 60s.
+#    - Re-enroll from /settings → Security → Enable 2FA.
+```
+
+Equivalent CLI escape (per-user, no SQL needed): `pnpm reset-2fa <email>`.
+
+### 1.5 Upstash Redis REST URL + token
 
 ```bash
 # 1. console.upstash.com → invoiced-rl → Details → REST API → "Reset Token"
@@ -130,7 +172,7 @@ and the limiter becomes a no-op — login still works, but brute-force defense i
 disabled until you fix the creds. This is intentional (availability over the
 defense layer); confirm by tailing Vercel logs for the no-op log line.
 
-### 1.5 Neon `DATABASE_URL`
+### 1.6 Neon `DATABASE_URL`
 
 Rotate by resetting the role password, not by recreating the project.
 
