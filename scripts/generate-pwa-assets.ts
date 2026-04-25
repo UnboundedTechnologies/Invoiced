@@ -18,17 +18,22 @@ import fs from "node:fs/promises";
 const SOURCE = "public/logo.png";
 const BG = "#0a0a14";
 
-type IconSpec = { out: string; size: number };
+type IconSpec = { out: string; size: number; padding: number };
 type SplashSpec = { out: string; w: number; h: number; label: string };
 
+// All icons are composited onto a solid dark brand background — the source
+// logo has white text ("UNBOUNDED TECHNOLOGIES INC") on transparent, and
+// iOS renders PWA icons on a white surface by default, which makes the
+// white text invisible. Padding leaves breathing room around the logo
+// inside the icon canvas (Apple HIG suggests ~10-20%).
 const ICONS: IconSpec[] = [
-  { out: "public/icons/icon-192.png", size: 192 },
-  { out: "public/icons/icon-512.png", size: 512 },
-  { out: "public/icons/icon-1024.png", size: 1024 },
-  { out: "public/apple-touch-icon.png", size: 180 },
+  { out: "public/icons/icon-192.png", size: 192, padding: 0.12 },
+  { out: "public/icons/icon-512.png", size: 512, padding: 0.12 },
+  { out: "public/icons/icon-1024.png", size: 1024, padding: 0.12 },
+  { out: "public/apple-touch-icon.png", size: 180, padding: 0.1 },
 ];
 
-const MASKABLE: IconSpec & { padding: number } = {
+const MASKABLE: IconSpec = {
   out: "public/icons/icon-maskable-512.png",
   size: 512,
   padding: 0.2,
@@ -46,10 +51,17 @@ async function main() {
   await fs.mkdir("public/icons", { recursive: true });
   await fs.mkdir("public/splash", { recursive: true });
 
-  console.log("→ Icons");
-  for (const { out, size } of ICONS) {
-    await sharp(SOURCE).resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toFile(out);
-    console.log(`  ✓ ${out} (${size}×${size})`);
+  console.log("→ Icons (logo composited on brand-dark background)");
+  for (const { out, size, padding } of ICONS) {
+    const innerSize = Math.round(size * (1 - padding * 2));
+    const inner = await sharp(SOURCE).resize(innerSize, innerSize).png().toBuffer();
+    await sharp({
+      create: { width: size, height: size, channels: 4, background: BG },
+    })
+      .composite([{ input: inner, gravity: "center" }])
+      .png()
+      .toFile(out);
+    console.log(`  ✓ ${out} (${size}×${size}, ${(padding * 100).toFixed(0)}% padding)`);
   }
 
   console.log("→ Maskable icon (Android adaptive — safe-area padded)");
