@@ -153,7 +153,7 @@ function InactiveRzPanel({ data }: { data: SettingsRow }) {
             <InstructionsStep onBack={() => setStep("ask")} onClose={() => setOpen(false)} />
           )}
           {step === "input" && (
-            <InputStep businessNumber={data.businessNumber} onBack={() => setStep("ask")} />
+            <InputStep businessNumber={data.businessNumber} expectedVersion={data.version} onBack={() => setStep("ask")} />
           )}
         </CardContent>
       )}
@@ -268,9 +268,11 @@ function InstructionsStep({
 //  STEP 2b — Input
 function InputStep({
   businessNumber,
+  expectedVersion,
   onBack,
 }: {
   businessNumber: string;
+  expectedVersion: number;
   onBack: () => void;
 }) {
   const [value, setValue] = useState(businessNumber + "RZ0001");
@@ -290,6 +292,7 @@ function InputStep({
 
   return (
     <form action={formAction} className="space-y-4">
+      <input type="hidden" name="expectedVersion" value={expectedVersion} />
       <div>
         <Label htmlFor="payerRzAccount">Info-returns account number</Label>
         <div className="mt-1.5 relative">
