@@ -86,7 +86,7 @@ export function OnboardForm({ email }: { email: string }) {
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden p-6">
       <AuroraBackground />
 
-      <Card className="relative z-10 w-full max-w-md border-border/60 bg-card/60 backdrop-blur-xl shadow-2xl ring-brand-glow animate-in fade-in zoom-in-95 duration-500">
+      <Card className="relative z-10 w-full max-w-[20rem] sm:max-w-md border-border/60 bg-card/60 backdrop-blur-xl shadow-2xl ring-brand-glow animate-in fade-in zoom-in-95 duration-500">
         <CardHeader className="items-center text-center">
           <div className="mb-2 flex size-14 items-center justify-center rounded-xl bg-emerald-500/15 ring-1 ring-inset ring-emerald-500/30">
             <ShieldCheck className="size-7 text-emerald-400" />
