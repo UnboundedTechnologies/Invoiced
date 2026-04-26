@@ -1,8 +1,8 @@
 # Security Runbook — Invoiced
 
-> Owner: Saïd Aïssani · Last reviewed: 2026-04-24 (Phase 5 close)
+> Owner: Saïd Aïssani · Last reviewed: 2026-04-25
 > Scope: production rotation SOPs, incident response, Neon backup/restore drill,
-> and a record of what shipped in Phase 5.
+> and a record of what shipped in Phase 5 + 5B-blob + 5B-2FA + 5B-PWA.
 
 This runbook is the single source of truth for "something is wrong, what do I
 do?" Keep it short and operational — every section ends in commands you can
@@ -17,21 +17,31 @@ copy-paste. Update it whenever an env var, vendor, or threat model changes.
 | Identity | Auth.js v5 credentials + Argon2id, 8h JWT | `auth.ts`, `auth.config.ts` |
 | Allowlist | `ALLOWED_LOGIN_EMAILS` env (CSV) | Vercel env |
 | Brute-force defense | Upstash sliding window — 10 attempts / 10 min / IP | `src/lib/rate-limit.ts` |
-| Vault re-auth | Argon2id PIN + 60s non-sliding cookie, `SameSite=strict` | `src/server/actions/vault-pin.ts` |
+| Mandatory 2FA | TOTP via `otplib`; AES-256-GCM ciphertext at rest under `TOTP_ENCRYPTION_KEY`; 5/15-min lockout shared with login; (app)/layout redirects unenrolled users to `/onboard/2fa` | `src/lib/totp.ts`, `auth.ts`, `src/app/(app)/layout.tsx` |
+| Vault three-factor gate | session → PIN cookie → 2FA cookie. Both 60s sliding refresh on any authenticated action; auto-lock timer fires `router.refresh()` when TTL expires while staying on `/vault` | `src/lib/vault-pin-session.ts`, `src/lib/vault-2fa-session.ts`, `src/components/vault/vault-session-expiry.tsx` |
 | Transport | HSTS preload, COOP/CORP same-origin, Origin-Agent-Cluster | `next.config.ts` |
-| Content | CSP `default-src 'self'`, `object-src 'none'`, `frame-ancestors 'self'` | `next.config.ts` |
-| Audit | `audit_log` (action + target + ip + UA + jsonb metadata) | `src/lib/db/schema.ts:764` |
+| Content | CSP `default-src 'self'`, `object-src 'none'`, `frame-ancestors 'self'`, `script-src 'self' 'unsafe-inline'` (nonce attempt deferred — see § 4.2) | `next.config.ts` |
+| Audit | `audit_log` (action + target + ip + UA + jsonb metadata) | `src/lib/db/schema.ts` |
 | PII guard | `pnpm verify-audit-metadata` blocks forbidden keys in `audit_log.metadata` | `scripts/verify-audit-metadata.ts` |
-| Storage | Vercel Blob (private, token-gated) for PDFs | `BLOB_READ_WRITE_TOKEN` |
-| Crawlers | `public/robots.txt` Disallow + `<meta robots noindex>` | `src/app/layout.tsx:14` |
+| Storage | Vercel Blob `invoiced-blob-private` — Private mode, streamed via SDK `get()` through auth-gated proxy routes (no direct URL exposure) | `src/lib/blob.ts`, six `/api/.../route.ts` proxies |
+| Optimistic lock | All 13 mutable tables have `updated_at` + version-check on UPDATE/DELETE; stale-tab edits surface a friendly refresh prompt | `src/lib/optimistic-lock.ts` |
+| Crawlers | `public/robots.txt` Disallow + `<meta robots noindex>` | `src/app/layout.tsx` |
 
-Production env vars (audit run 2026-04-24, all encrypted, prod-only):
+Production env vars (audit run 2026-04-25, all encrypted, prod-only):
 `AUTH_SECRET`, `AUTH_URL`, `NEXTAUTH_URL`, `DATABASE_URL`,
-`ADMIN_PASSWORD_HASH`, `ALLOWED_LOGIN_EMAILS`, `BLOB_READ_WRITE_TOKEN`,
-`UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`.
+`ADMIN_PASSWORD_HASH`, `ALLOWED_LOGIN_EMAILS`, `BLOB_READ_WRITE_TOKEN`
+(Private-mode store), `TOTP_ENCRYPTION_KEY` (Sensitive),
+`NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (Sensitive),
+`VAPID_SUBJECT`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`,
+`CRON_SECRET` (Vercel-injected when `vercel.json` has crons).
 
-No preview/development env scope is populated — if you ever add one, mirror
-test-only credentials, never production.
+`DATABASE_URL` is **deliberately not marked Sensitive** — see
+`memory/feedback_database_url_not_sensitive.md`. All other secrets are
+Sensitive so `vercel env pull` doesn't expose values.
+
+Development scope mirrors prod for the non-data-bearing keys (VAPID,
+TOTP_ENCRYPTION_KEY, AUTH_SECRET); DATABASE_URL points at the dev Neon
+branch.
 
 ---
 
@@ -89,10 +99,14 @@ admin row doesn't yet exist. After first login, the hash lives in the `users`
 table; the env var is a recovery tool. To force re-bootstrap, delete the
 admin row first via a Neon SQL console.
 
-### 1.3 `BLOB_READ_WRITE_TOKEN` — Vercel Blob
+### 1.3 `BLOB_READ_WRITE_TOKEN` — Vercel Blob (Private mode)
+
+The store is `invoiced-blob-private` (Private access). Reads happen via SDK
+`get()` from server routes — no public URL fetch path. Rotating this token
+invalidates only the SDK calls; existing blobs remain.
 
 ```bash
-# 1. Vercel dashboard → Storage → invoiced-blob → Settings → Rotate token
+# 1. Vercel dashboard → Storage → invoiced-blob-private → Settings → Rotate token
 #    (CLI rotation isn't supported as of 2026-04; UI only.)
 
 # 2. The token in the project's env auto-syncs from the Storage panel.
@@ -103,9 +117,14 @@ vercel env pull .env.production.local --environment=production
 vercel --prod
 
 # 4. Verify: download an existing PDF + upload a new T4/T5 slip → both work.
-#    Old token is invalidated immediately, so any stale Blob URL with embedded
-#    auth in the query string will 401.
+#    The old token is invalidated immediately on the server side; no public
+#    URLs exist for an attacker to reuse.
 ```
+
+If you ever need to migrate to a fresh blob store entirely, see commit
+`b318f0d` for the pattern (private store provisioning + `streamBlob()`
+adapter + per-row blob re-upload). Private store access mode is fixed at
+creation per Vercel — you cannot flip a public store to private.
 
 ### 1.4 `TOTP_ENCRYPTION_KEY` — 2FA secret encryption
 
@@ -182,13 +201,51 @@ Rotate by resetting the role password, not by recreating the project.
 # 3. Update Vercel
 vercel env rm DATABASE_URL production
 vercel env add DATABASE_URL production
-# paste new
+# paste new — leave Sensitive flag UNCHECKED (see feedback_database_url_not_sensitive.md)
 # 4. Redeploy
 vercel --prod
 # 5. Verify: load the dashboard → server-rendered totals appear (DB reads work)
 ```
 
-### 1.6 `ALLOWED_LOGIN_EMAILS`
+### 1.7 VAPID keypair (Web Push)
+
+The push notification keypair authenticates the server to Apple's APNs /
+Google's FCM relays. Rotating invalidates every active push subscription;
+all enrolled devices must re-subscribe via Settings → Notifications.
+
+```bash
+# 1. Generate a new keypair locally:
+node -e "console.log(require('web-push').generateVAPIDKeys())"
+
+# 2. Wipe existing subscriptions in prod DB (the old keys can no longer
+#    sign for them; sending would 410 anyway):
+#    Connect via Neon SQL Editor (production branch) and run:
+#      TRUNCATE TABLE push_subscriptions;
+#    (or DELETE WHERE endpoint LIKE ... if you want a partial rotation)
+
+# 3. Update Vercel — both keys at once
+vercel env rm NEXT_PUBLIC_VAPID_PUBLIC_KEY production
+vercel env add NEXT_PUBLIC_VAPID_PUBLIC_KEY production
+# paste new public key (NOT Sensitive — bundled into client JS)
+
+vercel env rm VAPID_PRIVATE_KEY production
+vercel env add VAPID_PRIVATE_KEY production
+# paste new private key (Sensitive ✓)
+
+# 4. Mirror locally
+# edit .env.local → NEXT_PUBLIC_VAPID_PUBLIC_KEY=<new>, VAPID_PRIVATE_KEY=<new>
+
+# 5. Redeploy
+vercel --prod
+
+# 6. Verify: open the installed PWA → Settings → Security → Notifications →
+#    Re-enable on the device. The "Registered devices" list should update.
+```
+
+`VAPID_SUBJECT` is a contact mailto: only — no rotation needed unless the
+contact email changes.
+
+### 1.8 `ALLOWED_LOGIN_EMAILS`
 
 CSV of authorized emails. Editing this is how you onboard/offboard a visitor
 account. Removing an email does NOT delete that user's row — clean up via
@@ -228,16 +285,18 @@ faster to over-rotate than to find out later that you missed an attack vector.
 
 ### 2.2 First hour — rotate everything reachable from the leak
 
-Pick the smallest scope that covers the leak. When in doubt, rotate all five.
+Pick the smallest scope that covers the leak. When in doubt, rotate all eight.
 
 | Suspected leak | Must rotate |
 |---|---|
-| Source-code / repo / IDE leak | `AUTH_SECRET`, `ADMIN_PASSWORD_HASH`, `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, both Upstash creds |
-| Vercel account compromise | All five + change Vercel password + revoke all Vercel tokens |
+| Source-code / repo / IDE leak | `AUTH_SECRET`, `ADMIN_PASSWORD_HASH`, `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, `TOTP_ENCRYPTION_KEY`, `VAPID_PRIVATE_KEY`, both Upstash creds |
+| Vercel account compromise | All eight + change Vercel password + revoke all Vercel tokens |
 | Neon account compromise | `DATABASE_URL`, then audit Neon project for unknown branches/roles |
 | Upstash account compromise | Both Upstash creds, then check Upstash audit log for unknown IPs |
-| Blob URL leak (single file) | Rotate `BLOB_READ_WRITE_TOKEN` and delete the specific blob via dashboard |
-| `.env.local` leak from dev box | All five — local file mirrors prod values |
+| Blob token leak | Rotate `BLOB_READ_WRITE_TOKEN` (UI-only); existing private blobs are unreachable without the new token |
+| 2FA secret column dump | Rotate `TOTP_ENCRYPTION_KEY` (§ 1.4) — the leaked ciphertext can't be decrypted without it |
+| `.env.local` leak from dev box | All eight — local file mirrors prod values |
+| Push subscription leak | Rotate `VAPID_PRIVATE_KEY` (§ 1.7) — leaked subs can no longer be signed for |
 
 ### 2.3 First day — investigate
 
@@ -368,9 +427,9 @@ table from a branch and `INSERT … SELECT` the missing rows back:
 
 ---
 
-## 4. Phase 5 outcomes (shipped 2026-04-22 → 2026-04-24)
+## 4. Shipped security work
 
-What landed:
+### 4.0 Phase 5 (2026-04-22 → 2026-04-24)
 
 | Phase | Commit(s) | What |
 |---|---|---|
@@ -379,14 +438,49 @@ What landed:
 | 5-2b | `9f0eed8` | drizzle-kit 0.30 → 0.31 (transitive vulns) |
 | 5-2c | `e8e1306`, `1ec4374`, `d8a0d6a` | Next 15 → 16, React 19.2, next-auth beta.31, drop `"type": "module"` (Vercel CJS launcher fix) |
 | 5-3a | `37377e6` | Upstash IP rate-limit on /login (10/10m sliding) |
-| 5-3b | `c2c7a3a`, **`1f4ad3c` (revert)** | CSP nonce attempt — incompatible with Next.js prerender (static `/login` + `/settings` lose their script tags' nonce). **Deferred** until we have either app-wide dynamic rendering or Next ships nonce-aware prerender. |
+| 5-3b | `c2c7a3a`, **`1f4ad3c` (revert)** | CSP nonce attempt — incompatible with Next.js prerender. **Won't fix** in current architecture; revisit only if Next ships nonce-aware prerender or we move to app-wide dynamic rendering. |
 | 5-3c | `5c1bf0e` | Vault-pin cookie `SameSite=lax` → `strict` |
 | 5-3d | `259c777` | `verify-audit-metadata` PII-leak guard + `reset-vault-pin` typed-confirm |
 | 5-4 | `d21601f`, `4320931` | `robots.txt`, drop unused 2 MB sprite, fix middleware matcher to allow crawler files |
 | (ops) | `7ff0350` | `wipe-operational-data` script — 3-gate (`--apply` + typed confirm + masked URL display); used to wipe prod 2026-04-24 keeping visitor account |
-| 5-5 | (this commit) | Vercel CLI install + env audit + `SECURITY_RUNBOOK.md` + Neon restore drill |
+| 5-5 | `16e73d6` | Vercel CLI install + env audit + this runbook + Neon restore drill |
 
-### 4.1 Lighthouse on prod `/login` (2026-04-24)
+### 4.1 Phase 5B-blob — Private Vercel Blob migration (2026-04-25)
+
+| Commit | What |
+|---|---|
+| `b318f0d` | Provisioned `invoiced-blob-private` (Private mode), retired the old public `invoiced-blob` store. New `src/lib/blob.ts` adapter with `streamBlob()` helper that wraps SDK `get()` with the per-route streaming shape. Flipped all 11 `put()` callsites to `access: "private"`; converted all 6 `/api` proxy routes to use `streamBlob()` instead of plain `fetch(blobUrl)`. Direct blob URL is now unreachable to the browser without the read-write token. The old store was deleted intentionally during migration; pre-migration PDFs are not recoverable (DB phantoms swept by `cleanup-phantom-docs --apply`). Per Vercel: store access mode is fixed at creation, so any future re-org needs a fresh store + re-upload pass. |
+
+### 4.2 Phase 5B-2FA — Mandatory TOTP 2FA (2026-04-25)
+
+| Commit | What |
+|---|---|
+| `b1e1acb` (PR1) | Schema columns on `users`: `totp_secret_encrypted`, `totp_enabled_at`, `totp_backup_codes_hashed`, `totp_failed_count`, `totp_locked_until`. Pure module `src/lib/totp.ts` — AES-256-GCM with explicit-key parameter, otplib v13 functional API (verifySync, ±30s drift), backup codes argon2id-hashed and consumed once. Pending-cookie scheme `__Host-2fa-pending` (60s, HMAC-signed under `AUTH_SECRET`). Updated `auth.ts` authorize() to dispatch by `mode` — default email/password, `2fa` mode reads pending cookie and verifies TOTP, `2fa-backup` consumes a backup code. 4-step enrollment wizard + status card on Settings → Security. `/login/2fa` page hard-gated by the pending cookie. CLI escape hatch `pnpm reset-2fa <email>`. 7-check `verify-totp` script. |
+| `801d4e9` (PR2) | Vault three-factor stack — session → PIN cookie → 2FA cookie. New `__Host-vault-2fa` cookie (60s) and `requireVault2faSession()` gate enforced on `/vault` page + `/api/documents/[id]` route. Shared lockout state with login 2FA via the same `totpFailedCount`/`totpLockedUntil` columns. |
+| `d730fac` (PR3) | Animated oklch mesh-gradient login backdrop (cosmetic — `/login`, `/login/2fa`). |
+| `e7c4456` (PR4) | This runbook + README + memory polish. |
+| `4daffb6` | Mandatory 2FA enforcement — (app)/layout redirects unenrolled users to `/onboard/2fa` until they finish the wizard. Login action shortcuts non-enrolled users straight there to avoid the dashboard-bounce. |
+| `d70b7aa` | Sliding refresh on vault cookies — every successful action re-issues both cookies, so active use never silently times out. Closed a gap where the vault server actions only enforced PIN, not 2FA. |
+| `c115cd0` | Auto-lock when TTL expires while the user stays on `/vault` — client timer fires `router.refresh()` exactly at cookie expiry. |
+| `dc096c3` | Inline unlock dialog when opening contract attachments from `/clients` so users don't have to detour through `/vault`. |
+
+### 4.3 Optimistic-locking sweep (2026-04-25)
+
+| Commit | What |
+|---|---|
+| `23df825`, `25ec8ca`, `ac0974f`, `db3f28c`, `cef7fb9` | Version-check on UPDATE/DELETE for all 13 mutable tables. Stale-tab edits surface as `{ error: "stale" }` action results that forms catch + auto-refresh. Closed the only remaining open P2 finding from the silent-history-rewrite audit. |
+
+### 4.4 Phase 5B-PWA — Installable as iPhone/iPad app (2026-04-25)
+
+| Commit | What |
+|---|---|
+| `02d16da` (PR1) | `manifest.json` + 4 icon sizes + 5 iOS splash screens + apple-touch-icon, all generated by `pnpm gen-pwa-assets` from `public/logo.png` and baked onto the brand-dark background. Layout metadata: manifest link, apple-mobile-web-app capable + black-translucent status bar + per-device startupImage matrix. (app)/layout adds `pt-[env(safe-area-inset-top)]` so the TopBar doesn't render under the notch. |
+| `da2bdee` (PR2) | Serwist service worker — precaches `/_next/static/*` for instant cold launches. Excludes `/api`, `/login`, `/vault` routes (cache-control no-store enforced server-side too). Build switched to `next build --webpack` because Serwist's webpack-config injection conflicts with Turbopack default. |
+| `e5d37a4` (PR3) | Web Push for upcoming deadlines — daily Vercel Cron at 12:00 UTC. New `push_subscriptions` table; subscribe/unsubscribe via Settings → Security toggle; SW push handler renders system notification → opens `/calendar` on tap. CRON_SECRET-gated route. New env: `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (Sensitive), `VAPID_SUBJECT`. |
+| `c46a07c` | Mobile hamburger drawer (the desktop sidebar was `hidden md:flex` with no mobile alternative). |
+| `41c5c3b` | PWA icons re-baked on dark background so the white-text logo stays readable on iOS home screen. |
+
+### 4.5 Lighthouse on prod `/login` (2026-04-24)
 
 | Metric | Score |
 |---|---|
@@ -395,10 +489,15 @@ What landed:
 | Best Practices | 100 |
 | SEO | 66 (only `is-crawlable` failing — intentional `noindex`) |
 
-### 4.2 Deferred / known gaps (carry into Phase 6)
+> **Note:** scores from before the cosmic aurora background + starfield landed
+> (commits `33198c8`, `0581ada`). Re-run on demand — the multi-layer composition
+> may shift Performance a few points.
 
-- **CSP nonce + drop `'unsafe-inline'`** — see 5-3b above. Tracking issue:
-  Next.js prerender + per-request nonce.
+### 4.6 Deferred / known gaps
+
+- **CSP nonce + drop `'unsafe-inline'`** — won't fix in the current architecture
+  (Next.js prerender carries no per-request nonce; revisit if Next ships
+  nonce-aware prerender or the app moves to fully dynamic rendering).
 - **Middleware deny-list** — manual SQL is the only "block IP" tool today.
   Cheap to add: a small env-var deny-list in `src/middleware.ts` short-circuit
   before the auth handler.
@@ -406,6 +505,10 @@ What landed:
   (12mo? 24mo?) and add a monthly trim cron once growth becomes meaningful.
 - **Backup test cadence** — set a calendar reminder to re-run §3.1 every
   6 months so the SOP doesn't rot.
+- **GitHub branch protection + secret scanning** — gated behind GitHub Pro /
+  GHAS for private repos. Locally we run a leak + vuln scan before every
+  commit (`feedback_commit_security_audit.md`); revisit if the repo gains
+  more contributors. See `feedback_github_security_posture.md`.
 
 ---
 
