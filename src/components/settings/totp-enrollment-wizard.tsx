@@ -63,6 +63,15 @@ export function TotpEnrollmentWizard({
     }
   }, [open]);
 
+  // Auto-clear the "copied" pill after 1.8s. Cleanup cancels the timeout if
+  // the user closes the dialog or copies again before it fires — prevents a
+  // setState-on-unmounted-component React warning.
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(null), 1800);
+    return () => clearTimeout(t);
+  }, [copied]);
+
   function handleStart() {
     setStartError(null);
     startTransition(async () => {
@@ -84,7 +93,8 @@ export function TotpEnrollmentWizard({
     try {
       await navigator.clipboard.writeText(text);
       setCopied(kind);
-      setTimeout(() => setCopied(null), 1800);
+      // Auto-clear handled by the useEffect above so the timeout is properly
+      // cancelled if the dialog closes mid-flight.
     } catch {
       toast.error("Couldn't copy. Select and copy manually.");
     }
