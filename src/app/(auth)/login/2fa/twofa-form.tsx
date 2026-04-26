@@ -27,7 +27,7 @@ export function TwoFactorForm() {
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden p-6">
       <AuroraBackground />
 
-      <Card className="relative z-10 w-full max-w-sm border-border/60 bg-card/60 backdrop-blur-xl shadow-2xl ring-brand-glow animate-in fade-in zoom-in-95 duration-500">
+      <Card className="relative z-10 w-full max-w-[20rem] sm:max-w-sm border-border/60 bg-card/60 backdrop-blur-xl shadow-2xl ring-brand-glow animate-in fade-in zoom-in-95 duration-500">
         <CardHeader className="items-center text-center">
           <div className="rounded-full p-1 animate-glow-pulse">
             <Image src="/logo.png" alt="Unbounded Technologies" width={120} height={120} priority />
