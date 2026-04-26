@@ -1,6 +1,7 @@
 "use server";
 
 import { and, desc, eq } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/lib/db/client";
 import { pushSubscriptions, auditLog } from "@/lib/db/schema";
 import { auth } from "../../../auth";
@@ -13,35 +14,47 @@ async function requireSession() {
   return session.user.email.toLowerCase();
 }
 
+// Server actions invoked with structured payloads (not FormData) bypass
+// Next's automatic FormData parsing — we still want runtime input checks
+// since the TS types are erased at the RPC boundary. Lengths sized to
+// realistic Web Push payloads from W3C Push API (no spec maximum, but
+// 1 KiB endpoint + 88-char p256dh + 24-char auth covers every browser).
+const subscribeSchema = z.object({
+  endpoint: z.string().url().max(2048),
+  p256dh: z.string().min(1).max(256),
+  auth: z.string().min(1).max(256),
+  userAgent: z.string().max(1024).optional(),
+});
+
+const endpointSchema = z.string().url().max(2048);
+const idSchema = z.string().uuid();
+
 /** Endpoints from the same browser+device are stable; on conflict we just
  * touch lastSeenAt so a re-subscribe (after the SW updates, after a clear-
  * site-data, etc.) doesn't create a duplicate row. */
-export async function subscribePush(payload: {
-  endpoint: string;
-  p256dh: string;
-  auth: string;
-  userAgent?: string;
-}): Promise<ActionResult> {
+export async function subscribePush(payload: unknown): Promise<ActionResult> {
   try {
     const email = await requireSession();
-    if (!payload.endpoint || !payload.p256dh || !payload.auth) {
-      return { error: "Incomplete subscription payload." };
+    const parsed = subscribeSchema.safeParse(payload);
+    if (!parsed.success) {
+      return { error: parsed.error.issues[0]?.message ?? "Invalid subscription payload." };
     }
+    const { endpoint, p256dh, auth, userAgent } = parsed.data;
     await db
       .insert(pushSubscriptions)
       .values({
-        endpoint: payload.endpoint,
-        p256dh: payload.p256dh,
-        auth: payload.auth,
+        endpoint,
+        p256dh,
+        auth,
         userEmail: email,
-        userAgent: payload.userAgent ?? null,
+        userAgent: userAgent ?? null,
       })
       .onConflictDoUpdate({
         target: pushSubscriptions.endpoint,
         set: {
           lastSeenAt: new Date(),
           userEmail: email,
-          userAgent: payload.userAgent ?? null,
+          userAgent: userAgent ?? null,
         },
       });
     await db.insert(auditLog).values({
@@ -49,8 +62,8 @@ export async function subscribePush(payload: {
       action: "create",
       target: "push_subscriptions:subscribe",
       metadata: {
-        endpointPrefix: payload.endpoint.slice(0, 64),
-        userAgent: payload.userAgent ?? null,
+        endpointPrefix: endpoint.slice(0, 64),
+        userAgent: userAgent ?? null,
       },
     });
     return { ok: "Notifications enabled on this device." };
@@ -59,15 +72,17 @@ export async function subscribePush(payload: {
   }
 }
 
-export async function unsubscribePush(endpoint: string): Promise<ActionResult> {
+export async function unsubscribePush(endpoint: unknown): Promise<ActionResult> {
   try {
     const email = await requireSession();
-    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+    const parsed = endpointSchema.safeParse(endpoint);
+    if (!parsed.success) return { error: "Invalid endpoint." };
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, parsed.data));
     await db.insert(auditLog).values({
       actorEmail: email,
       action: "delete",
       target: "push_subscriptions:unsubscribe",
-      metadata: { endpointPrefix: endpoint.slice(0, 64) },
+      metadata: { endpointPrefix: parsed.data.slice(0, 64) },
     });
     return { ok: "Notifications disabled." };
   } catch (e) {
@@ -97,12 +112,14 @@ export async function listMyPushSubscriptions(): Promise<PushSubRow[]> {
 }
 
 /** Revoke a registration by id (e.g. an old browser the user no longer uses). */
-export async function deletePushSubscription(id: string): Promise<ActionResult> {
+export async function deletePushSubscription(id: unknown): Promise<ActionResult> {
   try {
     const email = await requireSession();
+    const parsed = idSchema.safeParse(id);
+    if (!parsed.success) return { error: "Invalid id." };
     await db
       .delete(pushSubscriptions)
-      .where(and(eq(pushSubscriptions.id, id), eq(pushSubscriptions.userEmail, email)));
+      .where(and(eq(pushSubscriptions.id, parsed.data), eq(pushSubscriptions.userEmail, email)));
     return { ok: "Device removed." };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Remove failed" };
