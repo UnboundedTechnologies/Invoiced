@@ -45,6 +45,10 @@ export function VaultPicker({
     setSelected(null);
     listAvailableContractDocuments()
       .then((d) => setDocs(d))
+      .catch((e) => {
+        toast.error(e instanceof Error ? e.message : "Couldn't load vault documents.");
+        setDocs([]);
+      })
       .finally(() => setLoading(false));
   }, [open]);
 
