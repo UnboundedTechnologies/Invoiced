@@ -78,7 +78,10 @@ export async function logoutAction() {
     value: "",
     httpOnly: true,
     secure: true,
-    sameSite: "lax",
+    // Must match the original set-attributes (sameSite=strict in vault-pin.ts).
+    // __Host- cookie deletion is silently dropped by some browsers when the
+    // delete-call attributes don't match what was used at issue time.
+    sameSite: "strict",
     path: "/",
     maxAge: 0,
   });

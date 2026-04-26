@@ -61,6 +61,7 @@ function revalidate(taxYear?: number) {
 // ————————————————————————————————————————————————————————————————
 
 export async function t1PeriodLockError(iso: string): Promise<string | null> {
+  await requireSession();
   const taxYear = taxYearFor(iso);
   const [r] = await db
     .select({ status: t1Returns.status })

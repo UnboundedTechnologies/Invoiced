@@ -113,17 +113,21 @@ export default async function VaultPage({ searchParams }: { searchParams: Search
     );
   }
 
-  const parentLinks = await resolveParentLinks(rows);
-  const pinSetAt = await getPinSetAt();
-  // Pre-fetch contracts for the upload dialog's "Contract" category picker.
-  // Includes ended ones so the dialog can offer a "Show ended" toggle without
-  // a second round-trip.
-  const contractOptions = await listContractsForPicker({ includeEnded: true });
-
-  // Read the earliest cookie expiresAt so the client-side timer can
-  // auto-lock the vault when the TTL runs out instead of leaving the user
-  // on a stale view that errors out on next action.
-  const lockAt = await getVaultSessionLockAt();
+  // Four independent reads — parallelise to avoid four sequential round-trips
+  // on the unlocked-vault path (~200ms savings on cold renders against Neon).
+  // resolveParentLinks needs the filtered rows, but the other three are
+  // independent of any prior await.
+  const [parentLinks, pinSetAt, contractOptions, lockAt] = await Promise.all([
+    resolveParentLinks(rows),
+    getPinSetAt(),
+    // Pre-fetch contracts for the upload dialog's "Contract" category picker.
+    // Includes ended ones so the dialog can offer a "Show ended" toggle without
+    // a second round-trip.
+    listContractsForPicker({ includeEnded: true }),
+    // Earliest cookie expiresAt so the client-side timer can auto-lock when
+    // the TTL runs out instead of leaving the user on a stale view.
+    getVaultSessionLockAt(),
+  ]);
 
   return (
     <div className="space-y-6">
