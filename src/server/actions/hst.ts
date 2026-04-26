@@ -66,6 +66,7 @@ async function getFye() {
  * expenses/invoices don't need to know the HST schema shape.
  */
 export async function hstPeriodLockError(iso: string): Promise<string | null> {
+  await requireSession();
   const { fyeMonth, fyeDay } = await getFye();
   const fiscalYear = fiscalYearFor(iso, fyeMonth, fyeDay);
   const [r] = await db

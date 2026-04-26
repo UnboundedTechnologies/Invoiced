@@ -69,16 +69,19 @@ async function slipLockError(
 
 /** Block if a T4 slip is filed for the paycheque's pay-date calendar year. */
 export async function t4SlipLockError(payDate: string): Promise<string | null> {
+  await requireSession();
   return slipLockError(payDate, "T4", "Paycheque edit");
 }
 
 /** Block if a T5 slip is filed for the dividend's paid-date calendar year. */
 export async function t5SlipLockError(paidDate: string): Promise<string | null> {
+  await requireSession();
   return slipLockError(paidDate, "T5", "Dividend edit");
 }
 
 /** Block if a T4A slip is filed for the loan-entry's entry-date calendar year. */
 export async function t4aSlipLockError(entryDate: string): Promise<string | null> {
+  await requireSession();
   return slipLockError(entryDate, "T4A", "Loan-ledger edit");
 }
 

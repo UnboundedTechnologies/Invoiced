@@ -82,6 +82,7 @@ function revalidate(fiscalYear?: number) {
 // ————————————————————————————————————————————————————————————————
 
 export async function t2PeriodLockError(iso: string): Promise<string | null> {
+  await requireSession();
   const { fyeMonth, fyeDay } = await getFye();
   const fiscalYear = fiscalYearFor(iso, fyeMonth, fyeDay);
   const [r] = await db
