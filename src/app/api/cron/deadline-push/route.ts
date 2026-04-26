@@ -1,10 +1,22 @@
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { and, eq, gte, lte } from "drizzle-orm";
 import webpush from "web-push";
 import { db } from "@/lib/db/client";
 import { deadlines, pushSubscriptions } from "@/lib/db/schema";
 
 export const runtime = "nodejs";
+
+/** Constant-time string compare for the cron Bearer token. Plain === leaks
+ * per-byte timing (microseconds) which is below network-jitter floor in
+ * practice — we use timingSafeEqual anyway to avoid leaving a defensive
+ * gap that a future runtime change could expose. */
+function bearerEquals(received: string, expected: string): boolean {
+  const a = Buffer.from(received, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
 
 /**
  * Daily Vercel Cron — sends one push notification per subscription
@@ -48,7 +60,8 @@ export async function GET(req: Request) {
   if (!cronSecret) {
     return new NextResponse("CRON_SECRET not configured", { status: 503 });
   }
-  if (req.headers.get("authorization") !== `Bearer ${cronSecret}`) {
+  const auth = req.headers.get("authorization") ?? "";
+  if (!bearerEquals(auth, `Bearer ${cronSecret}`)) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
