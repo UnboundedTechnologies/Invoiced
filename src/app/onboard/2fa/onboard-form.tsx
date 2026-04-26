@@ -50,6 +50,14 @@ export function OnboardForm({ email }: { email: string }) {
     if (verifyState?.error) toast.error(verifyState.error);
   }, [verifyState]);
 
+  // Auto-clear the "copied" pill 1.8s after a copy. Cleanup cancels if the
+  // user navigates away mid-flight to avoid a setState-on-unmounted warning.
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(null), 1800);
+    return () => clearTimeout(t);
+  }, [copied]);
+
   function handleStart() {
     setStartError(null);
     startTransition(async () => {
@@ -71,7 +79,8 @@ export function OnboardForm({ email }: { email: string }) {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(kind);
-      setTimeout(() => setCopied(null), 1800);
+      // Auto-clear handled by the useEffect above so the timeout is properly
+      // cancelled if the user navigates away mid-flight.
     } catch {
       toast.error("Couldn't copy. Select and copy manually.");
     }
