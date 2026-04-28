@@ -1,70 +1,55 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronRight } from "lucide-react";
 import { MobileNav } from "./mobile-nav";
 
-type Meta = { section: string; sectionHref: string; page: string };
-
-// sectionHref points at the first page in each sidebar section so clicking
-// e.g. "Income" lands on /invoices, "Self-pay" on /paycheques, etc.
-const TITLES: Record<string, Meta> = {
-  "/dashboard": { section: "Overview", sectionHref: "/dashboard", page: "Dashboard" },
-  "/psb": { section: "Overview", sectionHref: "/dashboard", page: "PSB risk" },
-  "/invoices": { section: "Income", sectionHref: "/invoices", page: "Invoices" },
-  "/clients": { section: "Income", sectionHref: "/invoices", page: "Clients & contracts" },
-  "/paycheques": { section: "Self-pay", sectionHref: "/paycheques", page: "Paycheques (T4)" },
-  "/dividends": { section: "Self-pay", sectionHref: "/paycheques", page: "Dividends (T5)" },
-  "/shareholder-loan": { section: "Self-pay", sectionHref: "/paycheques", page: "Shareholder loan" },
-  "/expenses": { section: "Expenses & taxes", sectionHref: "/expenses", page: "Expenses" },
-  "/hst": { section: "Expenses & taxes", sectionHref: "/expenses", page: "HST return" },
-  "/corp-tax": { section: "Expenses & taxes", sectionHref: "/expenses", page: "Corporate tax (T2)" },
-  "/personal-tax": { section: "Expenses & taxes", sectionHref: "/expenses", page: "Personal tax (T1)" },
-  "/slips": { section: "Expenses & taxes", sectionHref: "/expenses", page: "Year-end slips" },
-  "/calendar": { section: "Admin", sectionHref: "/calendar", page: "Deadlines" },
-  "/vault": { section: "Admin", sectionHref: "/calendar", page: "Document vault" },
-  "/settings": { section: "Admin", sectionHref: "/calendar", page: "Settings" },
+// Page-name lookup keyed by route. Kept flat (no section grouping) since the
+// top bar shows just the page name now — section context lives in the sidebar.
+const PAGE_TITLES: Record<string, string> = {
+  "/dashboard": "Dashboard",
+  "/psb": "PSB risk",
+  "/invoices": "Invoices",
+  "/clients": "Clients & contracts",
+  "/paycheques": "Paycheques (T4)",
+  "/dividends": "Dividends (T5)",
+  "/shareholder-loan": "Shareholder loan",
+  "/expenses": "Expenses",
+  "/hst": "HST return",
+  "/corp-tax": "Corporate tax (T2)",
+  "/personal-tax": "Personal tax (T1)",
+  "/slips": "Year-end slips",
+  "/calendar": "Deadlines",
+  "/vault": "Document vault",
+  "/settings": "Settings",
 };
 
-function matchMeta(pathname: string): Meta {
-  if (TITLES[pathname]) return TITLES[pathname];
-  // Fall back to the longest prefix match so /invoices/abc still resolves to the Income section.
-  const match = Object.keys(TITLES)
+function matchPage(pathname: string): string {
+  if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
+  const match = Object.keys(PAGE_TITLES)
     .sort((a, b) => b.length - a.length)
     .find((key) => pathname.startsWith(`${key}/`));
-  return (match && TITLES[match]) || { section: "Overview", sectionHref: "/dashboard", page: "Invoiced" };
+  return (match && PAGE_TITLES[match]) || "Invoiced";
 }
 
 export function TopBar({ corpName }: { corpName: string }) {
   const pathname = usePathname();
-  const meta = matchMeta(pathname);
+  const page = matchPage(pathname);
 
   return (
     <div className="sticky top-0 z-20 border-b border-border/40 bg-background/60 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-2">
           <MobileNav corpName={corpName} />
-        <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
-          <Link href="/dashboard" className="hover:text-foreground transition-colors">
-            {corpName}
-          </Link>
-          <ChevronRight className="size-3.5 opacity-50" />
-          <Link
-            href={meta.sectionHref}
-            className="hidden sm:inline hover:text-foreground transition-colors"
+          <h1
+            className="truncate text-sm font-medium text-foreground sm:text-base"
+            aria-current="page"
           >
-            {meta.section}
-          </Link>
-          <ChevronRight className="size-3.5 opacity-50 hidden sm:inline" />
-          <span className="truncate font-medium text-foreground" aria-current="page">
-            {meta.page}
-          </span>
-        </nav>
+            {page}
+          </h1>
         </div>
 
         <div
-          className="dq-scene relative hidden h-10 w-[200px] overflow-hidden rounded-md border border-border/40 shadow-sm sm:block"
+          className="dq-scene relative h-9 w-[140px] shrink-0 overflow-hidden rounded-md border border-border/40 shadow-sm sm:h-10 sm:w-[200px]"
           role="img"
           aria-label="Heroes walking through the landscape"
         >
