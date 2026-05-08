@@ -69,6 +69,8 @@
   html, body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    /* Tabular nums app-wide so updating values (totals, %, sliders) don't jitter. */
+    font-variant-numeric: tabular-nums;
   }
   body {
     /* Subtle radial halo in the top-left corner to give the surface depth */
