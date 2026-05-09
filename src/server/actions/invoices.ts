@@ -33,7 +33,7 @@ async function periodLockError(iso: string): Promise<string | null> {
   return t2PeriodLockError(iso);
 }
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -52,7 +52,7 @@ const createSchema = z.object({
 export async function createInvoice(_prev: ActionResult | undefined, fd: FormData): Promise<ActionResult> {
   let createdInvoiceId: string | null = null;
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       return { error: "Vercel Blob is not configured. Set BLOB_READ_WRITE_TOKEN in .env.local." };
     }
@@ -230,7 +230,7 @@ export async function setInvoiceStatus(
   expectedVersion: number,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = statusSchema.safeParse(status);
     if (!parsed.success) return { error: "Invalid status." };
 
@@ -279,7 +279,7 @@ export async function setInvoiceStatus(
 
 export async function deleteDraftInvoice(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [inv] = await db.select().from(invoices).where(eq(invoices.id, id));
     if (!inv) return { error: "Invoice not found." };
     if (inv.version !== expectedVersion) {

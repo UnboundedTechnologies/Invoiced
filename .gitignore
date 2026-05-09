@@ -66,6 +66,8 @@ logs/
 .vscode/
 !.vscode/settings.json.example
 .claude/
+.agents/
+.junie/
 .DS_Store
 Thumbs.db
 desktop.ini

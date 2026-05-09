@@ -19,7 +19,7 @@ const codeSchema = z.object({
   mode: z.enum(["totp", "backup"]).optional(),
 });
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email.toLowerCase();
@@ -36,7 +36,7 @@ export async function verifyVault2fa(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = codeSchema.safeParse({
       code: String(fd.get("code") ?? "").replace(/\s+/g, ""),
       mode: String(fd.get("mode") ?? "totp"),

@@ -10,7 +10,7 @@ import { auth } from "../../../auth";
 
 type ActionResult = { ok?: string; error?: string };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -68,7 +68,7 @@ export async function updateChecklistItem(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = updateSchema.safeParse({
       status: fd.get("status") ?? "not_started",
       notes: (fd.get("notes") as string) || null,
@@ -104,7 +104,7 @@ export async function updateChecklistItem(
 
 export async function quickToggleItem(id: string, status: string): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const allowed = ["not_started", "in_progress", "done", "not_applicable"] as const;
     if (!allowed.includes(status as typeof allowed[number])) return { error: "Invalid status." };
 
@@ -130,7 +130,7 @@ export async function quickToggleItem(id: string, status: string): Promise<Actio
 
 export async function takePsbSnapshot(reason: string): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     await snapshotToday(email, reason || "manual");
     revalidate();
     return { ok: "Snapshot saved." };

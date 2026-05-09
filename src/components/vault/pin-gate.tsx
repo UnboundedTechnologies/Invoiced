@@ -67,15 +67,15 @@ function SetupCard() {
         <CardContent>
           <form action={formAction} onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <label className="block text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="block text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 New PIN
-              </label>
+              </div>
               <PinInput name="pin" value={pin} onChange={setPin} invalid={invalid} disabled={pending} />
             </div>
             <div className="space-y-2">
-              <label className="block text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="block text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Confirm PIN
-              </label>
+              </div>
               <PinInput
                 name="_confirm"
                 value={confirmPin}

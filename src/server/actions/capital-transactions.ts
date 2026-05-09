@@ -12,7 +12,7 @@ import { versionConflictError } from "@/lib/optimistic-lock";
 
 type ActionResult = { ok?: string; error?: string };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -62,7 +62,7 @@ export async function createCapitalTransaction(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = txSchema.safeParse({
       kind: fd.get("kind"),
       description: fd.get("description"),
@@ -120,7 +120,7 @@ export async function deleteCapitalTransaction(
   expectedVersion: number,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db
       .select()
       .from(capitalTransactions)

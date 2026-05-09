@@ -8,7 +8,7 @@ import { auth } from "../../../auth";
 
 type ActionResult = { ok?: string; error?: string };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email.toLowerCase();
@@ -34,7 +34,7 @@ const idSchema = z.string().uuid();
  * site-data, etc.) doesn't create a duplicate row. */
 export async function subscribePush(payload: unknown): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = subscribeSchema.safeParse(payload);
     if (!parsed.success) {
       return { error: parsed.error.issues[0]?.message ?? "Invalid subscription payload." };
@@ -74,7 +74,7 @@ export async function subscribePush(payload: unknown): Promise<ActionResult> {
 
 export async function unsubscribePush(endpoint: unknown): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = endpointSchema.safeParse(endpoint);
     if (!parsed.success) return { error: "Invalid endpoint." };
     await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, parsed.data));
@@ -98,7 +98,7 @@ export type PushSubRow = {
 };
 
 export async function listMyPushSubscriptions(): Promise<PushSubRow[]> {
-  const email = await requireSession();
+  const email = await requireAuth();
   return db
     .select({
       id: pushSubscriptions.id,
@@ -114,7 +114,7 @@ export async function listMyPushSubscriptions(): Promise<PushSubRow[]> {
 /** Revoke a registration by id (e.g. an old browser the user no longer uses). */
 export async function deletePushSubscription(id: unknown): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = idSchema.safeParse(id);
     if (!parsed.success) return { error: "Invalid id." };
     await db

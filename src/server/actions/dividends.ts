@@ -14,7 +14,7 @@ import { bumpVersion, parseExpectedVersion, versionConflictError } from "@/lib/o
 
 type ActionResult = { ok?: string; error?: string };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -65,7 +65,7 @@ export async function createDividend(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = parseForm(fd);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
     const { amountDollars, declaredDate, paidDate, eligible, notes } = parsed.data;
@@ -113,7 +113,7 @@ export async function updateDividend(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const expectedVersion = parseExpectedVersion(fd);
     const [existing] = await db.select().from(dividends).where(eq(dividends.id, id));
     if (!existing) return { error: "Dividend not found." };
@@ -191,7 +191,7 @@ export async function updateDividend(
 
 export async function deleteDividend(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db.select().from(dividends).where(eq(dividends.id, id));
     if (!existing) return { error: "Dividend not found." };
     if (existing.version !== expectedVersion) {
@@ -301,7 +301,7 @@ export async function markDividendPaid(
   expectedVersion: number,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(paidDate)) return { error: "Invalid paid date." };
     const [existing] = await db.select().from(dividends).where(eq(dividends.id, id));
     if (!existing) return { error: "Dividend not found." };
@@ -349,7 +349,7 @@ export async function markDividendPaid(
 
 export async function markDividendUnpaid(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db.select().from(dividends).where(eq(dividends.id, id));
     if (!existing) return { error: "Dividend not found." };
     if (existing.version !== expectedVersion) {

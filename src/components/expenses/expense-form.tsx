@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Percent } from "lucide-react";
@@ -104,7 +104,7 @@ export function ExpenseForm({
   const [total, setTotal] = useState(
     expense ? (expense.totalCents / 100).toFixed(2) : "",
   );
-  const [totalTouched, setTotalTouched] = useState(!!expense);
+  const totalTouched = useRef<boolean>(!!expense);
 
   const hstRatePercent = hstRateBps / 100;
   const ccaInitial = expense ? ccaFromJson(expense.cca) : undefined;
@@ -121,7 +121,7 @@ export function ExpenseForm({
   // Auto-fill total whenever subtotal or hst changes, unless the user has
   // explicitly edited total (totalTouched). Preserves manual overrides.
   function maybeAutoFillTotal(nextSubtotal?: string, nextHst?: string) {
-    if (totalTouched) return;
+    if (totalTouched.current) return;
     const s = Number(nextSubtotal ?? subtotal) || 0;
     const h = Number(nextHst ?? hstPaid) || 0;
     if (s === 0 && h === 0) return;
@@ -136,7 +136,7 @@ export function ExpenseForm({
     const hst = t - sub;
     setSubtotal(sub.toFixed(2));
     setHstPaid(hst.toFixed(2));
-    setTotalTouched(true);
+    totalTouched.current = true;
   }
 
   const sNum = Number(subtotal) || 0;
@@ -240,7 +240,7 @@ export function ExpenseForm({
               value={total}
               onChange={(e) => {
                 setTotal(e.target.value);
-                setTotalTouched(true);
+                totalTouched.current = true;
               }}
               data-gramm="false"
             />

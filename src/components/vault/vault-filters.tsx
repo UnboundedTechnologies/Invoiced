@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { Suspense, useEffect, useRef, useState, useTransition } from "react";
 import { Search, X, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,15 @@ import {
 
 type CountMap = Partial<Record<VaultCategory | "all", number>>;
 
-export function VaultFilters({ counts }: { counts: CountMap }) {
+export function VaultFilters(props: { counts: CountMap }) {
+  return (
+    <Suspense fallback={null}>
+      <VaultFiltersInner {...props} />
+    </Suspense>
+  );
+}
+
+function VaultFiltersInner({ counts }: { counts: CountMap }) {
   const router = useRouter();
   const sp = useSearchParams();
   const [, startTransition] = useTransition();
@@ -25,23 +33,26 @@ export function VaultFilters({ counts }: { counts: CountMap }) {
   const category = sp.get("category") as VaultCategory | null;
   const archived = sp.get("archived") === "1";
 
-  // Debounce text search → URL.
+  // Debounce text search → URL. Navigation lives in the onChange handler so
+  // useEffect stays free of router.replace (lint: nextjs-no-client-side-redirect).
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
+  function handleSearchChange(nextQ: string) {
+    setQ(nextQ);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       const params = new URLSearchParams(sp.toString());
-      if (q) params.set("q", q);
+      if (nextQ) params.set("q", nextQ);
       else params.delete("q");
-      const next = params.toString();
-      const path = next ? `/vault?${next}` : "/vault";
+      const search = params.toString();
+      const path = search ? `/vault?${search}` : "/vault";
       startTransition(() => router.replace(path, { scroll: false }));
     }, 250);
+  }
+  useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q]);
+  }, []);
 
   function toggleCategory(c: VaultCategory) {
     const params = new URLSearchParams(sp.toString());
@@ -123,14 +134,14 @@ export function VaultFilters({ counts }: { counts: CountMap }) {
           <Input
             type="search"
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             placeholder="Search by file name…"
             className="pl-8 pr-8 text-sm"
           />
           {q && (
             <button
               type="button"
-              onClick={() => setQ("")}
+              onClick={() => handleSearchChange("")}
               aria-label="Clear search"
               className="absolute right-2 top-1/2 -translate-y-1/2 rounded text-muted-foreground hover:text-foreground"
             >

@@ -62,8 +62,6 @@ export const FEDERAL_BPA_MAX_2026 = 16_452;
 export const FEDERAL_BPA_MIN_2026 = 14_829;
 export const FEDERAL_BPA_PHASE_START_2026 = 181_440;
 export const FEDERAL_BPA_PHASE_END_2026 = 258_482;
-/** Back-compat export — refers to the max value. Prefer `federalBpaFor()` elsewhere. */
-export const FEDERAL_BPA_2026 = FEDERAL_BPA_MAX_2026;
 
 /**
  * Returns the federal BPA for a given annualized net income (dollars).

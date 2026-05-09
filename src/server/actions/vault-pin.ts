@@ -23,7 +23,7 @@ import {
 
 type ActionResult = { ok?: string; error?: string; warning?: string; retryAfter?: string };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -78,7 +78,7 @@ export async function setupVaultPin(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = pinSchema.safeParse({ pin: fd.get("pin") });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid PIN" };
 
@@ -113,7 +113,7 @@ export async function verifyVaultPin(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = pinSchema.safeParse({ pin: fd.get("pin") });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid PIN" };
 
@@ -180,7 +180,7 @@ export async function changeVaultPin(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = changeSchema.safeParse({
       currentPin: fd.get("currentPin"),
       newPin: fd.get("newPin"),
@@ -237,7 +237,7 @@ export async function changeVaultPin(
 
 export async function lockVaultSession(): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     await clearPinCookie();
     // 2FA cookie lives in parallel — clear it on the same lock action so
     // re-entry requires both factors again.

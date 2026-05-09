@@ -34,7 +34,8 @@ export function PinInput({
   const refs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    if (autoFocus) refs.current[0]?.focus();
+    if (!autoFocus) return;
+    refs.current[0]?.focus();
   }, [autoFocus]);
 
   function setValue(next: string) {

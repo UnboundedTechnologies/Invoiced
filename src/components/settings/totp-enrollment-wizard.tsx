@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
@@ -144,12 +145,12 @@ export function TotpEnrollmentWizard({
           <div className="space-y-4 py-2">
             <Card className="border-border/60 bg-muted/30">
               <CardContent className="flex flex-col items-center gap-3 p-4">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={payload.qrDataUri}
                   alt="2FA enrollment QR code"
                   width={224}
                   height={224}
+                  unoptimized
                   className="rounded-md border border-border/60 bg-white"
                 />
                 <div className="w-full space-y-2">
@@ -238,7 +239,7 @@ export function TotpEnrollmentWizard({
               </CardContent>
             </Card>
             <label className="flex items-center gap-2 text-sm">
-              <Input
+              <input
                 type="checkbox"
                 checked={savedConfirmed}
                 onChange={(e) => setSavedConfirmed(e.target.checked)}

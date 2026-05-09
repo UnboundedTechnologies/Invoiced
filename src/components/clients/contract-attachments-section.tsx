@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ExternalLink, Paperclip, FileText, Lock } from "lucide-react";
@@ -34,19 +34,19 @@ export function ContractAttachmentsSection({
 }) {
   const router = useRouter();
   const [unlockOpen, setUnlockOpen] = useState(false);
-  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const pendingHref = useRef<string | null>(null);
 
   function handleAttachmentClick(e: React.MouseEvent, href: string) {
     if (vaultUnlocked) return; // let the anchor's target=_blank do its thing
     e.preventDefault();
-    setPendingHref(href);
+    pendingHref.current = href;
     setUnlockOpen(true);
   }
 
   function onUnlocked() {
-    const href = pendingHref;
+    const href = pendingHref.current;
     setUnlockOpen(false);
-    setPendingHref(null);
+    pendingHref.current = null;
     if (href) {
       // Inside the unlock-button click handler → transient activation still
       // valid → window.open is allowed. noopener prevents the new tab from
@@ -145,7 +145,7 @@ export function ContractAttachmentsSection({
         open={unlockOpen}
         onOpenChange={(v) => {
           setUnlockOpen(v);
-          if (!v) setPendingHref(null);
+          if (!v) pendingHref.current = null;
         }}
         onUnlocked={onUnlocked}
         twofaEnrolled={twofaEnrolled}

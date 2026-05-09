@@ -38,7 +38,7 @@ type ActionResult = {
   pdfBase64?: string;
 };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -61,7 +61,7 @@ function revalidate(taxYear?: number) {
 // ————————————————————————————————————————————————————————————————
 
 export async function t1PeriodLockError(iso: string): Promise<string | null> {
-  await requireSession();
+  await requireAuth();
   const taxYear = taxYearFor(iso);
   const [r] = await db
     .select({ status: t1Returns.status })
@@ -100,6 +100,7 @@ export type LiveT1Aggregate = {
 };
 
 export async function loadLiveT1Aggregate(taxYear: number): Promise<LiveT1Aggregate> {
+  await requireAuth();
   const start = `${taxYear}-01-01`;
   const end = `${taxYear}-12-31`;
 
@@ -144,7 +145,7 @@ export async function loadLiveT1Aggregate(taxYear: number): Promise<LiveT1Aggreg
 
 export async function upsertDraftT1Return(taxYear: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
 
     const [existing] = await db
       .select()
@@ -215,7 +216,7 @@ export async function fileT1Return(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = fileSchema.safeParse({
       craConfirmationNumber: fd.get("craConfirmationNumber"),
       filedAt: fd.get("filedAt"),
@@ -364,7 +365,7 @@ export async function fileT1Return(
 
 export async function unfileT1Return(taxYear: number, expectedVersion: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db
       .select()
       .from(t1Returns)
@@ -429,7 +430,7 @@ export async function unfileT1Return(taxYear: number, expectedVersion: number): 
 
 export async function generateT1Pdf(taxYear: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [row] = await db
       .select()
       .from(t1Returns)
@@ -481,13 +482,13 @@ export async function generateT1Pdf(taxYear: number): Promise<ActionResult> {
 // ————————————————————————————————————————————————————————————————
 
 export async function listT1Returns(): Promise<T1Return[]> {
-  await requireSession();
+  await requireAuth();
   return db.select().from(t1Returns).orderBy(desc(t1Returns.taxYear));
 }
 
 /** Candidate-CY detection — used by /personal-tax list page's "Start CY X" CTA. */
 export async function listTaxYearsWithActivity(): Promise<number[]> {
-  await requireSession();
+  await requireAuth();
   return taxYearsWithActivity();
 }
 
@@ -498,7 +499,7 @@ export async function listTaxYearsWithActivity(): Promise<number[]> {
 
 export async function syncT1Deadlines(): Promise<ActionResult> {
   try {
-    await requireSession();
+    await requireAuth();
     const years = await taxYearsWithActivity();
     if (years.length === 0) return { ok: "No CYs with activity yet." };
 

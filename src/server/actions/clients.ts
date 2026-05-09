@@ -10,7 +10,7 @@ import { bumpVersion, parseExpectedVersion, versionConflictError } from "@/lib/o
 
 type ActionResult = { ok?: string; error?: string };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -63,7 +63,7 @@ function parseClientForm(fd: FormData) {
 
 export async function createClient(_prev: ActionResult | undefined, fd: FormData): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = parseClientForm(fd);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
@@ -78,7 +78,7 @@ export async function createClient(_prev: ActionResult | undefined, fd: FormData
 
 export async function updateClient(id: string, _prev: ActionResult | undefined, fd: FormData): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = parseClientForm(fd);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
@@ -93,7 +93,7 @@ export async function updateClient(id: string, _prev: ActionResult | undefined, 
 
 export async function archiveClient(id: string): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     // refuse to archive if any active contracts
     const active = await db
       .select({ id: contracts.id })
@@ -113,7 +113,7 @@ export async function archiveClient(id: string): Promise<ActionResult> {
 
 export async function restoreClient(id: string): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     await db.update(clients).set({ archived: false }).where(eq(clients.id, id));
     await audit(email, `clients:restore:${id}`, {});
     revalidate();
@@ -168,7 +168,7 @@ export async function createContract(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = parseContractForm(clientId, fd);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
@@ -191,7 +191,7 @@ export async function updateContract(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const expectedVersion = parseExpectedVersion(fd);
     const [existing] = await db.select().from(contracts).where(eq(contracts.id, id));
     if (!existing) return { error: "Contract not found" };
@@ -229,7 +229,7 @@ export async function updateContract(
 
 export async function archiveContract(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db.select().from(contracts).where(eq(contracts.id, id));
     if (!existing) return { error: "Contract not found" };
     if (existing.version !== expectedVersion) {
@@ -265,7 +265,7 @@ export async function archiveContract(id: string, expectedVersion: number): Prom
 
 export async function reactivateContract(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db.select().from(contracts).where(eq(contracts.id, id));
     if (!existing) return { error: "Contract not found" };
     if (existing.version !== expectedVersion) {

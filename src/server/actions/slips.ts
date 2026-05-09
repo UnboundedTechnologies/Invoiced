@@ -22,7 +22,7 @@ import { t4BoxesToCsv, t4aBoxesToCsv, t5BoxesToCsv, type SlipCsvPayer } from "@/
 type PdfActionResult = { ok?: string; error?: string; pdfBase64?: string; filename?: string };
 type CsvActionResult = { ok?: string; error?: string; csvBase64?: string; filename?: string };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -69,19 +69,19 @@ async function slipLockError(
 
 /** Block if a T4 slip is filed for the paycheque's pay-date calendar year. */
 export async function t4SlipLockError(payDate: string): Promise<string | null> {
-  await requireSession();
+  await requireAuth();
   return slipLockError(payDate, "T4", "Paycheque edit");
 }
 
 /** Block if a T5 slip is filed for the dividend's paid-date calendar year. */
 export async function t5SlipLockError(paidDate: string): Promise<string | null> {
-  await requireSession();
+  await requireAuth();
   return slipLockError(paidDate, "T5", "Dividend edit");
 }
 
 /** Block if a T4A slip is filed for the loan-entry's entry-date calendar year. */
 export async function t4aSlipLockError(entryDate: string): Promise<string | null> {
-  await requireSession();
+  await requireAuth();
   return slipLockError(entryDate, "T4A", "Loan-ledger edit");
 }
 
@@ -91,14 +91,14 @@ export async function t4aSlipLockError(entryDate: string): Promise<string | null
 
 /** All slip rows (any type, any status — including voided) ordered newest tax year first. */
 export async function listAllSlips(): Promise<Slip[]> {
-  await requireSession();
+  await requireAuth();
   return db.select().from(slips).orderBy(desc(slips.taxYear), desc(slips.createdAt));
 }
 
 /** Candidate CY detection for slips. A CY is a slip candidate if it has activity
  *  (paycheques/dividends/loan entries) AND no active (non-void) T4+T5 pair yet. */
 export async function listSlipCandidateYears(): Promise<number[]> {
-  await requireSession();
+  await requireAuth();
   const years = await taxYearsWithActivity();
   // Even years with filed T4 only (no T5) still show up — `/slips/[cy]` shows both cards.
   return years.sort((a, b) => b - a);
@@ -115,7 +115,7 @@ export type SlipPreview = {
 
 /** Full preview for a tax year: live T4/T5/T4A boxes from aggregators + any existing slip rows. */
 export async function loadSlipPreview(taxYear: number): Promise<SlipPreview> {
-  await requireSession();
+  await requireAuth();
   const [t4, t5, t4a, rows] = await Promise.all([
     buildT4SlipBoxes(taxYear),
     buildT5SlipBoxes(taxYear),
@@ -127,7 +127,10 @@ export async function loadSlipPreview(taxYear: number): Promise<SlipPreview> {
     const typed = rows.filter((r) => r.type === type);
     const active = typed.find((r) => r.status !== "void");
     if (active) return active;
-    return typed.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0] ?? null;
+    return typed.reduce<Slip | null>(
+      (newest, r) => (newest === null || r.createdAt > newest.createdAt ? r : newest),
+      null,
+    );
   };
   return {
     taxYear,
@@ -151,7 +154,7 @@ async function requireSettings() {
 
 export async function generateT4WorkingCopyPdf(taxYear: number): Promise<PdfActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [boxes, s, bannerDataUri] = await Promise.all([
       buildT4SlipBoxes(taxYear),
       requireSettings(),
@@ -212,7 +215,7 @@ export async function generateT4WorkingCopyPdf(taxYear: number): Promise<PdfActi
 
 export async function generateT4aWorkingCopyPdf(taxYear: number): Promise<PdfActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [boxes, s, bannerDataUri] = await Promise.all([
       buildT4ASlipBoxes(taxYear),
       requireSettings(),
@@ -274,7 +277,7 @@ export async function generateT4aWorkingCopyPdf(taxYear: number): Promise<PdfAct
 
 export async function generateT5WorkingCopyPdf(taxYear: number): Promise<PdfActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [boxes, s, bannerDataUri] = await Promise.all([
       buildT5SlipBoxes(taxYear),
       requireSettings(),
@@ -359,7 +362,7 @@ function csvPayer(s: {
 
 export async function generateT4WorkingCopyCsv(taxYear: number): Promise<CsvActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [boxes, s] = await Promise.all([buildT4SlipBoxes(taxYear), requireSettings()]);
     if (boxes.paychequeCount === 0) {
       return { error: `No issued paycheques in CY ${taxYear} — nothing to generate.` };
@@ -384,7 +387,7 @@ export async function generateT4WorkingCopyCsv(taxYear: number): Promise<CsvActi
 
 export async function generateT4aWorkingCopyCsv(taxYear: number): Promise<CsvActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [boxes, s] = await Promise.all([buildT4ASlipBoxes(taxYear), requireSettings()]);
     if (boxes.box117Cents === 0) {
       return { error: `No shareholder-loan benefits in CY ${taxYear} — nothing to generate.` };
@@ -409,7 +412,7 @@ export async function generateT4aWorkingCopyCsv(taxYear: number): Promise<CsvAct
 
 export async function generateT5WorkingCopyCsv(taxYear: number): Promise<CsvActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [boxes, s] = await Promise.all([buildT5SlipBoxes(taxYear), requireSettings()]);
     const count = boxes.eligible.count + boxes.nonEligible.count;
     if (count === 0) {
@@ -472,7 +475,7 @@ export async function fileT4Slip(
   fd: FormData,
 ): Promise<SlipActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       return { error: "Vercel Blob is not configured. Set BLOB_READ_WRITE_TOKEN in .env.local." };
     }
@@ -644,7 +647,7 @@ export async function fileT5Slip(
   fd: FormData,
 ): Promise<SlipActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       return { error: "Vercel Blob is not configured. Set BLOB_READ_WRITE_TOKEN in .env.local." };
     }
@@ -815,7 +818,7 @@ export async function fileT4aSlip(
   fd: FormData,
 ): Promise<SlipActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       return { error: "Vercel Blob is not configured. Set BLOB_READ_WRITE_TOKEN in .env.local." };
     }
@@ -975,7 +978,7 @@ export async function voidSlip(
   fd: FormData,
 ): Promise<SlipActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
 
     const parsed = voidSlipSchema.safeParse({
       reason: String(fd.get("reason") ?? "").trim(),

@@ -15,7 +15,7 @@ type ActionResult = { ok?: string; error?: string };
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_MIME = "application/pdf";
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -44,7 +44,7 @@ export async function uploadContractDocument(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const v = await validatedFile(fd);
     if (!("file" in v)) return v;
     const file = v.file;
@@ -124,7 +124,7 @@ export async function replaceContractDocument(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const v = await validatedFile(fd);
     if (!("file" in v)) return v;
     const file = v.file;
@@ -233,7 +233,7 @@ export async function unlinkContractDocument(
   expectedVersion: number,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db
       .select({ documentId: contracts.documentId, version: contracts.version })
       .from(contracts)
@@ -312,7 +312,7 @@ export async function linkVaultDocumentToContract(
   expectedVersion: number,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
 
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId));
     if (!doc) return { error: "Document not found." };
@@ -362,6 +362,7 @@ export async function linkVaultDocumentToContract(
 
 /** List vault documents available to link as a contract (category=contract, not archived, not already linked). */
 export async function listAvailableContractDocuments() {
+  await requireAuth();
   const linkedIds = await db
     .select({ id: contracts.documentId })
     .from(contracts)

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -147,12 +148,12 @@ export function OnboardForm({ email }: { email: string }) {
           {step === "qr" && payload && (
             <>
               <div className="flex flex-col items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={payload.qrDataUri}
                   alt="2FA enrollment QR code"
                   width={224}
                   height={224}
+                  unoptimized
                   className="rounded-md border border-border/60 bg-white"
                 />
                 <div className="w-full space-y-2">
@@ -237,7 +238,7 @@ export function OnboardForm({ email }: { email: string }) {
                 </Button>
               </div>
               <label className="flex items-center gap-2 text-sm">
-                <Input
+                <input
                   type="checkbox"
                   checked={savedConfirmed}
                   onChange={(e) => setSavedConfirmed(e.target.checked)}

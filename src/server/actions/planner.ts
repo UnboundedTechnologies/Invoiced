@@ -34,7 +34,7 @@ type ActionResult = {
   scenarioId?: string;
 };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -66,6 +66,7 @@ function sha256(s: string): string {
 // ————————————————————————————————————————————————————————————————
 
 export async function loadBaseline(fiscalYear: number): Promise<BaselineFromActuals> {
+  await requireAuth();
   const { fyeMonth, fyeDay } = await getFye();
   const period = hstPeriodFor(fiscalYear, fyeMonth, fyeDay);
 
@@ -149,7 +150,7 @@ export async function loadBaseline(fiscalYear: number): Promise<BaselineFromActu
 
 export async function upsertDraftScenario(fiscalYear: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     // Already have a Custom row?
     const [existing] = await db
       .select()
@@ -257,7 +258,7 @@ export async function saveScenario(
   input: z.infer<typeof saveScenarioSchema>,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = saveScenarioSchema.safeParse(input);
     if (!parsed.success) {
       return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -373,7 +374,7 @@ export async function saveScenario(
 
 export async function pinScenario(id: string, fiscalYear: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
 
     // Atomic pin-flip: pin this row, unpin every other in the same FY.
     await db.execute(drizzleSql`
@@ -399,7 +400,7 @@ export async function pinScenario(id: string, fiscalYear: number): Promise<Actio
 
 export async function unpinScenario(id: string, fiscalYear: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     await db.batch([
       db
         .update(plannerScenarios)
@@ -426,7 +427,7 @@ export async function unpinScenario(id: string, fiscalYear: number): Promise<Act
 
 export async function deleteScenario(id: string): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [row] = await db
       .select()
       .from(plannerScenarios)
@@ -457,7 +458,7 @@ export async function deleteScenario(id: string): Promise<ActionResult> {
 // ————————————————————————————————————————————————————————————————
 
 export async function listScenariosForFy(fiscalYear: number): Promise<PlannerScenario[]> {
-  await requireSession();
+  await requireAuth();
   return db
     .select()
     .from(plannerScenarios)
@@ -466,7 +467,7 @@ export async function listScenariosForFy(fiscalYear: number): Promise<PlannerSce
 }
 
 export async function listAllScenarios(): Promise<PlannerScenario[]> {
-  await requireSession();
+  await requireAuth();
   return db
     .select()
     .from(plannerScenarios)

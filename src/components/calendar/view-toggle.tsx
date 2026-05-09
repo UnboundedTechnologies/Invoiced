@@ -1,10 +1,19 @@
 "use client";
 
+import { Suspense } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { CalendarDays, List } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function ViewToggle({ current }: { current: "calendar" | "list" }) {
+export function ViewToggle(props: { current: "calendar" | "list" }) {
+  return (
+    <Suspense fallback={null}>
+      <ViewToggleInner {...props} />
+    </Suspense>
+  );
+}
+
+function ViewToggleInner({ current }: { current: "calendar" | "list" }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
