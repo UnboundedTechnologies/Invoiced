@@ -118,11 +118,11 @@ export function LoanEntryRow({
         <td className="px-4 py-3 text-center font-mono text-xs text-muted-foreground">
           FY {entry.fiscalYear}
         </td>
-        <td className={cn("px-4 py-3 text-right font-medium tabular-nums", amountTone)}>
+        <td className={cn("px-4 py-3 text-right font-medium", amountTone)}>
           {sign}
           {formatCAD(entry.amountCents)}
         </td>
-        <td className="px-4 py-3 text-right font-mono text-xs tabular-nums text-muted-foreground">
+        <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">
           {formatCAD(runningBalanceCents)}
         </td>
         <td className="px-2 py-3">

@@ -399,7 +399,7 @@ export default async function DashboardPage() {
               <div className="text-xs uppercase tracking-wide text-muted-foreground">
                 Revenue trend
               </div>
-              <div className="text-3xl font-bold leading-none tracking-tight tabular-nums">
+              <div className="text-3xl font-bold leading-none tracking-tight">
                 {formatCAD(trend12moTotal)}
               </div>
               <div className="text-xs text-muted-foreground">

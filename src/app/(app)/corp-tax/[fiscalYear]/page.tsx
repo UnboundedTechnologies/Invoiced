@@ -162,7 +162,7 @@ export default async function CorpTaxDetailPage({
             </div>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-2xl font-bold tabular-nums">{formatCAD(taxable)}</div>
+            <div className="text-2xl font-bold">{formatCAD(taxable)}</div>
             <div className="mt-1 text-[11px] text-muted-foreground">
               On {formatCAD(live.inputs.revenueCents)} revenue
             </div>
@@ -180,7 +180,7 @@ export default async function CorpTaxDetailPage({
             </div>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-2xl font-bold tabular-nums">{formatCAD(totalTax)}</div>
+            <div className="text-2xl font-bold">{formatCAD(totalTax)}</div>
             <div className="mt-1 text-[11px] text-muted-foreground">
               Fed + Ontario combined
             </div>
@@ -198,7 +198,7 @@ export default async function CorpTaxDetailPage({
             </div>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-2xl font-bold tabular-nums">{formatCAD(dividendRefund)}</div>
+            <div className="text-2xl font-bold">{formatCAD(dividendRefund)}</div>
             <div className="mt-1 text-[11px] text-muted-foreground">
               ERDTOH + NERDTOH refund (Schedule 3)
             </div>
@@ -236,7 +236,7 @@ export default async function CorpTaxDetailPage({
               <tbody>
                 <tr className="border-b border-border/30">
                   <td className="px-4 py-2.5">Revenue (taxable supplies, ex-HST)</td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                  <td className="px-4 py-2.5 text-right font-mono">
                     {formatCAD(live.inputs.revenueCents)}
                   </td>
                 </tr>
@@ -244,37 +244,37 @@ export default async function CorpTaxDetailPage({
                   <td className="px-4 py-2.5 text-muted-foreground">
                     Operating expenses (meals 50%, capital excluded)
                   </td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums text-muted-foreground">
+                  <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">
                     ({formatCAD(live.inputs.operatingExpensesCents)})
                   </td>
                 </tr>
                 <tr className="border-b border-border/30">
                   <td className="px-4 py-2.5 text-muted-foreground">Salary paid (gross)</td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums text-muted-foreground">
+                  <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">
                     ({formatCAD(live.inputs.salaryCents)})
                   </td>
                 </tr>
                 <tr className="border-b border-border/30">
                   <td className="px-4 py-2.5 text-muted-foreground">Employer CPP + CPP2</td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums text-muted-foreground">
+                  <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">
                     ({formatCAD(live.inputs.employerCppCents)})
                   </td>
                 </tr>
                 <tr className="border-b border-border/30">
                   <td className="px-4 py-2.5 text-muted-foreground">CCA claimed (Schedule 8)</td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums text-muted-foreground">
+                  <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">
                     ({formatCAD(live.inputs.ccaClaimedCents)})
                   </td>
                 </tr>
                 <tr className="border-t border-border/70 bg-muted/20">
                   <td className="px-4 py-3 font-semibold">Net income for tax</td>
-                  <td className="px-4 py-3 text-right font-mono font-semibold tabular-nums">
+                  <td className="px-4 py-3 text-right font-mono font-semibold">
                     {formatCAD(live.result.netIncomeForTaxCents)}
                   </td>
                 </tr>
                 <tr className="border-t border-border/70 bg-muted/10">
                   <td className="px-4 py-3 font-semibold">Taxable income</td>
-                  <td className="px-4 py-3 text-right font-mono font-semibold tabular-nums">
+                  <td className="px-4 py-3 text-right font-mono font-semibold">
                     {formatCAD(live.result.taxableIncomeCents)}
                   </td>
                 </tr>
@@ -297,7 +297,7 @@ export default async function CorpTaxDetailPage({
               <tbody>
                 <tr className="border-b border-border/30">
                   <td className="px-4 py-2.5">Business limit (ITA s.125(2))</td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                  <td className="px-4 py-2.5 text-right font-mono">
                     {formatCAD(live.result.sbdBusinessLimitCents)}
                   </td>
                 </tr>
@@ -305,19 +305,19 @@ export default async function CorpTaxDetailPage({
                   <td className="px-4 py-2.5 text-muted-foreground">
                     Passive-income grind · prior AAII {formatCAD(live.priorYearAaiiCents)}
                   </td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums text-muted-foreground">
+                  <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">
                     ({formatCAD(live.result.sbdGrindCents)})
                   </td>
                 </tr>
                 <tr className="border-t border-border/70 bg-muted/20">
                   <td className="px-4 py-3 font-semibold">Limit after grind</td>
-                  <td className="px-4 py-3 text-right font-mono font-semibold tabular-nums">
+                  <td className="px-4 py-3 text-right font-mono font-semibold">
                     {formatCAD(live.result.sbdLimitAfterGrindCents)}
                   </td>
                 </tr>
                 <tr className="border-b border-border/30">
                   <td className="px-4 py-2.5 text-emerald-400">SBD-eligible income</td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums text-emerald-400">
+                  <td className="px-4 py-2.5 text-right font-mono text-emerald-400">
                     {formatCAD(live.result.sbdEligibleCents)}
                   </td>
                 </tr>
@@ -325,7 +325,7 @@ export default async function CorpTaxDetailPage({
                   <td className="px-4 py-2.5 text-amber-400">
                     Full-rate income (taxed at general rate)
                   </td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums text-amber-400">
+                  <td className="px-4 py-2.5 text-right font-mono text-amber-400">
                     {formatCAD(live.result.fullRateIncomeCents)}
                   </td>
                 </tr>
@@ -355,15 +355,15 @@ export default async function CorpTaxDetailPage({
               <tbody>
                 <tr className="border-b border-border/30">
                   <td className="px-4 py-2.5">Federal SBD portion</td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">9.00%</td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                  <td className="px-4 py-2.5 text-right font-mono">9.00%</td>
+                  <td className="px-4 py-2.5 text-right font-mono">
                     {formatCAD(live.result.fedSbdPortionCents)}
                   </td>
                 </tr>
                 <tr className="border-b border-border/30">
                   <td className="px-4 py-2.5">Federal general portion (GRR)</td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">15.00%</td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                  <td className="px-4 py-2.5 text-right font-mono">15.00%</td>
+                  <td className="px-4 py-2.5 text-right font-mono">
                     {formatCAD(live.result.fedGeneralPortionCents)}
                   </td>
                 </tr>
@@ -371,38 +371,38 @@ export default async function CorpTaxDetailPage({
                   <td className="px-4 py-2.5">
                     Ontario SBD portion (blended {fmtBps(live.result.ontarioBlendedSbdRateBps)})
                   </td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                  <td className="px-4 py-2.5 text-right font-mono">
                     {fmtBps(live.result.ontarioBlendedSbdRateBps)}
                   </td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                  <td className="px-4 py-2.5 text-right font-mono">
                     {formatCAD(live.result.ontarioSbdPortionCents)}
                   </td>
                 </tr>
                 <tr className="border-b border-border/30">
                   <td className="px-4 py-2.5">Ontario general portion</td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">11.50%</td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                  <td className="px-4 py-2.5 text-right font-mono">11.50%</td>
+                  <td className="px-4 py-2.5 text-right font-mono">
                     {formatCAD(live.result.ontarioGeneralPortionCents)}
                   </td>
                 </tr>
                 <tr className="border-t border-border/70 bg-muted/10">
                   <td className="px-4 py-3 font-semibold">Federal total</td>
                   <td className="px-4 py-3"></td>
-                  <td className="px-4 py-3 text-right font-mono font-semibold tabular-nums">
+                  <td className="px-4 py-3 text-right font-mono font-semibold">
                     {formatCAD(live.result.fedTaxCents)}
                   </td>
                 </tr>
                 <tr className="bg-muted/10">
                   <td className="px-4 py-3 font-semibold">Ontario total</td>
                   <td className="px-4 py-3"></td>
-                  <td className="px-4 py-3 text-right font-mono font-semibold tabular-nums">
+                  <td className="px-4 py-3 text-right font-mono font-semibold">
                     {formatCAD(live.result.ontarioTaxCents)}
                   </td>
                 </tr>
                 <tr className="border-t border-border/70 bg-indigo-500/10">
                   <td className="px-4 py-3 font-semibold">Total tax owing</td>
                   <td className="px-4 py-3"></td>
-                  <td className="px-4 py-3 text-right font-mono font-semibold tabular-nums">
+                  <td className="px-4 py-3 text-right font-mono font-semibold">
                     {formatCAD(live.result.totalTaxCents)}
                   </td>
                 </tr>
@@ -440,19 +440,19 @@ export default async function CorpTaxDetailPage({
                   {live.ccaRows.map((r) => (
                     <tr key={r.class} className="border-b border-border/30">
                       <td className="px-4 py-2.5 font-mono">{r.class}</td>
-                      <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                      <td className="px-4 py-2.5 text-right font-mono">
                         {fmtBps(r.classRateBps)}
                       </td>
-                      <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                      <td className="px-4 py-2.5 text-right font-mono">
                         {formatCAD(r.openingUccCents)}
                       </td>
-                      <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                      <td className="px-4 py-2.5 text-right font-mono">
                         {formatCAD(r.additionsCents)}
                       </td>
-                      <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                      <td className="px-4 py-2.5 text-right font-mono">
                         ({formatCAD(r.halfYearAdjustmentCents)})
                       </td>
-                      <td className="px-4 py-2.5 text-right font-mono tabular-nums">
+                      <td className="px-4 py-2.5 text-right font-mono">
                         {formatCAD(r.ccaBaseCents)}
                       </td>
                       <td className="px-4 py-2.5 text-center">
@@ -463,10 +463,10 @@ export default async function CorpTaxDetailPage({
                           disabled={isFiled}
                         />
                       </td>
-                      <td className="px-4 py-2.5 text-right font-mono font-semibold tabular-nums">
+                      <td className="px-4 py-2.5 text-right font-mono font-semibold">
                         {formatCAD(r.ccaClaimedCents)}
                       </td>
-                      <td className="px-4 py-2.5 text-right font-mono tabular-nums text-muted-foreground">
+                      <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">
                         {formatCAD(r.closingUccCents)}
                       </td>
                     </tr>
@@ -475,7 +475,7 @@ export default async function CorpTaxDetailPage({
                     <td className="px-4 py-3 font-semibold" colSpan={7}>
                       Total CCA
                     </td>
-                    <td className="px-4 py-3 text-right font-mono font-semibold tabular-nums">
+                    <td className="px-4 py-3 text-right font-mono font-semibold">
                       {formatCAD(live.inputs.ccaClaimedCents)}
                     </td>
                     <td className="px-4 py-3"></td>
@@ -647,20 +647,20 @@ function PoolCard({
       <div className="mt-3 space-y-1 text-xs">
         <div className="flex justify-between">
           <span className="text-muted-foreground">Opening</span>
-          <span className="font-mono tabular-nums">{formatCAD(opening)}</span>
+          <span className="font-mono">{formatCAD(opening)}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-muted-foreground">Additions</span>
-          <span className="font-mono tabular-nums">{formatCAD(addition)}</span>
+          <span className="font-mono">{formatCAD(addition)}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-muted-foreground">{usedLabel}</span>
-          <span className="font-mono tabular-nums">({formatCAD(used)})</span>
+          <span className="font-mono">({formatCAD(used)})</span>
         </div>
       </div>
       <div className="mt-3 flex items-baseline justify-between gap-2 border-t border-border/50 pt-2">
         <span className="text-xs font-semibold uppercase tracking-wider">Closing</span>
-        <span className={`font-mono text-base font-bold tabular-nums ${t.text}`}>
+        <span className={`font-mono text-base font-bold ${t.text}`}>
           {formatCAD(closing)}
         </span>
       </div>
@@ -690,7 +690,7 @@ function ActivityRow({
       </div>
       <div className="flex items-center gap-3">
         {right ?? null}
-        <span className="rounded-md bg-muted/40 px-2 py-0.5 text-xs font-semibold tabular-nums">
+        <span className="rounded-md bg-muted/40 px-2 py-0.5 text-xs font-semibold">
           {count}
         </span>
       </div>

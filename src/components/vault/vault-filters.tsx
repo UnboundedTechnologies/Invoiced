@@ -83,7 +83,7 @@ export function VaultFilters({ counts }: { counts: CountMap }) {
           )}
         >
           All
-          <span className="rounded-sm bg-background/60 px-1 py-px text-[10px] tabular-nums text-muted-foreground">
+          <span className="rounded-sm bg-background/60 px-1 py-px text-[10px] text-muted-foreground">
             {counts.all ?? 0}
           </span>
         </button>
@@ -106,7 +106,7 @@ export function VaultFilters({ counts }: { counts: CountMap }) {
               {CATEGORY_LABEL[c]}
               <span
                 className={cn(
-                  "rounded-sm px-1 py-px text-[10px] tabular-nums",
+                  "rounded-sm px-1 py-px text-[10px]",
                   active ? "bg-background/60" : "bg-background/50 text-muted-foreground",
                 )}
               >

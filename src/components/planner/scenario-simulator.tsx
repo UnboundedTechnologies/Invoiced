@@ -352,7 +352,7 @@ function OutcomeGrid({ result }: { result: ScenarioResult }) {
                 {c.label}
               </div>
             </div>
-            <div className="mt-2 font-mono text-xl font-semibold tabular-nums">
+            <div className="mt-2 font-mono text-xl font-semibold">
               {formatCAD(c.value)}
             </div>
           </div>
@@ -407,7 +407,7 @@ function Row({
         {label}
         {hint ? <span className="ml-1 text-[10px] text-muted-foreground/70">· {hint}</span> : null}
       </span>
-      <span className="font-mono tabular-nums">{value}</span>
+      <span className="font-mono">{value}</span>
     </div>
   );
 }
@@ -427,7 +427,7 @@ function FieldBlock({
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <Label className="text-sm">{label}</Label>
-        <span className="font-mono text-sm tabular-nums">{formatCAD(value)}</span>
+        <span className="font-mono text-sm">{formatCAD(value)}</span>
       </div>
       <div className="flex items-center gap-2">{children}</div>
       {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
@@ -456,7 +456,7 @@ function NumberInputCents({
         if (!Number.isFinite(dollars) || dollars < 0) return;
         onChange(Math.round(dollars) * 100);
       }}
-      className="h-8 max-w-[10rem] font-mono tabular-nums"
+      className="h-8 max-w-[10rem] font-mono"
       data-gramm="false"
     />
   );
@@ -481,7 +481,7 @@ function SliderBlock({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <Label className="text-sm">{label}</Label>
-        <span className="font-mono text-sm tabular-nums">{formatCAD(value)}</span>
+        <span className="font-mono text-sm">{formatCAD(value)}</span>
       </div>
       <Slider
         value={[value]}
@@ -589,7 +589,7 @@ function SaveScenarioButton({
             )}
           </div>
           <div className="rounded-md border border-border/40 bg-card/30 p-3 text-[11px] text-muted-foreground">
-            <div className="grid grid-cols-2 gap-1 font-mono tabular-nums">
+            <div className="grid grid-cols-2 gap-1 font-mono">
               <span>Corp tax</span>
               <span className="text-right">{formatCAD(result.corpTaxCents)}</span>
               <span>Personal tax</span>
