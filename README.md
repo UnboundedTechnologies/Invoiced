@@ -1,4 +1,4 @@
-# Unbounded Technologies Inc. · Invoicedv
+# Unbounded Technologies Inc. · Invoiced
 
 [![React Doctor](https://github.com/UnboundedTechnologies/Invoiced/actions/workflows/react-doctor.yml/badge.svg?branch=main)](https://github.com/UnboundedTechnologies/Invoiced/actions/workflows/react-doctor.yml)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org)
