@@ -198,12 +198,12 @@ export function ExpenseForm({
         </Select>
         {category === "meals_entertainment" && (
           <p className="text-[11px] text-amber-400">
-            Record the full receipt amount here. CRA caps the deduction at 50% — applied at tax time.
+            Record the full receipt amount here. CRA caps the deduction at 50%, applied at tax time.
           </p>
         )}
         {isCapital && (
           <p className="text-[11px] text-sky-400">
-            Capital asset — fill out CCA class below. Full acquisition cost is recorded; depreciation happens at T2 time.
+            Capital asset: fill out CCA class below. Full acquisition cost is recorded; depreciation happens at T2 time.
           </p>
         )}
       </div>

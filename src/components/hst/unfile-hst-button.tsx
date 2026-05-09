@@ -50,7 +50,7 @@ export function UnfileHstButton({ fiscalYear, version }: { fiscalYear: number; v
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Unfile HST return — FY {fiscalYear}?</AlertDialogTitle>
+            <AlertDialogTitle>Unfile HST return, FY {fiscalYear}?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2">
                 <p>
@@ -63,7 +63,7 @@ export function UnfileHstButton({ fiscalYear, version }: { fiscalYear: number; v
                   number from your corrected submission.
                 </p>
                 <p className="text-xs text-amber-400">
-                  Use only when CRA needs you to amend — not as an undo button.
+                  Use only when CRA needs you to amend, not as an undo button.
                 </p>
               </div>
             </AlertDialogDescription>

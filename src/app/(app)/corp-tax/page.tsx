@@ -83,7 +83,7 @@ export default async function CorpTaxPage() {
             <CardDescription>
               Start a return for a fiscal year with activity. Every number is
               computed live from invoices, expenses, paycheques, and dividends
-              until you click File — after that the snapshot is frozen and the
+              until you click File. After that the snapshot is frozen and the
               FY's rows are locked from edits.
             </CardDescription>
           </CardHeader>

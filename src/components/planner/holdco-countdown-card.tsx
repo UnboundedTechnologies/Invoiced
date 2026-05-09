@@ -78,7 +78,7 @@ export function HoldcoCountdownCard({
           <div>
             <CardTitle className="text-base">Holdco / QSBC readiness</CardTitle>
             <CardDescription>
-              Display-only — no structure is created. Playbook trigger: $200K retained earnings OR a 24-month exit horizon.
+              Display-only, no structure is created. Playbook trigger: $200K retained earnings OR a 24-month exit horizon.
             </CardDescription>
           </div>
         </div>

@@ -61,7 +61,7 @@ export function FileT2Button({
           <form action={action}>
             <input type="hidden" name="expectedVersion" value={version} />
             <AlertDialogHeader>
-              <AlertDialogTitle>File T2 return — FY {fiscalYear}</AlertDialogTitle>
+              <AlertDialogTitle>File T2 return, FY {fiscalYear}</AlertDialogTitle>
               <AlertDialogDescription asChild>
                 <div className="space-y-2">
                   <p>
@@ -75,7 +75,7 @@ export function FileT2Button({
                     ) : null}
                     . Locks every invoice, expense, paycheque, dividend, and loan-ledger
                     entry in this fiscal year against edits or deletion. Corrections after
-                    filing route through CRA form T2A — cannot be reversed from within Invoiced.
+                    filing route through CRA form T2A, and cannot be reversed from within Invoiced.
                   </p>
                 </div>
               </AlertDialogDescription>

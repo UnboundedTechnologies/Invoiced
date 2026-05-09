@@ -94,7 +94,7 @@ export default async function CalendarPage({
         <div className="flex items-start gap-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-300/90">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
           <div>
-            No incorporation date set — your Ontario annual return deadline won&rsquo;t
+            No incorporation date set, so your Ontario annual return deadline won&rsquo;t
             be derived.{" "}
             <Link href="/settings" className="underline hover:text-amber-200">
               Set it in Settings → Fiscal

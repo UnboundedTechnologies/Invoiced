@@ -50,7 +50,7 @@ export function UnfileT2Button({ fiscalYear, version }: { fiscalYear: number; ve
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Unfile T2 — FY {fiscalYear}?</AlertDialogTitle>
+            <AlertDialogTitle>Unfile T2, FY {fiscalYear}?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2">
                 <p>
@@ -61,10 +61,10 @@ export function UnfileT2Button({ fiscalYear, version }: { fiscalYear: number; ve
                 <p>
                   Frozen P&amp;L + pool balances stay on the row for audit trail; refile
                   overwrites them. <strong>tax_pools</strong> + <strong>cca_pools</strong>{" "}
-                  are not touched — they'll be overwritten on refile too.
+                  are not touched, they'll be overwritten on refile too.
                 </p>
                 <p className="text-xs text-amber-400">
-                  Blocked if FY {fiscalYear + 1} (or any later FY) T2 exists — the chain of
+                  Blocked if FY {fiscalYear + 1} (or any later FY) T2 exists. The chain of
                   pool opening balances would silently shift. Unfile downstream first.
                 </p>
               </div>

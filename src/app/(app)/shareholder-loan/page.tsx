@@ -130,7 +130,7 @@ export default async function ShareholderLoanPage() {
           <AlertTriangle className="size-4 shrink-0 text-amber-400" />
           <div className="text-xs text-muted-foreground">
             Latest configured prescribed rate ended {formatLongDate(lastRate.endDate)}. The engine
-            is falling forward at {lastRate.ratePercent}% — add the next quarter&rsquo;s rate when CRA
+            is falling forward at {lastRate.ratePercent}%. Add the next quarter&rsquo;s rate when CRA
             publishes it.
           </div>
         </div>
@@ -306,7 +306,7 @@ export default async function ShareholderLoanPage() {
                             +{formatCAD(a.inclusion15_2Cents)}
                           </span>
                         ) : (
-                          <span className="text-muted-foreground">—</span>
+                          <span className="text-muted-foreground">-</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-violet-400">

@@ -75,7 +75,7 @@ export function ReclassifyDrawDialog({
               outstanding from the draw on{" "}
               <span className="font-semibold text-foreground">{formatLongDate(drawDate)}</span> into a
               declared dividend. Writes the T5 dividend AND the matching repayment entry in a single
-              transaction — no chance of half-done state.
+              transaction. No chance of half-done state.
             </DialogDescription>
           </DialogHeader>
 

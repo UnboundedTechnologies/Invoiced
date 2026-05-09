@@ -66,14 +66,14 @@ export function FileReturnButton({
           <form action={action}>
             <input type="hidden" name="expectedVersion" value={version} />
             <AlertDialogHeader>
-              <AlertDialogTitle>File HST return — FY {fiscalYear}</AlertDialogTitle>
+              <AlertDialogTitle>File HST return, FY {fiscalYear}</AlertDialogTitle>
               <AlertDialogDescription asChild>
                 <div className="space-y-2">
                   <p>
                     Freezes the snapshot at <strong>{formatCAD(netCents)}</strong> net tax (
                     {method === "quick" ? "Quick Method" : "Regular Method"}) and locks all
                     invoices + expenses in this period against edits or deletion. This cannot
-                    be reversed from within Invoiced — corrections go on the next period&rsquo;s
+                    be reversed from within Invoiced. Corrections go on the next period&rsquo;s
                     return via CRA form GST189.
                   </p>
                 </div>

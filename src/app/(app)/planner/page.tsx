@@ -68,7 +68,7 @@ export default async function PlannerPage() {
             </div>
             <CardTitle>No scenarios yet</CardTitle>
             <CardDescription>
-              Open a fiscal year below to start simulating. The planner synthesizes a T4 from your chosen salary and runs the real T2 + T1 compute — same engines as /corp-tax and /personal-tax.
+              Open a fiscal year below to start simulating. The planner synthesizes a T4 from your chosen salary and runs the real T2 + T1 compute, using the same engines as /corp-tax and /personal-tax.
             </CardDescription>
           </CardHeader>
           <CardContent />

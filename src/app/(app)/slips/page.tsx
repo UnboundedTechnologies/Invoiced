@@ -149,7 +149,7 @@ export default async function SlipsPage() {
       )}
 
       <p className="text-xs text-muted-foreground">
-        Working copies only — this app computes the box values and prepares a PDF for
+        Working copies only. This app computes the box values and prepares a PDF for
         reference. You file the official T4/T5 slips via CRA Web Forms at canada.ca.
       </p>
     </div>

@@ -307,7 +307,7 @@ function FileDialog({
       <AlertDialogContent>
         <form action={formAction}>
           <AlertDialogHeader>
-            <AlertDialogTitle>File {kind} slip — CY {taxYear}</AlertDialogTitle>
+            <AlertDialogTitle>File {kind} slip, CY {taxYear}</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm">
                 <p>
@@ -425,7 +425,7 @@ function VoidDialog({
       <AlertDialogContent>
         <form action={formAction}>
           <AlertDialogHeader>
-            <AlertDialogTitle>Void {kind} slip — CY {taxYear}</AlertDialogTitle>
+            <AlertDialogTitle>Void {kind} slip, CY {taxYear}</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm">
                 <p>
@@ -436,7 +436,7 @@ function VoidDialog({
                 <p className="text-muted-foreground">
                   Use when a box value needs correcting before re-filing. CRA itself
                   requires an amended slip (T4-ADJ / T5-ADJ) for corrections after
-                  their submission has been accepted — the Invoiced void is separate
+                  their submission has been accepted; the Invoiced void is separate
                   from CRA&rsquo;s amendment process and only controls this app&rsquo;s locks.
                 </p>
               </div>

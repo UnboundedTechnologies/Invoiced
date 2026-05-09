@@ -161,7 +161,7 @@ export default async function SlipPreviewPage({
               </span>
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Working copy — re-key the values below into CRA Web Forms at canada.ca to file.
+              Working copy. Re-key the values below into CRA Web Forms at canada.ca to file.
             </p>
           </div>
 
@@ -243,7 +243,7 @@ export default async function SlipPreviewPage({
               <p>
                 <span className="text-muted-foreground">SIN:</span>{" "}
                 <span className="font-mono text-muted-foreground">
-                  not stored — enter on CRA form
+                  not stored, enter on CRA form
                 </span>
               </p>
               <p className="text-muted-foreground">
@@ -353,7 +353,7 @@ function T4Card({
             </span>
           ) : voided ? (
             <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-400">
-              Voided — preview reflects live data
+              Voided, preview reflects live data
             </span>
           ) : (
             <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400">
@@ -415,7 +415,7 @@ function T4ACard({
       <CardHeader className="pb-3">
         <CardTitle className="flex flex-wrap items-center gap-3 text-base">
           <FileCheck className="size-4 text-amber-400" />
-          T4A · Statement of Other Income (Box 117 — Loan Benefits)
+          T4A · Statement of Other Income (Box 117: Loan Benefits)
           {filed ? (
             <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400">
               <Lock className="size-3" />
@@ -423,7 +423,7 @@ function T4ACard({
             </span>
           ) : voided ? (
             <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-400">
-              Voided — preview reflects live data
+              Voided, preview reflects live data
             </span>
           ) : (
             <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400">
@@ -439,10 +439,10 @@ function T4ACard({
       </CardHeader>
       <CardContent className="space-y-1">
         <BoxRow box="Box 022" label="Income tax deducted (corp doesn't withhold on loan benefits)" amount={boxes.box022TaxWithheldCents} muted />
-        <BoxRow box="Box 117" label="Loan benefits — total filed value" amount={boxes.box117Cents} strong />
+        <BoxRow box="Box 117" label="Loan benefits, total filed value" amount={boxes.box117Cents} strong />
         <div className="pt-3 border-t border-border/30" />
         <p className="pt-2 pb-2 text-xs font-medium text-muted-foreground">
-          Audit breakdown (informational — not on the CRA T4A)
+          Audit breakdown (informational, not on the CRA T4A)
         </p>
         <BoxRow label="s.80.4(2) deemed-interest benefit (after interest-paid offset)" amount={boxes.breakdown.benefit80_4Cents} muted />
         <BoxRow label="s.15(2) inclusion (loan past 15(2.6) deadline)" amount={boxes.breakdown.inclusion15_2Cents} muted />
@@ -487,7 +487,7 @@ function T5Card({
             </span>
           ) : voided ? (
             <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-400">
-              Voided — preview reflects live data
+              Voided, preview reflects live data
             </span>
           ) : (
             <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400">

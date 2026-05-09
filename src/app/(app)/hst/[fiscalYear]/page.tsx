@@ -139,7 +139,7 @@ export default async function HstDetailPage({
         </Link>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">HST return — FY {fiscalYear}</h1>
+            <h1 className="text-3xl font-bold tracking-tight">HST return, FY {fiscalYear}</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {formatLongDate(period.start)} – {formatLongDate(period.end)} · due{" "}
               {formatLongDate(due)}
@@ -264,7 +264,7 @@ export default async function HstDetailPage({
                     )}
                     {breakEven.recommendation === "wash" && (
                       <span className="text-muted-foreground">
-                        Within $200 — either method works; Quick saves bookkeeping admin.
+                        Within $200; either method works; Quick saves bookkeeping admin.
                       </span>
                     )}
                   </div>
@@ -284,7 +284,7 @@ export default async function HstDetailPage({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            CRA line numbers — {activeMethod === "quick" ? "Quick Method" : "Regular Method"}
+            CRA line numbers: {activeMethod === "quick" ? "Quick Method" : "Regular Method"}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -322,7 +322,7 @@ export default async function HstDetailPage({
           <Separator />
           <div className="flex items-center justify-between px-4 py-4">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Line 109 — {netLabel}
+              Line 109: {netLabel}
             </div>
             <div className={`font-mono text-2xl font-bold ${netToneColor}`}>
               {formatCAD(Math.abs(shown.line109))}
@@ -377,7 +377,7 @@ export default async function HstDetailPage({
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
-                Expenses —{" "}
+                Expenses:{" "}
                 {activeMethod === "quick"
                   ? "capital assets (line 106)"
                   : "ITC contributions (lines 106 & 107)"}

@@ -206,7 +206,7 @@ function RemittanceCard({
             )}
           </div>
           <div className="text-sm font-medium leading-snug">
-            Source deductions — {remittance.periodStart} → {remittance.periodEnd}
+            Source deductions: {remittance.periodStart} → {remittance.periodEnd}
           </div>
           <div className="text-xs text-muted-foreground">
             {formatCAD(remittance.amountCents)} · managed on{" "}
@@ -265,7 +265,7 @@ function MarkCompleteInlineDialog({
         <form action={action}>
           <input type="hidden" name="id" value={deadlineId} />
           <DialogHeader>
-            <DialogTitle>Mark complete — {title}</DialogTitle>
+            <DialogTitle>Mark complete: {title}</DialogTitle>
             <DialogDescription>
               Paste the CRA / Ontario registry confirmation number if you have one (optional).
             </DialogDescription>

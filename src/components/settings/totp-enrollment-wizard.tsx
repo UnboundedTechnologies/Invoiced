@@ -209,7 +209,7 @@ export function TotpEnrollmentWizard({
           <div className="space-y-4 py-2">
             <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-300">
               These 10 codes are your only way back in if your phone is lost. Each works once. They are
-              hashed in the database — we cannot show them again.
+              hashed in the database, so we cannot show them again.
             </div>
             <Card className="border-border/60 bg-muted/30">
               <CardContent className="p-4">

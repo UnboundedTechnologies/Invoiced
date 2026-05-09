@@ -583,7 +583,7 @@ export default async function CorpTaxDetailPage({
           <CardContent>
             {live.warnings.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Nothing to flag — review the prep summary PDF and hand to the accountant.
+                Nothing to flag. Review the prep summary PDF and hand to the accountant.
               </p>
             ) : (
               <ul className="space-y-2 text-xs">

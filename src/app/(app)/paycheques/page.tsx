@@ -112,7 +112,7 @@ export default async function PaychequesPage() {
       <div className="flex items-start gap-3 rounded-md border border-sky-500/30 bg-sky-500/5 p-3 text-xs text-sky-300/90">
         <Shield className="mt-0.5 size-4 shrink-0 text-sky-400" />
         <div>
-          Paying yourself salary when PSB risk is red can backfire — if reassessed, only salary-to-incorporated-employee
+          Paying yourself salary when PSB risk is red can backfire. If reassessed, only salary-to-incorporated-employee
           is deductible, and every other deduction you took gets clawed back.{" "}
           <Link href="/psb" className="underline hover:text-sky-200">
             Check your PSB score

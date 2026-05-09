@@ -118,7 +118,7 @@ export function VaultTable({
                           {parent.label}
                         </Link>
                       ) : (
-                        <span className="text-[11px] text-muted-foreground">—</span>
+                        <span className="text-[11px] text-muted-foreground">-</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">

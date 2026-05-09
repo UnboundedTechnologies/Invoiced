@@ -210,7 +210,7 @@ export function OnboardForm({ email }: { email: string }) {
             <>
               <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-300">
                 These 10 codes are your only way back in if your phone is lost. Each works once. They are
-                hashed in the database — we cannot show them again.
+                hashed in the database, so we cannot show them again.
               </div>
               <div className="rounded-md border border-border/60 bg-muted/30 p-3">
                 <div className="grid grid-cols-2 gap-2 font-mono text-sm">
