@@ -19,7 +19,7 @@ import { bumpVersion, parseExpectedVersion, versionConflictError } from "@/lib/o
 type ActionResult = { ok?: string; error?: string };
 type CommitResult = { ok: true } | { error: string };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -92,7 +92,7 @@ const corpSchema = z
 
 export async function updateCorporation(_prev: ActionResult | undefined, fd: FormData): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = corpSchema.safeParse({
       corpLegalName: fd.get("corpLegalName"),
       businessNumber: fd.get("businessNumber"),
@@ -126,7 +126,7 @@ const payrollActivateSchema = z.object({
 
 export async function activatePayroll(_prev: ActionResult | undefined, fd: FormData): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = payrollActivateSchema.safeParse({ payrollAccount: fd.get("payrollAccount") });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
@@ -152,7 +152,7 @@ export async function activatePayroll(_prev: ActionResult | undefined, fd: FormD
 
 export async function deactivatePayroll(): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     // Refuse if any draft paycheque exists — deactivating only gates the
     // "New paycheque" UI button, not the edit/issue paths on existing drafts.
     // A draft issued after deactivation would leak through without the gate.
@@ -183,7 +183,7 @@ const payerRzActivateSchema = z.object({
 
 export async function activatePayerRz(_prev: ActionResult | undefined, fd: FormData): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = payerRzActivateSchema.safeParse({ payerRzAccount: fd.get("payerRzAccount") });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
@@ -208,7 +208,7 @@ export async function activatePayerRz(_prev: ActionResult | undefined, fd: FormD
 
 export async function deactivatePayerRz(): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     // No draft-slip guard yet (file/void actions land in 4E-4). When they ship,
     // mirror the payroll pattern: refuse deactivation while a draft T5 slip exists.
     const result = await commit(email, { payerRzActive: false }, "payer-rz-deactivate");
@@ -227,7 +227,7 @@ const directorSchema = z.object({
 
 export async function updateDirector(_prev: ActionResult | undefined, fd: FormData): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = directorSchema.safeParse({
       directorLegalName: fd.get("directorLegalName"),
       directorEmail: fd.get("directorEmail"),
@@ -259,7 +259,7 @@ const fiscalSchema = z.object({
 
 export async function updateFiscal(_prev: ActionResult | undefined, fd: FormData): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = fiscalSchema.safeParse({
       fiscalYearEndMonth: fd.get("fiscalYearEndMonth"),
       fiscalYearEndDay: fd.get("fiscalYearEndDay"),
@@ -317,7 +317,7 @@ const personalTaxSchema = z.object({
 
 export async function updatePersonalTax(_prev: ActionResult | undefined, fd: FormData): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = personalTaxSchema.safeParse({
       rrspRoomDollars: fd.get("rrspRoomDollars") ?? undefined,
       fhsaRoomDollars: fd.get("fhsaRoomDollars") ?? undefined,
@@ -351,7 +351,7 @@ const selfPaySchema = z.object({
 
 export async function updateSelfPay(_prev: ActionResult | undefined, fd: FormData): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = selfPaySchema.safeParse({
       paymentStrategy: fd.get("paymentStrategy"),
       targetAnnualSalaryDollars: fd.get("targetAnnualSalaryDollars"),
@@ -388,7 +388,7 @@ const brandingSchema = z.object({
 
 export async function updateBranding(_prev: ActionResult | undefined, fd: FormData): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = brandingSchema.safeParse({
       brandPrimaryHex: fd.get("brandPrimaryHex"),
       brandAccentHex: fd.get("brandAccentHex"),
@@ -427,7 +427,7 @@ export async function updateCorpTax(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = corpTaxSchema.safeParse({
       isCcpc: fd.get("isCcpc") === "on",
       priorYearAaiiDollars: fd.get("priorYearAaiiDollars"),

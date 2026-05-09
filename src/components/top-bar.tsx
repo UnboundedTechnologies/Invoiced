@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { MobileNav } from "./mobile-nav";
 
@@ -53,11 +54,14 @@ export function TopBar({ corpName }: { corpName: string }) {
           role="img"
           aria-label="Heroes walking through the landscape"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element -- next/image re-encodes animated GIFs into static frames, which kills the walk cycle */}
-          <img
+          {/* unoptimized: preserves animated GIF frames (next/image otherwise re-encodes to a still). */}
+          <Image
             src="/sprites/dq11nb.gif"
             alt=""
-            className="relative h-full w-full select-none object-cover object-[center_80%]"
+            fill
+            sizes="(min-width: 640px) 200px, 140px"
+            unoptimized
+            className="select-none object-cover object-[center_80%]"
             draggable={false}
           />
         </div>

@@ -22,7 +22,7 @@ type ActionResult = { ok?: string; error?: string };
 
 const TOTP_ISSUER = "Invoiced — Unbounded Technologies";
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -62,7 +62,7 @@ export async function enrollStart(): Promise<
   | { ok: false; error: string }
 > {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const key = getEncryptionKey();
 
     const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
@@ -110,7 +110,7 @@ export async function enrollVerify(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const key = getEncryptionKey();
     const parsed = codeSchema.safeParse({ code: String(fd.get("code") ?? "").replace(/\s+/g, "") });
     if (!parsed.success) {
@@ -156,7 +156,7 @@ export async function revoke(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const key = getEncryptionKey();
     const parsed = revokeSchema.safeParse({
       password: String(fd.get("password") ?? ""),

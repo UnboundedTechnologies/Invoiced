@@ -54,7 +54,7 @@ type ActionResult = {
   filename?: string;
 };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -82,7 +82,7 @@ function revalidate(fiscalYear?: number) {
 // ————————————————————————————————————————————————————————————————
 
 export async function t2PeriodLockError(iso: string): Promise<string | null> {
-  await requireSession();
+  await requireAuth();
   const { fyeMonth, fyeDay } = await getFye();
   const fiscalYear = fiscalYearFor(iso, fyeMonth, fyeDay);
   const [r] = await db
@@ -206,6 +206,7 @@ export type LiveT2Aggregate = {
 };
 
 export async function loadLiveT2Aggregate(fiscalYear: number): Promise<LiveT2Aggregate> {
+  await requireAuth();
   const { fyeMonth, fyeDay } = await getFye();
   const period = hstPeriodFor(fiscalYear, fyeMonth, fyeDay); // same FY period as HST — reused
 
@@ -398,7 +399,7 @@ export async function loadLiveT2Aggregate(fiscalYear: number): Promise<LiveT2Agg
 
 export async function upsertDraftT2Return(fiscalYear: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const { fyeMonth, fyeDay } = await getFye();
     const period = hstPeriodFor(fiscalYear, fyeMonth, fyeDay);
 
@@ -452,7 +453,7 @@ export async function setIsCcpc(
   value: boolean,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     await assertDraft(fiscalYear);
     await db.batch([
       db
@@ -483,7 +484,7 @@ export async function setPriorYearAaii(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     await assertDraft(fiscalYear);
     const parsed = aaiiSchema.safeParse({ amountDollars: fd.get("amountDollars") });
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid amount" };
@@ -518,7 +519,7 @@ export async function setCcaClaimFraction(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     await assertDraft(fiscalYear);
     const parsed = claimFractionSchema.safeParse({
       ccaClass: fd.get("ccaClass"),
@@ -574,7 +575,7 @@ export async function fileT2Return(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = fileSchema.safeParse({
       craConfirmationNumber: fd.get("craConfirmationNumber"),
       filedAt: fd.get("filedAt"),
@@ -808,7 +809,7 @@ export async function fileT2Return(
 
 export async function unfileT2Return(fiscalYear: number, expectedVersion: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db
       .select()
       .from(t2Returns)
@@ -888,7 +889,7 @@ export async function unfileT2Return(fiscalYear: number, expectedVersion: number
 
 export async function generateT2Pdf(fiscalYear: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [row] = await db
       .select()
       .from(t2Returns)
@@ -940,7 +941,7 @@ export async function generateT2Pdf(fiscalYear: number): Promise<ActionResult> {
 
 export async function exportGifiCsv(fiscalYear: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [row] = await db
       .select()
       .from(t2Returns)
@@ -989,6 +990,6 @@ export async function exportGifiCsv(fiscalYear: number): Promise<ActionResult> {
 // ————————————————————————————————————————————————————————————————
 
 export async function listT2Returns(): Promise<T2Return[]> {
-  await requireSession();
+  await requireAuth();
   return db.select().from(t2Returns).orderBy(desc(t2Returns.fiscalYear));
 }

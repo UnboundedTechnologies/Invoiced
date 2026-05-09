@@ -25,7 +25,7 @@ async function periodLockError(iso: string): Promise<string | null> {
 type ActionResult = { ok?: string; error?: string; expenseId?: string };
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
-const ALLOWED_MIMES = new Set([
+const ALLOWED_MIMES = [
   "application/pdf",
   "image/jpeg",
   "image/jpg",
@@ -33,9 +33,9 @@ const ALLOWED_MIMES = new Set([
   "image/webp",
   "image/heic",
   "image/heif",
-]);
+] as const;
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -146,7 +146,7 @@ type FileCheck =
 async function validatedReceiptFile(fd: FormData, fieldName = "receipt"): Promise<FileCheck> {
   const entry = fd.get(fieldName);
   if (!(entry instanceof File) || entry.size === 0 || !entry.name) return { kind: "none" };
-  if (!ALLOWED_MIMES.has(entry.type)) {
+  if (!(ALLOWED_MIMES as readonly string[]).includes(entry.type)) {
     return { kind: "error", error: "Receipt must be PDF, JPEG, PNG, WebP, or HEIC." };
   }
   if (entry.size > MAX_BYTES) {
@@ -187,7 +187,7 @@ export async function createExpense(
 ): Promise<ActionResult> {
   let uploadedBlobUrl: string | null = null;
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = parseForm(fd);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
     const data = parsed.data;
@@ -305,7 +305,7 @@ export async function updateExpense(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const expectedVersion = parseExpectedVersion(fd);
     const [existing] = await db.select().from(expenses).where(eq(expenses.id, id));
     if (!existing) return { error: "Expense not found." };
@@ -385,7 +385,7 @@ export async function updateExpense(
 
 export async function deleteExpense(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db.select().from(expenses).where(eq(expenses.id, id));
     if (!existing) return { error: "Expense not found." };
     if (existing.version !== expectedVersion) {
@@ -452,7 +452,7 @@ export async function uploadReceipt(
 ): Promise<ActionResult> {
   let uploadedBlobUrl: string | null = null;
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db.select().from(expenses).where(eq(expenses.id, expenseId));
     if (!existing) return { error: "Expense not found." };
     if (existing.version !== expectedVersion) {
@@ -523,7 +523,7 @@ export async function replaceReceipt(
 ): Promise<ActionResult> {
   let newBlobUrl: string | null = null;
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db.select().from(expenses).where(eq(expenses.id, expenseId));
     if (!existing) return { error: "Expense not found." };
     if (existing.version !== expectedVersion) {
@@ -605,7 +605,7 @@ export async function deleteReceipt(
   expectedVersion: number,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db.select().from(expenses).where(eq(expenses.id, expenseId));
     if (!existing) return { error: "Expense not found." };
     if (existing.version !== expectedVersion) {

@@ -23,7 +23,7 @@ import { bumpVersion, parseExpectedVersion, versionConflictError } from "@/lib/o
 
 type ActionResult = { ok?: string; error?: string };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -74,7 +74,7 @@ export async function createLoanEntry(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = parseEntry(fd);
     if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
     const { entryDate, type, amountDollars, description, sourceKind, sourceRef } = parsed.data;
@@ -121,7 +121,7 @@ export async function updateLoanEntry(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const expectedVersion = parseExpectedVersion(fd);
     const [existing] = await db
       .select()
@@ -204,7 +204,7 @@ export async function updateLoanEntry(
 
 export async function deleteLoanEntry(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db
       .select()
       .from(shareholderLoanEntries)
@@ -322,7 +322,7 @@ export async function upsertPrescribedRate(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = rateSchema.safeParse({
       startDate: String(fd.get("startDate") ?? "").trim(),
       endDate: String(fd.get("endDate") ?? "").trim(),
@@ -399,7 +399,7 @@ export async function upsertPrescribedRate(
 
 export async function deletePrescribedRate(id: string): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     await db.delete(prescribedRatePeriods).where(eq(prescribedRatePeriods.id, id));
     await db.insert(auditLog).values({
       actorEmail: email,
@@ -431,7 +431,7 @@ export async function reclassifyDrawAsDividend(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
 
     const parsed = reclassifySchema.safeParse({
       declaredDate: String(fd.get("declaredDate") ?? "").trim(),

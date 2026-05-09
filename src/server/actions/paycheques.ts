@@ -26,7 +26,7 @@ import { bumpVersion, versionConflictError } from "@/lib/optimistic-lock";
 
 type ActionResult = { ok?: string; error?: string };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -59,7 +59,7 @@ export async function createPaycheque(
 ): Promise<ActionResult> {
   let createdId: string | null = null;
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       return { error: "Vercel Blob is not configured. Set BLOB_READ_WRITE_TOKEN in .env.local." };
     }
@@ -245,7 +245,7 @@ export async function setPaychequeStatus(
   expectedVersion: number,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = statusSchema.safeParse(status);
     if (!parsed.success) return { error: "Invalid status." };
 
@@ -332,7 +332,7 @@ export async function setPaychequeStatus(
 
 export async function deleteDraftPaycheque(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [pq] = await db.select().from(paycheques).where(eq(paycheques.id, id));
     if (!pq) return { error: "Paycheque not found." };
     if (pq.version !== expectedVersion) {
@@ -400,7 +400,7 @@ export async function markRemittancePaid(
   confirmationNumber: string | null,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     await db
       .update(remittances)
       .set({ paidAt: new Date(), confirmationNumber })
@@ -420,7 +420,7 @@ export async function markRemittancePaid(
 
 export async function markRemittanceUnpaid(remittanceId: string): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     await db
       .update(remittances)
       .set({ paidAt: null, confirmationNumber: null })
@@ -440,7 +440,7 @@ export async function markRemittanceUnpaid(remittanceId: string): Promise<Action
 
 export async function deleteRemittance(remittanceId: string): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [row] = await db.select().from(remittances).where(eq(remittances.id, remittanceId));
     if (!row) return { error: "Remittance not found." };
     if (row.paidAt) return { error: "Paid remittances can't be deleted (audit trail)." };

@@ -32,7 +32,7 @@ import { bumpVersion, parseExpectedVersion, versionConflictError } from "@/lib/o
 
 type ActionResult = { ok?: string; error?: string; pdfBase64?: string };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -66,7 +66,7 @@ async function getFye() {
  * expenses/invoices don't need to know the HST schema shape.
  */
 export async function hstPeriodLockError(iso: string): Promise<string | null> {
-  await requireSession();
+  await requireAuth();
   const { fyeMonth, fyeDay } = await getFye();
   const fiscalYear = fiscalYearFor(iso, fyeMonth, fyeDay);
   const [r] = await db
@@ -97,6 +97,7 @@ export async function loadLiveAggregate({
   fiscalYear,
   isFirstQmFy,
 }: LiveAggregateArgs): Promise<LiveAggregateResult> {
+  await requireAuth();
   const { fyeMonth, fyeDay } = await getFye();
   const period = hstPeriodFor(fiscalYear, fyeMonth, fyeDay);
 
@@ -184,7 +185,7 @@ export async function loadLiveAggregate({
 
 export async function upsertDraftReturn(fiscalYear: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const { fyeMonth, fyeDay } = await getFye();
     const period = hstPeriodFor(fiscalYear, fyeMonth, fyeDay);
 
@@ -236,7 +237,7 @@ const methodSchema = z.enum(["regular", "quick"]);
 
 export async function setMethod(fiscalYear: number, method: string): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = methodSchema.safeParse(method);
     if (!parsed.success) return { error: "Invalid method." };
     const [existing] = await db
@@ -274,7 +275,7 @@ export async function setFirstQmFy(
   value: boolean,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db
       .select()
       .from(hstReturns)
@@ -316,7 +317,7 @@ export async function fileReturn(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = fileSchema.safeParse({
       craConfirmationNumber: fd.get("craConfirmationNumber"),
       filedAt: fd.get("filedAt"),
@@ -431,7 +432,7 @@ export async function fileReturn(
 
 export async function unfileHstReturn(fiscalYear: number, expectedVersion: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db
       .select()
       .from(hstReturns)
@@ -497,7 +498,7 @@ export async function unfileHstReturn(fiscalYear: number, expectedVersion: numbe
 
 export async function generateHstPdf(fiscalYear: number): Promise<ActionResult> {
   try {
-    await requireSession();
+    await requireAuth();
     const [row] = await db
       .select()
       .from(hstReturns)
@@ -575,7 +576,7 @@ export async function generateHstPdf(fiscalYear: number): Promise<ActionResult> 
     const pdfBase64 = Buffer.from(buffer).toString("base64");
 
     await db.insert(auditLog).values({
-      actorEmail: await requireSession(),
+      actorEmail: await requireAuth(),
       action: "download",
       target: `hst_returns:${fiscalYear}:pdf`,
       metadata: { status: row.status, method: row.method },
@@ -592,6 +593,6 @@ export async function generateHstPdf(fiscalYear: number): Promise<ActionResult> 
 // ——————————————————————————————————————————————————————————————
 
 export async function listReturns(): Promise<HstReturn[]> {
-  await requireSession();
+  await requireAuth();
   return db.select().from(hstReturns).orderBy(desc(hstReturns.fiscalYear));
 }

@@ -1,6 +1,6 @@
 "use server";
 
-import { signIn, signOut } from "../../../auth";
+import { auth, signIn, signOut } from "../../../auth";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
@@ -12,7 +12,10 @@ import { readPendingUserId, clearPendingCookie } from "@/lib/totp-pending";
 import { clearVault2faCookie } from "@/lib/vault-2fa-session";
 
 export async function loginAction(_prev: { error?: string } | undefined, formData: FormData) {
+  const session = await auth();
+  if (session?.user?.email) redirect("/dashboard");
   const emailRaw = String(formData.get("email") ?? "").toLowerCase();
+  let pendingFor2fa = false;
   try {
     await signIn("credentials", {
       email: formData.get("email"),
@@ -25,11 +28,13 @@ export async function loginAction(_prev: { error?: string } | undefined, formDat
       // cookie first. Distinguish "wrong password" from "2FA required" by
       // checking whether the cookie landed.
       const pendingUserId = await readPendingUserId();
-      if (pendingUserId) redirect("/login/2fa");
-      return { error: "Invalid email or password." };
+      if (!pendingUserId) return { error: "Invalid email or password." };
+      pendingFor2fa = true;
+    } else {
+      return { error: "Something went wrong. Please try again." };
     }
-    return { error: "Something went wrong. Please try again." };
   }
+  if (pendingFor2fa) redirect("/login/2fa");
 
   // Successful sign-in. If the user hasn't enrolled 2FA yet, skip the
   // dashboard hop and go straight to the forced-enrolment page (the
@@ -48,6 +53,8 @@ export async function login2faAction(
   _prev: { error?: string } | undefined,
   formData: FormData,
 ): Promise<{ error?: string } | undefined> {
+  const session = await auth();
+  if (session?.user?.email) redirect("/dashboard");
   const mode = String(formData.get("mode") ?? "2fa");
   const code = String(formData.get("code") ?? "").replace(/\s+/g, "");
   try {
@@ -65,11 +72,13 @@ export async function login2faAction(
 
 /** Cancel the in-flight 2FA step and bounce back to the login page. */
 export async function cancel2faAction() {
+  await auth();
   await clearPendingCookie();
   redirect("/login");
 }
 
 export async function logoutAction() {
+  await auth();
   // Clear the vault PIN cookie alongside the main session. Explicit attribute
   // match required — `__Host-` cookies ignore bare c.delete() in some browsers.
   const c = await cookies();

@@ -11,7 +11,7 @@ import { versionConflictError } from "@/lib/optimistic-lock";
 
 type ActionResult = { ok?: string; error?: string };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -67,7 +67,7 @@ export async function createContribution(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = contributionSchema.safeParse({
       appliedToTaxYear: fd.get("appliedToTaxYear"),
       kind: fd.get("kind"),
@@ -116,7 +116,7 @@ export async function createContribution(
 
 export async function deleteContribution(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db
       .select()
       .from(rrspContributions)

@@ -2,6 +2,7 @@
 
 import { useActionState, useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { PiggyBank, Plus, Trash2, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -113,7 +114,7 @@ export function ContributionsCard({
 
         {rrspRoomCents == null && fhsaRoomCents == null ? (
           <p className="text-[11px] text-muted-foreground">
-            Set your RRSP / FHSA room in <a className="underline" href="/settings">Settings → Personal tax</a>.
+            Set your RRSP / FHSA room in <Link className="underline" href="/settings">Settings → Personal tax</Link>.
           </p>
         ) : null}
       </CardContent>

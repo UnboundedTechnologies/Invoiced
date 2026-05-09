@@ -578,7 +578,6 @@ function SaveScenarioButton({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="My baseline"
-              autoFocus
               maxLength={64}
               data-gramm="false"
             />

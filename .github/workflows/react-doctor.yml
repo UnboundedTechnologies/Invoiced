@@ -1,0 +1,33 @@
+name: React Doctor
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - id: doctor
+        uses: millionco/react-doctor@main
+        with:
+          diff: main
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enforce score floor
+        run: |
+          score="${{ steps.doctor.outputs.score }}"
+          echo "react-doctor score: $score"
+          if [ -z "$score" ]; then
+            echo "::error::No score reported by react-doctor action."
+            exit 1
+          fi
+          if [ "$score" -lt 75 ]; then
+            echo "::error::Score $score is below the 75 floor."
+            exit 1
+          fi

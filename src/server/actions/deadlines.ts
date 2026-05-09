@@ -11,7 +11,7 @@ import { fiscalYearFor } from "@/lib/utils";
 
 type ActionResult = { ok?: string; error?: string };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -29,7 +29,7 @@ function revalidate() {
 
 export async function syncAnnualDeadlines(): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [s] = await db.select().from(settings).where(eq(settings.id, 1));
     if (!s) return { error: "Settings missing." };
 
@@ -109,7 +109,7 @@ export async function markDeadlineComplete(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = markCompleteSchema.safeParse({
       id: fd.get("id"),
       craConfirmationNumber: fd.get("craConfirmationNumber"),
@@ -153,7 +153,7 @@ export async function markDeadlineComplete(
 
 export async function markDeadlineIncomplete(id: string): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [row] = await db.select().from(deadlines).where(eq(deadlines.id, id));
     if (!row) return { error: "Deadline not found." };
     if (!row.completed) return { error: "Not marked complete." };
@@ -194,7 +194,7 @@ export async function createManualDeadline(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = manualSchema.safeParse({
       title: fd.get("title"),
       description: (fd.get("description") as string) || null,
@@ -229,7 +229,7 @@ export async function createManualDeadline(
 
 export async function deleteDeadline(id: string): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [row] = await db.select().from(deadlines).where(eq(deadlines.id, id));
     if (!row) return { error: "Deadline not found." };
     // Auto-generated deadlines (sourceKey set) shouldn't be deleted via this

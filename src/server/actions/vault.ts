@@ -23,7 +23,7 @@ import { users } from "@/lib/db/schema";
 type ActionResult = { ok?: string; error?: string; documentId?: string };
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
-const ALLOWED_MIMES = new Set([
+const ALLOWED_MIMES = [
   "application/pdf",
   "image/jpeg",
   "image/jpg",
@@ -31,22 +31,21 @@ const ALLOWED_MIMES = new Set([
   "image/webp",
   "image/heic",
   "image/heif",
-]);
+] as const;
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
 }
 
 /**
- * Full vault gate: session → PIN cookie → (if 2FA enrolled) 2FA cookie.
- * Throws on any miss. Centralised so every mutating vault action enforces
- * the same three-factor stack — PR2 added 2FA to /api/documents but missed
- * the server actions; this helper closes that gap.
+ * Vault PIN + (optional) 2FA gate. Caller must have already resolved the
+ * session via requireAuth(). Centralised so every mutating vault action
+ * enforces the same three-factor stack — PR2 added 2FA to /api/documents
+ * but missed the server actions; this helper closes that gap.
  */
-async function requireFullVaultAccess(): Promise<string> {
-  const email = await requireSession();
+async function requireVaultGate(email: string): Promise<void> {
   await requireVaultPinSession();
   const [me] = await db
     .select({ totpEnabledAt: users.totpEnabledAt })
@@ -55,7 +54,6 @@ async function requireFullVaultAccess(): Promise<string> {
   if (me?.totpEnabledAt) {
     await requireVault2faSession();
   }
-  return email;
 }
 
 function revalidate() {
@@ -84,7 +82,8 @@ export async function uploadMiscDocument(
 ): Promise<ActionResult> {
   let uploadedBlobUrl: string | null = null;
   try {
-    const email = await requireFullVaultAccess();
+    const email = await requireAuth();
+    await requireVaultGate(email);
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       return { error: "Vercel Blob is not configured. Set BLOB_READ_WRITE_TOKEN in .env.local." };
     }
@@ -119,7 +118,7 @@ export async function uploadMiscDocument(
     if (!(entry instanceof File) || entry.size === 0 || !entry.name) {
       return { error: "Pick a file first." };
     }
-    if (!ALLOWED_MIMES.has(entry.type)) {
+    if (!(ALLOWED_MIMES as readonly string[]).includes(entry.type)) {
       return { error: "File must be PDF, JPEG, PNG, WebP, or HEIC." };
     }
     if (entry.size > MAX_BYTES) {
@@ -220,7 +219,8 @@ async function resolveLiveParentLink(docId: string, blobUrl: string): Promise<st
 
 export async function deleteMiscDocument(documentId: string): Promise<ActionResult> {
   try {
-    const email = await requireFullVaultAccess();
+    const email = await requireAuth();
+    await requireVaultGate(email);
 
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId));
     if (!doc) return { error: "Document not found." };
@@ -259,7 +259,8 @@ export async function deleteMiscDocument(documentId: string): Promise<ActionResu
 
 export async function archiveDocument(documentId: string): Promise<ActionResult> {
   try {
-    const email = await requireFullVaultAccess();
+    const email = await requireAuth();
+    await requireVaultGate(email);
 
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId));
     if (!doc) return { error: "Document not found." };
@@ -288,7 +289,8 @@ export async function archiveDocument(documentId: string): Promise<ActionResult>
 
 export async function unarchiveDocument(documentId: string): Promise<ActionResult> {
   try {
-    const email = await requireFullVaultAccess();
+    const email = await requireAuth();
+    await requireVaultGate(email);
 
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId));
     if (!doc) return { error: "Document not found." };

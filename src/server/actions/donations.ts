@@ -12,7 +12,7 @@ import { versionConflictError } from "@/lib/optimistic-lock";
 
 type ActionResult = { ok?: string; error?: string };
 
-async function requireSession() {
+async function requireAuth() {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
   return session.user.email;
@@ -67,7 +67,7 @@ export async function createDonation(
   fd: FormData,
 ): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const parsed = donationSchema.safeParse({
       charityName: fd.get("charityName"),
       registeredCharityNumber: fd.get("registeredCharityNumber"),
@@ -115,7 +115,7 @@ export async function createDonation(
 
 export async function deleteDonation(id: string, expectedVersion: number): Promise<ActionResult> {
   try {
-    const email = await requireSession();
+    const email = await requireAuth();
     const [existing] = await db.select().from(donations).where(eq(donations.id, id));
     if (!existing) return { error: "Donation not found." };
     if (existing.version !== expectedVersion) {

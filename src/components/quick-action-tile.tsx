@@ -36,7 +36,7 @@ export function QuickActionTile({
           "absolute inset-0 -z-10 opacity-0 transition-opacity duration-300 group-hover:opacity-100 bg-gradient-to-br",
           t.topBar,
         )}
-        style={{ filter: "blur(40px)", transform: "scale(0.85)" }}
+        style={{ filter: "blur(10px)", transform: "scale(0.85)" }}
       />
 
       <div className="flex items-start justify-between gap-3">

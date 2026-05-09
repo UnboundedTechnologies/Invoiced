@@ -44,7 +44,7 @@ export function PaychequeForm({
   const [payDate, setPayDate] = useState(today);
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
-  const [grossDollars, setGrossDollars] = useState<string>(defaultGrossDollars.toFixed(2));
+  const [grossDollars, setGrossDollars] = useState<string>(() => defaultGrossDollars.toFixed(2));
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
