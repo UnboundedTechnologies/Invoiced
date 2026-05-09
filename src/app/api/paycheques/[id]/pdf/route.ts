@@ -10,7 +10,10 @@ export const runtime = "nodejs";
 /**
  * GET /api/paycheques/[id]/pdf
  * Auth-gated pay stub PDF proxy. Streams the paystub PDF from Vercel Blob.
+ * GET is required for inline PDF rendering; the audit_log insert IS the
+ * point of this route (download tracking), not a CSRF surface.
  */
+// oxlint-disable-next-line react-doctor/nextjs-no-side-effect-in-get-handler
 export async function GET(
   req: Request,
   ctx: { params: Promise<{ id: string }> },

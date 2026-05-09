@@ -11,7 +11,10 @@ export const runtime = "nodejs";
  * GET /api/slips/[id]/pdf
  * Auth-gated proxy — streams the filed-slip PDF from Vercel Blob.
  * Only filed slips have a pdfBlobUrl; drafts 404.
+ * GET is required for inline PDF rendering; audit_log insert is the
+ * download-tracking purpose of this route (session-gated, SameSite=Lax).
  */
+// oxlint-disable-next-line react-doctor/nextjs-no-side-effect-in-get-handler
 export async function GET(
   req: Request,
   ctx: { params: Promise<{ id: string }> },

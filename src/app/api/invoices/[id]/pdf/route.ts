@@ -10,7 +10,10 @@ export const runtime = "nodejs";
 /**
  * GET /api/invoices/[id]/pdf
  * Auth-gated PDF proxy. Streams the invoice PDF from Vercel Blob.
+ * GET is required so browsers render the PDF inline; audit_log insert
+ * IS the download-tracking purpose of this route, not a CSRF surface.
  */
+// oxlint-disable-next-line react-doctor/nextjs-no-side-effect-in-get-handler
 export async function GET(
   req: Request,
   ctx: { params: Promise<{ id: string }> },

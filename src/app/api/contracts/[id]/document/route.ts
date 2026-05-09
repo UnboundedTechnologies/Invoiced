@@ -14,8 +14,11 @@ export const runtime = "nodejs";
  *  - Requires Auth.js session
  *  - Joins contract → document, fetches the blob URL (never exposed)
  *  - Streams the PDF back through this app
- *  - Logs every view
+ *  - Logs every view (audit_log insert IS the route's purpose; not a CSRF surface)
+ *
+ * GET is required so browsers can render the PDF inline.
  */
+// oxlint-disable-next-line react-doctor/nextjs-no-side-effect-in-get-handler
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.email) return new NextResponse("Unauthorized", { status: 401 });

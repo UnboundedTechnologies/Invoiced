@@ -51,6 +51,10 @@ function pluralDays(n: number): string {
   return `in ${n} days`;
 }
 
+// GET is required: Vercel Cron only invokes endpoints via GET. The
+// pushSubscriptions delete is a side-effect of the daily run, not a
+// CSRF surface — endpoint is bearer-token gated by CRON_SECRET above.
+// oxlint-disable-next-line react-doctor/nextjs-no-side-effect-in-get-handler
 export async function GET(req: Request) {
   // Vercel auto-injects CRON_SECRET as a project env when crons are
   // configured. The Vercel Cron runner hits this endpoint with a matching
