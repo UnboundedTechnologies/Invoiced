@@ -16,7 +16,13 @@ export const runtime = "nodejs";
  * session cookie. Parent-specific routes (/api/invoices/[id]/pdf etc.) remain
  * session-only — they're the frictionless daily path for PDFs users already
  * have open in their parent page.
+ *
+ * GET (not POST) is intentional: browsers issue GET to render PDFs/images
+ * inline; the audit_log insert IS the purpose of this route (download
+ * tracking). CSRF mitigation: triple-gated by session + PIN cookie + 2FA
+ * cookie (if enrolled), all SameSite=Lax. Next.js does not prefetch /api.
  */
+// oxlint-disable-next-line react-doctor/nextjs-no-side-effect-in-get-handler
 export async function GET(
   req: Request,
   ctx: { params: Promise<{ id: string }> },

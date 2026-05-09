@@ -12,7 +12,10 @@ export const runtime = "nodejs";
  * Auth-gated receipt proxy. Streams the receipt from Vercel Blob so the blob
  * URL is never exposed to the browser. Supports PDF + JPEG/PNG/WebP/HEIC; the
  * content-type comes from the documents vault row we wrote at upload time.
+ * GET is required so browsers can render the receipt inline; the audit_log
+ * insert is the route's purpose, not a CSRF surface (session-gated, SameSite=Lax).
  */
+// oxlint-disable-next-line react-doctor/nextjs-no-side-effect-in-get-handler
 export async function GET(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
