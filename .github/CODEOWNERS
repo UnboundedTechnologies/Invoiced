@@ -1,0 +1,7 @@
+# Code ownership for Invoiced.
+#
+# Single-user repo: every change is reviewed by the sole owner. CODEOWNERS
+# is here primarily so the GitHub UI surfaces the right reviewer chip on
+# Dependabot PRs and any community PRs.
+
+* @UnboundedTechnologies

@@ -6,14 +6,15 @@
 
 [![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=next.js&logoColor=white)](https://nextjs.org)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-38BDF8?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 [![Auth.js](https://img.shields.io/badge/Auth.js-v5-7C3AED?logo=auth0&logoColor=white)](https://authjs.dev)
 [![Drizzle](https://img.shields.io/badge/Drizzle-ORM-C5F74F?logo=drizzle&logoColor=black)](https://orm.drizzle.team)
 [![Neon](https://img.shields.io/badge/Neon-Postgres-00E599?logo=postgresql&logoColor=white)](https://neon.tech)
 [![Upstash](https://img.shields.io/badge/Upstash-Redis-00E9A3?logo=upstash&logoColor=white)](https://upstash.com)
 [![Vercel](https://img.shields.io/badge/Vercel-Deployed-000?logo=vercel&logoColor=white)](https://vercel.com)
-[![License](https://img.shields.io/badge/License-Private-lightgrey)](#-license)
+[![React Doctor](https://github.com/UnboundedTechnologies/Invoiced/actions/workflows/react-doctor.yml/badge.svg?branch=main)](https://github.com/UnboundedTechnologies/Invoiced/actions/workflows/react-doctor.yml)
+[![License](https://img.shields.io/badge/License-Proprietary-lightgrey)](./LICENSE)
 
 ---
 
@@ -42,7 +43,7 @@
 | Layer | Tech |
 |---|---|
 | Framework | [Next.js 16](https://nextjs.org) (App Router · Turbopack) + [React 19](https://react.dev) |
-| Language | [TypeScript 5.7](https://www.typescriptlang.org) |
+| Language | [TypeScript 6](https://www.typescriptlang.org) |
 | Styling | [Tailwind CSS v4](https://tailwindcss.com) + [shadcn/ui](https://ui.shadcn.com) (New York) |
 | Auth | [Auth.js v5](https://authjs.dev) — credentials, Argon2id, JWT, TOTP 2FA via [otplib](https://github.com/yeojz/otplib) |
 | Database | [Neon Postgres](https://neon.tech) + [Drizzle ORM](https://orm.drizzle.team) |
@@ -55,7 +56,7 @@
 
 ## 🚀 First-run setup
 
-> Requires **Node.js 20+** and **[pnpm](https://pnpm.io)**.
+> Requires **Node.js 22+** (Vercel runs Node 24 LTS) and **[pnpm](https://pnpm.io)**.
 
 1. **Create `.env.local`** from `.env.example` and fill:
    - `DATABASE_URL` — Neon pooled connection string ([console.neon.tech](https://console.neon.tech))
@@ -148,6 +149,14 @@ pnpm reset-vault-pin         # CLI escape hatch — wipe vault PIN
 pnpm reset-2fa <email>       # CLI escape hatch — wipe TOTP for an account
 ```
 
+## 🤝 Contributing & Issues
+
+This is a single-tenant private app, but issues and PRs are welcome:
+
+- 🐛 [Bug report](https://github.com/UnboundedTechnologies/Invoiced/issues/new?template=bug.yml)
+- 💡 [Feature request](https://github.com/UnboundedTechnologies/Invoiced/issues/new?template=feature.yml)
+- 🔐 [Security advisory](./SECURITY.md) — please **do not** open public issues for vulnerabilities
+
 ## 📜 License
 
-Private — © Unbounded Technologies Inc. All rights reserved. This repository is published openly for transparency; no public license is granted.
+Proprietary — © 2026 Unbounded Technologies Inc. All rights reserved. The repository is published openly for transparency; see [`LICENSE`](./LICENSE) for the full notice.
