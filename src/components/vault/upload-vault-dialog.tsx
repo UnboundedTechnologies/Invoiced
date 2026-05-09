@@ -137,7 +137,7 @@ export function UploadVaultDialog({
         <DialogHeader>
           <DialogTitle>Upload to vault</DialogTitle>
           <DialogDescription>
-            For misc docs — articles of incorporation, NDAs, filed tax returns, anything
+            For misc docs: articles of incorporation, NDAs, filed tax returns, anything
             else you want protected behind the vault PIN.
           </DialogDescription>
         </DialogHeader>

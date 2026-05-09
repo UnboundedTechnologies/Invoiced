@@ -57,7 +57,7 @@ export function T2ConfigCard({
               CCPC status
             </Label>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Canadian-Controlled Private Corp — gates the SBD. Off = general rate only.
+              Canadian-Controlled Private Corp, gates the SBD. Off = general rate only.
             </p>
           </div>
           <Switch

@@ -56,7 +56,7 @@ export function AddDeadlineButton() {
               <DialogTitle>Add a manual deadline</DialogTitle>
               <DialogDescription>
                 For one-off items. Annual recurring deadlines (HST, T2, T4, Ontario
-                annual return) come from your settings — don&rsquo;t duplicate them here.
+                annual return) come from your settings; don&rsquo;t duplicate them here.
               </DialogDescription>
             </DialogHeader>
 

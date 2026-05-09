@@ -31,7 +31,7 @@ export function CalendarRemittanceRow({
       </td>
       <td className="px-4 py-3">
         <div className="font-medium">
-          Source deductions — {remittance.periodStart} → {remittance.periodEnd}
+          Source deductions: {remittance.periodStart} → {remittance.periodEnd}
         </div>
         <div className="text-[11px] text-muted-foreground">
           {formatCAD(remittance.amountCents)} · managed on /paycheques

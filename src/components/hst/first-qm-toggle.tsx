@@ -45,7 +45,7 @@ export function FirstQmToggle({
       >
         <span>First-year Quick Method election</span>
         <span className="text-[11px] text-muted-foreground">
-          +1% off remittance rate on first $30K (max $300) — tick only for the FY you file GST74.
+          +1% off remittance rate on first $30K (max $300). Tick only for the FY you file GST74.
         </span>
       </Label>
     </div>

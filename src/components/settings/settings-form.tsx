@@ -203,7 +203,7 @@ function SecurityPanel({ data }: { data: SettingsRow }) {
         <CardTitle>Vault PIN</CardTitle>
         <CardDescription>
           A 6-digit PIN gates the document vault + the generic document API. It&rsquo;s a second wall on
-          top of login — does not affect invoices, paycheques, or other parent flows.
+          top of login, and does not affect invoices, paycheques, or other parent flows.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -474,7 +474,7 @@ function FiscalPanel({ data }: { data: SettingsRow }) {
               <strong className="text-amber-200">HST rate changing:</strong>{" "}
               {(data.hstRateBps / 100).toFixed(2)}% → {(hstBps / 100).toFixed(2)}%. Existing
               invoices keep their snapshotted HST. Any invoice issued from this point will use
-              the new rate. Double-check before saving — Ontario&rsquo;s 13.00% has been stable
+              the new rate. Double-check before saving; Ontario&rsquo;s 13.00% has been stable
               for years.
             </div>
           )}
@@ -506,7 +506,7 @@ function CorpTaxPanel({
         <CardTitle>Corporate tax (T2)</CardTitle>
         <CardDescription>
           Drives SBD allocation, GRIP, RDTOH, CDA. Opening pool balances are editable only
-          while no T2 has been filed — after that, prior-FY closing rows become the source
+          while no T2 has been filed; after that, prior-FY closing rows become the source
           of truth.
         </CardDescription>
       </CardHeader>
@@ -521,7 +521,7 @@ function CorpTaxPanel({
             <div>
               <Label htmlFor="isCcpc">CCPC status</Label>
               <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Canadian-Controlled Private Corp — gates the Small Business Deduction. Turn off
+                Canadian-Controlled Private Corp, gates the Small Business Deduction. Turn off
                 only for non-CCPC status (public, foreign-controlled, or voluntarily opted out).
               </p>
             </div>

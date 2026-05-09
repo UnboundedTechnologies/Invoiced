@@ -353,7 +353,7 @@ export default async function PersonalTaxDetailPage({
       {/* Federal calc */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Federal tax — Schedule 1</CardTitle>
+          <CardTitle className="text-base">Federal tax: Schedule 1</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1">
           <LineRow label="Tax from brackets" amount={r.federal.bracketTaxCents} />
@@ -372,7 +372,7 @@ export default async function PersonalTaxDetailPage({
       {/* Ontario calc */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Ontario tax — ON428</CardTitle>
+          <CardTitle className="text-base">Ontario tax: ON428</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1">
           <LineRow label="Tax from brackets" amount={r.ontario.bracketTaxCents} />

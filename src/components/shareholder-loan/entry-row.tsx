@@ -103,7 +103,7 @@ export function LoanEntryRow({
           {entry.description ? (
             <div>{entry.description}</div>
           ) : isUnmatchedDraw ? null : (
-            <span className="text-muted-foreground/60">—</span>
+            <span className="text-muted-foreground/60">-</span>
           )}
           {isUnmatchedDraw && (
             <div className={cn(entry.description && "mt-1")}>

@@ -97,7 +97,7 @@ export function ExpenseRow({
             </a>
           ) : (
             <span className="text-muted-foreground" aria-label="No receipt">
-              —
+              -
             </span>
           )}
         </td>

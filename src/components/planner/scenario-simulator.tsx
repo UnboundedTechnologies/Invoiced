@@ -135,7 +135,7 @@ export function ScenarioSimulator({
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Preset scenarios</CardTitle>
           <CardDescription>
-            Tap a preset to seed the sliders — then fine-tune. Custom seeds from your YTD actuals.
+            Tap a preset to seed the sliders, then fine-tune. Custom seeds from your YTD actuals.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -232,7 +232,7 @@ export function ScenarioSimulator({
             />
             {eligibleDiv > openingGripCents + result.corpTaxableIncomeCents && (
               <p className="text-[11px] text-amber-400">
-                Above GRIP cap — excess triggers Part III.1 (20%).
+                Above GRIP cap; excess triggers Part III.1 (20%).
               </p>
             )}
 
@@ -583,7 +583,7 @@ function SaveScenarioButton({
             />
             {existingNames.has(name.trim()) && (
               <p className="text-[11px] text-amber-400">
-                &ldquo;{name.trim()}&rdquo; exists — saving will overwrite.
+                &ldquo;{name.trim()}&rdquo; exists; saving will overwrite.
               </p>
             )}
           </div>

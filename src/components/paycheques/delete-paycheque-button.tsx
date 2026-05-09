@@ -65,7 +65,7 @@ export function DeletePaychequeButton({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete draft paycheque {payDate}?</AlertDialogTitle>
             <AlertDialogDescription>
-              The pay stub PDF is removed from the vault. Issued paycheques cannot be deleted — void them instead.
+              The pay stub PDF is removed from the vault. Issued paycheques cannot be deleted; void them instead.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

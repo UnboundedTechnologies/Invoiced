@@ -134,7 +134,7 @@ export function PaychequeActions({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete draft paycheque?</AlertDialogTitle>
             <AlertDialogDescription>
-              The pay stub PDF is removed from the vault. Issued paycheques cannot be deleted — void them instead to
+              The pay stub PDF is removed from the vault. Issued paycheques cannot be deleted; void them instead to
               preserve the CRA audit trail.
             </AlertDialogDescription>
           </AlertDialogHeader>

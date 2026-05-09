@@ -56,7 +56,7 @@ export function MarkCompleteDialog({ deadlineId, title }: { deadlineId: string; 
           <form action={action}>
             <input type="hidden" name="id" value={deadlineId} />
             <AlertDialogHeader>
-              <AlertDialogTitle>Mark complete — {title}</AlertDialogTitle>
+              <AlertDialogTitle>Mark complete: {title}</AlertDialogTitle>
               <AlertDialogDescription>
                 Paste the CRA / Ontario registry confirmation number if you have one (optional).
                 The filed date is used to sort the completed-deadlines section.

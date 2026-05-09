@@ -50,7 +50,7 @@ export function UnfileT1Button({ taxYear, version }: { taxYear: number; version:
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Unfile T1 — CY {taxYear}?</AlertDialogTitle>
+            <AlertDialogTitle>Unfile T1, CY {taxYear}?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2">
                 <p>
@@ -64,7 +64,7 @@ export function UnfileT1Button({ taxYear, version }: { taxYear: number; version:
                   number from your T1-ADJ submission.
                 </p>
                 <p className="text-xs text-amber-400">
-                  Use only when CRA needs you to amend via T1-ADJ — not as an undo button.
+                  Use only when CRA needs you to amend via T1-ADJ, not as an undo button.
                 </p>
               </div>
             </AlertDialogDescription>

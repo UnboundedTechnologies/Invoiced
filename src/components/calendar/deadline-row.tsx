@@ -151,7 +151,7 @@ export function DeadlineRow({ deadline, today }: { deadline: Deadline; today: st
               <AlertDialogTitle>Delete this deadline?</AlertDialogTitle>
               <AlertDialogDescription>
                 Removes &ldquo;{deadline.title}&rdquo;. Auto-generated deadlines
-                (HST, T2, T4, annual return) can&rsquo;t be deleted here — change
+                (HST, T2, T4, annual return) can&rsquo;t be deleted here; change
                 the underlying setting instead.
               </AlertDialogDescription>
             </AlertDialogHeader>

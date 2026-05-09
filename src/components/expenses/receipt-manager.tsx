@@ -169,7 +169,7 @@ export function ReceiptManager({
             <AlertDialogHeader>
               <AlertDialogTitle>Remove receipt?</AlertDialogTitle>
               <AlertDialogDescription>
-                The receipt file will be deleted from storage. The expense record stays — you can
+                The receipt file will be deleted from storage. The expense record stays, and you can
                 re-attach a different file later.
               </AlertDialogDescription>
             </AlertDialogHeader>

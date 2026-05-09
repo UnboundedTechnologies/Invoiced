@@ -66,7 +66,7 @@ export default async function PersonalTaxPage() {
             <CardDescription>
               Start a return for a calendar year with personal-tax activity. Every
               number is computed live from paycheques, dividends, and the shareholder-
-              loan ledger until you click File — after that the snapshot is frozen and
+              loan ledger until you click File. After that the snapshot is frozen and
               the CY&rsquo;s rows are locked from edits.
             </CardDescription>
           </CardHeader>

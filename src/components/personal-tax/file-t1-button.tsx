@@ -63,7 +63,7 @@ export function FileT1Button({
           <form action={action}>
             <input type="hidden" name="expectedVersion" value={version} />
             <AlertDialogHeader>
-              <AlertDialogTitle>File T1 return — CY {taxYear}</AlertDialogTitle>
+              <AlertDialogTitle>File T1 return, CY {taxYear}</AlertDialogTitle>
               <AlertDialogDescription asChild>
                 <div className="space-y-2">
                   <p>
@@ -75,7 +75,7 @@ export function FileT1Button({
                     </strong>
                     . Locks every paycheque, dividend, and shareholder-loan entry whose
                     date falls in CY {taxYear} against edits or deletion. Corrections after
-                    filing route through CRA form T1-ADJ — cannot be reversed from within Invoiced.
+                    filing route through CRA form T1-ADJ, and cannot be reversed from within Invoiced.
                   </p>
                 </div>
               </AlertDialogDescription>

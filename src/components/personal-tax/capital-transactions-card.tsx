@@ -101,18 +101,18 @@ export function CapitalTransactionsCard({
         {rows.length > 0 && (
           <div className="space-y-1 border-t border-border/60 pt-3 text-sm">
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Line 19900 — Total capital gains/losses</span>
+              <span className="text-muted-foreground">Line 19900: Total capital gains/losses</span>
               <span className={`font-mono ${line19900Cents < 0 ? "text-rose-400" : ""}`}>
                 {line19900Cents < 0 ? `(${formatCAD(-line19900Cents)})` : formatCAD(line19900Cents)}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Line 12700 — 50% taxable inclusion</span>
+              <span className="text-muted-foreground">Line 12700: 50% taxable inclusion</span>
               <span className="font-mono font-semibold">{formatCAD(line12700Cents)}</span>
             </div>
             {line19900Cents < 0 && (
               <p className="pt-1 text-[11px] text-amber-400">
-                Net loss — line 12700 is 0. Carryforward not yet automated.
+                Net loss; line 12700 is 0. Carryforward not yet automated.
               </p>
             )}
           </div>

@@ -81,7 +81,7 @@ export function DividendRow({
           {isPaid ? (
             <span className="text-foreground">{formatLongDate(dividend.paidDate!)}</span>
           ) : (
-            <span className="text-muted-foreground">—</span>
+            <span className="text-muted-foreground">-</span>
           )}
         </td>
         <td className="px-4 py-3 text-center">
