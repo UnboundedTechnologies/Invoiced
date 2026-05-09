@@ -142,7 +142,7 @@ export function MonthGrid({
               <div className="flex items-start justify-between">
                 <span
                   className={cn(
-                    "inline-flex items-center justify-center text-xs font-medium tabular-nums",
+                    "inline-flex items-center justify-center text-xs font-medium",
                     todayFlag
                       ? "size-6 rounded-full bg-emerald-500 text-emerald-50 shadow-sm shadow-emerald-500/30"
                       : inMonth

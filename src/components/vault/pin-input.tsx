@@ -104,7 +104,7 @@ export function PinInput({
             disabled={disabled}
             aria-label={`PIN digit ${idx + 1}`}
             className={cn(
-              "size-11 rounded-md border text-center font-mono text-lg tabular-nums outline-none transition-colors",
+              "size-11 rounded-md border text-center font-mono text-lg outline-none transition-colors",
               "border-input bg-background focus:border-primary focus:ring-2 focus:ring-primary/20",
               invalid && "border-rose-500/60 focus:border-rose-500 focus:ring-rose-500/20",
               disabled && "cursor-not-allowed opacity-60",

@@ -169,7 +169,7 @@ export default async function ShareholderLoanPage() {
             </div>
             <div
               className={cn(
-                "text-3xl font-bold leading-none tracking-tight tabular-nums",
+                "text-3xl font-bold leading-none tracking-tight",
                 balanceTone,
               )}
             >
@@ -189,7 +189,7 @@ export default async function ShareholderLoanPage() {
                 <Info className="size-[1.05rem] text-cyan-400" />
               </div>
             </div>
-            <div className="text-3xl font-bold leading-none tracking-tight tabular-nums text-cyan-400">
+            <div className="text-3xl font-bold leading-none tracking-tight text-cyan-400">
               {formatCAD(fyBenefit)}
             </div>
             <CardDescription className="text-xs">
@@ -208,7 +208,7 @@ export default async function ShareholderLoanPage() {
                 <Coins className="size-[1.05rem] text-violet-400" />
               </div>
             </div>
-            <div className="text-3xl font-bold leading-none tracking-tight tabular-nums text-violet-400">
+            <div className="text-3xl font-bold leading-none tracking-tight text-violet-400">
               {formatCAD(fyT4aBox117)}
             </div>
             <CardDescription className="text-xs">
@@ -294,13 +294,13 @@ export default async function ShareholderLoanPage() {
                   {timeline.annualSummaries.map((a) => (
                     <tr key={a.calendarYear} className="border-b border-border/30">
                       <td className="px-4 py-3 font-mono text-xs">{a.calendarYear}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">
+                      <td className="px-4 py-3 text-right">
                         {formatCAD(a.grossBenefit80_4Cents)}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                      <td className="px-4 py-3 text-right text-muted-foreground">
                         −{formatCAD(a.interestPaidCents)}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
+                      <td className="px-4 py-3 text-right">
                         {a.inclusion15_2Cents > 0 ? (
                           <span className="text-rose-400">
                             +{formatCAD(a.inclusion15_2Cents)}
@@ -309,7 +309,7 @@ export default async function ShareholderLoanPage() {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold tabular-nums text-violet-400">
+                      <td className="px-4 py-3 text-right font-semibold text-violet-400">
                         {formatCAD(a.t4aBox117Cents)}
                       </td>
                     </tr>
