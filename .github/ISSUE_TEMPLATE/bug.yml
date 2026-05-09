@@ -1,0 +1,69 @@
+name: Bug report
+description: Something is broken or behaving unexpectedly
+title: "[bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. For security issues, please use the
+        Security Advisories link instead of this form.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: When I clicked X, the app did Y instead of Z.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to /...
+        2. Click on ...
+        3. See error
+    validations:
+      required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit / version
+      description: Output of `git rev-parse --short HEAD` or the deployed URL + timestamp.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Auth / 2FA / Vault
+        - Invoices
+        - Payroll / T4
+        - Dividends / T5
+        - HST
+        - Corp tax / T2
+        - Personal tax / T1
+        - Shareholder loan
+        - Slips (T4 / T5 / T4A)
+        - Self-pay planner
+        - Calendar / deadlines
+        - Document vault
+        - Dashboard
+        - PWA / push
+        - Settings
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Logs, screenshots, env quirks.
