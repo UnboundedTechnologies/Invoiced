@@ -10,9 +10,12 @@ export default auth;
 
 export const config = {
   matcher: [
-    // Skip middleware on Next.js internals + public assets + crawler files.
-    // Without robots.txt + sitemap.xml in the exclusion list, the auth
-    // matcher 307-redirects them to /login → SEO + Lighthouse audits fail.
-    "/((?!_next/static|_next/image|favicon\\.ico|robots\\.txt|sitemap\\.xml|\\.well-known|logo.*|banner.*|sprites/.*).*)",
+    // Skip middleware on Next.js internals + public assets + crawler files +
+    // PWA icon/manifest/splash/service-worker. Without the PWA exclusions iOS
+    // 307-bounces to /login on apple-icon fetches and falls back to Safari's
+    // generated "first letter of title" icon (white I on dark) for the
+    // home-screen tile. Same logic for manifest.json + sw.js — blocking them
+    // silently breaks installability.
+    "/((?!_next/static|_next/image|favicon\\.ico|apple-touch-icon.*|apple-icon.*|icon.*|manifest\\.json|splash/.*|sw\\.js|swe-worker-.*|robots\\.txt|sitemap\\.xml|\\.well-known|logo.*|banner.*|sprites/.*).*)",
   ],
 };
