@@ -161,7 +161,8 @@ pnpm dev                         # turbopack dev server at http://localhost:3000
 | `pnpm remove-user <email>` | Delete a non-admin login |
 | `pnpm reset-vault-pin` | Wipe vault PIN (escape hatch) |
 | `pnpm reset-2fa <email>` | Wipe TOTP secret + backup codes for an account |
-| `pnpm gen-pwa-assets` | Regenerate PWA icons + iOS splash screens from `public/logo.png` |
+| `pnpm gen-pwa-assets` | Regenerate iOS splash screens from `public/logo.png`. (PWA icons are now owned by `gen-brand-assets`; running this after will revert the icons to the old emblem.) |
+| `pnpm gen-brand-assets` | Regenerate the iPhone brand assets (app icon, Apple ID photo, Contact Poster, Home + Lock wallpapers, Landing-repo icon twin) into `public/brand-assets/` and promote the Invoiced app icon to the canonical PWA paths (`apple-touch-icon.png` + `icons/icon-*.png`) so iOS Add-to-Home picks it up. Source artwork: `public/banner.png`. |
 | `pnpm cleanup-blobs` | Sweep orphaned Vercel Blob files |
 | `pnpm cleanup-phantom-docs` | Remove `documents` rows whose blob is 404 |
 | `pnpm gen-tax-pdf` | Regenerate the canonical `TAX_OPTIMIZATION.pdf` playbook |

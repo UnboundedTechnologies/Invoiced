@@ -83,4 +83,7 @@ tmp/
 temp/
 .history/
 
+# ───── Brand assets (regen via pnpm gen-brand-assets) ─────
+public/brand-assets/
+
 .vercel
