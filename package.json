@@ -21,6 +21,7 @@
     "optimize-logo": "tsx scripts/optimize-logo.ts",
     "optimize-banner": "tsx scripts/optimize-banner.ts",
     "gen-pwa-assets": "tsx scripts/generate-pwa-assets.ts",
+    "gen-brand-assets": "tsx scripts/gen-brand-assets.ts",
     "cleanup-blobs": "tsx --env-file=.env.local scripts/cleanup-blobs.ts",
     "cleanup-phantom-docs": "tsx --env-file=.env.local scripts/cleanup-phantom-docs.ts",
     "backfill-paycheques-2026": "tsx --env-file=.env.local scripts/backfill-paycheques-2026.ts",
