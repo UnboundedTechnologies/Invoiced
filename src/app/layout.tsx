@@ -31,13 +31,11 @@ export const metadata: Metadata = {
   formatDetection: {
     telephone: false,
   },
-  icons: {
-    icon: [
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
-    ],
-    apple: { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
-  },
+  // Icons resolved via Next.js App Router file conventions:
+  // src/app/icon.png            → <link rel="icon">              (cache-busted)
+  // src/app/apple-icon{,0,1,2}  → <link rel="apple-touch-icon">  (cache-busted, 180/167/152/120)
+  // The cache-bust hash forces iOS "Add to Home Screen" to refetch the icon
+  // instead of serving a stale copy from before the brand refresh.
 };
 
 export const viewport: Viewport = {

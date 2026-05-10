@@ -266,7 +266,13 @@ async function genWallpaperFinals() {
 }
 
 // ============================================================================
-// Promote — write the home-screen icon into the canonical PWA paths
+// Promote — write the home-screen icon into the canonical PWA paths.
+//
+// The src/app/{icon,apple-icon}*.png entries use Next.js App Router file
+// conventions: Next emits cache-busted <link> tags (/apple-icon?v=hash) so iOS
+// "Add to Home Screen" re-fetches the icon instead of using a stale copy.
+// Multiple apple-icon sizes cover iPhone (180), iPad Pro (167), iPad (152), and
+// older iPhone (120). Manifest still reads from public/icons/*.
 // ============================================================================
 async function promoteToPWA() {
   const SOURCE = path.join(OUT_DIR, "app-icon-invoiced.png");
@@ -276,6 +282,11 @@ async function promoteToPWA() {
     { out: "public/icons/icon-1024.png", size: 1024 },
     { out: "public/icons/icon-maskable-512.png", size: 512 },
     { out: "public/apple-touch-icon.png", size: 180 },
+    { out: "src/app/icon.png", size: 192 },
+    { out: "src/app/apple-icon.png", size: 180 },
+    { out: "src/app/apple-icon0.png", size: 167 },
+    { out: "src/app/apple-icon1.png", size: 152 },
+    { out: "src/app/apple-icon2.png", size: 120 },
   ];
   for (const { out, size } of targets) {
     await sharp(SOURCE).resize(size, size, { fit: "cover" }).png().toFile(out);
