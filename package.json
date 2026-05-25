@@ -93,7 +93,7 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.6",
-    "postcss": "^8.5.14",
+    "postcss": "^8.5.15",
     "serwist": "^9.5.11",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.3.0",
